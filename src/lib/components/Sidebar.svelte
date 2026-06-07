@@ -51,22 +51,24 @@
   class="acrylic-sidebar w-full md:w-60 flex-shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-fluent-border-light dark:border-fluent-border-dark select-none h-auto md:h-full overflow-y-auto"
 >
   <!-- Brand / Header -->
-  <div class="px-6 py-5 flex items-center gap-3">
+  <div class="px-6 pt-9 pb-5 flex items-center gap-3" data-tauri-drag-region>
     <svg
       class="w-6 h-6 text-fluent-accent"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
       xmlns="http://www.w3.org/2000/svg"
+      data-tauri-drag-region
     >
       <path
         stroke-linecap="round"
         stroke-linejoin="round"
         stroke-width="2.5"
+        data-tauri-drag-region
         d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
       ></path>
     </svg>
-    <span class="text-lg font-bold tracking-wide">ShelfLife</span>
+    <span class="text-lg font-bold tracking-wide" data-tauri-drag-region>ShelfLife</span>
   </div>
 
   <!-- Navigation -->

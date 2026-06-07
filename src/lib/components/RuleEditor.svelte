@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { selectDirectory } from '$lib/api/files';
   import { saveRule, testRule } from '$lib/api/rules';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type {
@@ -40,6 +41,27 @@
   let testing = $state(false);
   let error = $state<string | null>(null);
   let testResults = $state<RuleMatchExplanation[]>([]);
+  async function browseWatchPath() {
+    try {
+      const selected = await selectDirectory('Select Watch Target Path', watchPath);
+      if (selected) {
+        watchPath = selected;
+      }
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : 'Could not select folder.';
+    }
+  }
+
+  async function browseDestinationPath() {
+    try {
+      const selected = await selectDirectory('Select Destination Path', destinationPath);
+      if (selected) {
+        destinationPath = selected;
+      }
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : 'Could not select folder.';
+    }
+  }
 
   function csv(value: string) {
     return value
@@ -203,12 +225,21 @@
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >Watch Target Path</span
         >
-        <input
-          bind:value={watchPath}
-          required
-          placeholder="C:\Users\Name\Downloads"
-          class="fluent-input"
-        />
+        <div class="flex gap-2">
+          <input
+            bind:value={watchPath}
+            required
+            placeholder="C:\Users\Name\Downloads"
+            class="fluent-input flex-1"
+          />
+          <button
+            type="button"
+            class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
+            onclick={browseWatchPath}
+          >
+            Browse...
+          </button>
+        </div>
       </label>
 
       <div class="grid grid-cols-2 gap-2">
@@ -360,12 +391,21 @@
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
             >Destination Path</span
           >
-          <input
-            bind:value={destinationPath}
-            placeholder="C:\SafeFolder"
-            class="fluent-input"
-            required
-          />
+          <div class="flex gap-2">
+            <input
+              bind:value={destinationPath}
+              placeholder="C:\SafeFolder"
+              class="fluent-input flex-1"
+              required
+            />
+            <button
+              type="button"
+              class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
+              onclick={browseDestinationPath}
+            >
+              Browse...
+            </button>
+          </div>
         </label>
       {/if}
 
