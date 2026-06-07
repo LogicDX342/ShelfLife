@@ -1,7 +1,7 @@
 # shelflife Product and Technical Specification
 
-Version: 0.2
-Status: Revised MVP specification
+Version: 0.3
+Status: v1 implemented
 Primary goal: Recoverable, explainable file hygiene for desktop clutter
 Target platforms: Windows
 Core stack: Tauri v2, Rust, Svelte 5, redb
@@ -1454,7 +1454,7 @@ Each module can be disabled without affecting core triage.
 
 ## 23. Acceptance Criteria for v1
 
-v1 is ready when:
+v1 is implemented when:
 
 ```text
 App can watch configured folders.
@@ -1469,6 +1469,38 @@ App exposes undo status for every logged action.
 App does not perform automatic destructive actions by default.
 App keeps frontend filesystem permissions narrow.
 App validates all paths in Rust.
+```
+
+### 23.1 v1 implementation status
+
+Status: implemented.
+
+Validation commands:
+
+```text
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+pnpm lint
+pnpm check
+pnpm tauri build --no-bundle
+```
+
+Run the no-bundle Windows build from the repository root:
+
+```powershell
+.\src-tauri\target\release\shelflife.exe
+```
+
+For development with the Svelte/Vite frontend and Tauri backend:
+
+```powershell
+pnpm tauri dev
+```
+
+To rebuild the release executable without producing an installer bundle:
+
+```powershell
+pnpm tauri build --no-bundle
 ```
 
 ---

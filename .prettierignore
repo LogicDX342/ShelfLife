@@ -7,9 +7,8 @@
 # Dependencies
 node_modules
 
-# Rust backend directories/files to ignore in JS formatting
-/src-tauri/target
-/src-tauri/Cargo.lock
+# Rust backend directory (formatted via cargo fmt)
+/src-tauri
 
 # Lockfiles and system files
 pnpm-lock.yaml

@@ -410,8 +410,6 @@ mod tests {
         assert_eq!(files[0].path, fresh.to_string_lossy());
     }
 
-
-
     struct Fixture {
         root: PathBuf,
     }
