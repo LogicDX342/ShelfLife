@@ -16,3 +16,7 @@ export function previewFile(path: string) {
 export function openFileLocation(path: string) {
   return invoke<void>('open_file_location', { path });
 }
+
+export function selectDirectory(title?: string, defaultPath?: string) {
+  return invoke<string | null>('select_directory', { title, defaultPath });
+}

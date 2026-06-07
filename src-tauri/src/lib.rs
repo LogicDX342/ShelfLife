@@ -45,7 +45,8 @@ pub fn run() {
             commands::update_watch_targets,
             commands::run_reconciliation_scan,
             commands::pause_watching,
-            commands::resume_watching
+            commands::resume_watching,
+            commands::select_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

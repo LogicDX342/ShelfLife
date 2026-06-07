@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getConfig, saveConfig, updateWatchTargets } from '$lib/api/config';
+  import { selectDirectory } from '$lib/api/files';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { AppConfig, WatchTarget } from '$lib/types';
 
@@ -15,6 +16,28 @@
   let successMessage = $state<string | null>(null);
   let savingPrefs = $state(false);
   let addingTarget = $state(false);
+
+  async function browseSafeFolder() {
+    try {
+      const selected = await selectDirectory('Select Safe Folder', safeFolderPath);
+      if (selected) {
+        safeFolderPath = selected;
+      }
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : 'Could not select folder.';
+    }
+  }
+
+  async function browseTargetFolder() {
+    try {
+      const selected = await selectDirectory('Select Watch Target Folder', targetPath);
+      if (selected) {
+        targetPath = selected;
+      }
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : 'Could not select folder.';
+    }
+  }
 
   onMount(async () => {
     await refreshConfig();
@@ -132,7 +155,16 @@
                 class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
                 >{i18n.t('settings.safeFolder')}</span
               >
-              <input bind:value={safeFolderPath} class="fluent-input text-xs" />
+              <div class="flex gap-2">
+                <input bind:value={safeFolderPath} class="fluent-input text-xs flex-1" />
+                <button
+                  type="button"
+                  class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
+                  onclick={browseSafeFolder}
+                >
+                  Browse...
+                </button>
+              </div>
             </label>
 
             <label class="flex flex-col gap-1.5">
@@ -260,13 +292,22 @@
 
           <!-- Add new folder form -->
           <div class="flex flex-col md:flex-row gap-2">
-            <input
-              bind:value={targetPath}
-              placeholder={i18n.t('settings.path')}
-              class="fluent-input flex-1 text-xs"
-            />
+            <div class="flex flex-1 gap-2">
+              <input
+                bind:value={targetPath}
+                placeholder={i18n.t('settings.path')}
+                class="fluent-input flex-1 text-xs"
+              />
+              <button
+                type="button"
+                class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
+                onclick={browseTargetFolder}
+              >
+                Browse...
+              </button>
+            </div>
             <button
-              class="fluent-button text-xs font-semibold"
+              class="fluent-button text-xs font-semibold md:flex-shrink-0"
               onclick={addTarget}
               disabled={addingTarget || !targetPath.trim()}
             >

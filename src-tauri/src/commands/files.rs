@@ -303,6 +303,24 @@ fn normalize_configured_path(path: &Path) -> Option<PathBuf> {
     }
 }
 
+#[tauri::command]
+pub async fn select_directory(
+    title: Option<String>,
+    default_path: Option<String>,
+) -> Result<Option<String>, AppError> {
+    let mut dialog = rfd::AsyncFileDialog::new();
+    if let Some(title) = &title {
+        dialog = dialog.set_title(title);
+    }
+    if let Some(ref path) = default_path {
+        if !path.is_empty() {
+            dialog = dialog.set_directory(path);
+        }
+    }
+    let folder = dialog.pick_folder().await;
+    Ok(folder.map(|f| f.path().to_string_lossy().into_owned()))
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
