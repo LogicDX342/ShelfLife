@@ -16,7 +16,7 @@
   <!-- Custom Title Bar -->
   <TitleBar />
 
-  <div class="app-shell flex-1 overflow-hidden flex flex-col md:flex-row">
+  <div class="app-shell flex-1 overflow-hidden flex flex-row">
     <!-- Sidebar -->
     <Sidebar />
 
