@@ -9,12 +9,23 @@ class FilesState {
   private hasLoadedOnce = false;
   private loadingTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  counts = $derived({
-    fresh: this.files.filter((file) => file.state === 'Fresh').length,
-    stale: this.files.filter((file) => file.state === 'Stale').length,
-    decaying: this.files.filter((file) => file.state === 'Decaying').length,
-    pinned: this.files.filter((file) => file.state === 'Pinned').length,
-    ignored: this.files.filter((file) => file.state === 'Ignored').length,
+  counts = $derived.by(() => {
+    let fresh = 0;
+    let stale = 0;
+    let decaying = 0;
+    let pinned = 0;
+    let ignored = 0;
+
+    for (let i = 0; i < this.files.length; i++) {
+      const state = this.files[i].state;
+      if (state === 'Fresh') fresh++;
+      else if (state === 'Stale') stale++;
+      else if (state === 'Decaying') decaying++;
+      else if (state === 'Pinned') pinned++;
+      else if (state === 'Ignored') ignored++;
+    }
+
+    return { fresh, stale, decaying, pinned, ignored };
   });
 
   async refresh() {

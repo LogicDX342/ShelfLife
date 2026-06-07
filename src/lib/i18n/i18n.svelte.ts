@@ -6,6 +6,8 @@ type Theme = 'light' | 'dark' | 'system';
 const translations: Record<Language, Record<string, string>> = {
   en: {
     'nav.dashboard': 'Dashboard',
+    'nav.queue': 'Review Queue',
+    'nav.browser': 'File Browser',
     'nav.rules': 'Rules',
     'nav.audit': 'Audit',
     'nav.settings': 'Settings',
@@ -93,6 +95,8 @@ const translations: Record<Language, Record<string, string>> = {
   },
   zh: {
     'nav.dashboard': '仪表板',
+    'nav.queue': '清理队列',
+    'nav.browser': '文件浏览器',
     'nav.rules': '自动化规则',
     'nav.audit': '审计日志',
     'nav.settings': '设置',

@@ -33,6 +33,14 @@
     Ignored: true,
   });
 
+  let visibleLimits = $state<Record<string, number>>({
+    Decaying: 50,
+    Stale: 50,
+    Fresh: 50,
+    Pinned: 50,
+    Ignored: 50,
+  });
+
   function toggleGroup(state: FileDecayState) {
     collapsedGroups[state] = !collapsedGroups[state];
   }
@@ -116,7 +124,7 @@
         <!-- Collapsible Content -->
         {#if !collapsedGroups[group.state]}
           <div class="p-4 space-y-4 bg-transparent">
-            {#each group.files as file (file.path)}
+            {#each group.files.slice(0, visibleLimits[group.state]) as file (file.path)}
               <FileCard
                 {file}
                 {onRefresh}
@@ -125,6 +133,20 @@
                 {onSelectedChange}
               />
             {/each}
+
+            {#if group.files.length > visibleLimits[group.state]}
+              <div class="pt-2 flex justify-center">
+                <button
+                  type="button"
+                  class="fluent-button w-full justify-center text-xs font-semibold py-2"
+                  onclick={() => {
+                    visibleLimits[group.state] = (visibleLimits[group.state] || 50) + 100;
+                  }}
+                >
+                  Load More ({group.files.length - visibleLimits[group.state]} remaining)
+                </button>
+              </div>
+            {/if}
           </div>
         {/if}
       </section>

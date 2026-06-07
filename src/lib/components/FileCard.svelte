@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { explainFile, openFileLocation } from '$lib/api/files';
   import { executeTriageAction } from '$lib/api/triage';
   import { i18n } from '$lib/i18n/i18n.svelte';
@@ -27,9 +26,6 @@
     explanations.filter((e) => e.rule_id !== null && e.proposed_action !== null),
   );
 
-  onMount(() => {
-    loadExplanation();
-  });
   let busy = $state(false);
   let error = $state<string | null>(null);
   let expanded = $state(false);
