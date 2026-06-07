@@ -122,10 +122,10 @@
   }
 </script>
 
-<div class="space-y-6 relative pb-24">
+<div class="h-full flex flex-col min-h-0 relative gap-6">
   <!-- Header -->
   <header
-    class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-4"
+    class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0"
   >
     <div>
       <h1 class="text-2xl font-bold tracking-tight">{i18n.t('dashboard.title')}</h1>
@@ -152,11 +152,13 @@
   </header>
 
   <!-- Status Summary Band -->
-  <StatusBar files={filesState.files} />
+  <div class="flex-shrink-0">
+    <StatusBar files={filesState.files} />
+  </div>
 
   <!-- Search & Tabs Control Bar -->
   <div
-    class="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-black/5 dark:bg-white/5 p-2 rounded-lg"
+    class="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-black/5 dark:bg-white/5 p-2 rounded-lg flex-shrink-0"
   >
     <!-- State Tabs -->
     <div class="flex flex-wrap gap-1">
@@ -206,71 +208,74 @@
     </div>
   </div>
 
-  <!-- Messages -->
-  {#if bulkError}
-    <div
-      class="p-3 text-sm rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/50"
-    >
-      {bulkError}
-    </div>
-  {/if}
-  {#if bulkSummary}
-    <div
-      class="p-3 text-sm rounded bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-900/50"
-    >
-      {bulkSummary}
-    </div>
-  {/if}
+  <!-- Scrollable content -->
+  <div class="flex-1 overflow-y-auto space-y-6 pb-24 pr-1">
+    <!-- Messages -->
+    {#if bulkError}
+      <div
+        class="p-3 text-sm rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/50"
+      >
+        {bulkError}
+      </div>
+    {/if}
+    {#if bulkSummary}
+      <div
+        class="p-3 text-sm rounded bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-900/50"
+      >
+        {bulkSummary}
+      </div>
+    {/if}
 
-  <!-- Queue Content -->
-  {#if filesState.error}
-    <div class="p-6 text-center text-red-500">
-      <p class="font-semibold">Error loading files</p>
-      <p class="text-sm mt-1">{filesState.error}</p>
-    </div>
-  {:else if filesState.loading}
-    <div class="py-12 flex flex-col items-center justify-center gap-3">
-      <svg class="animate-spin h-8 w-8 text-fluent-accent" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
-        ></circle>
-        <path
-          class="opacity-75"
-          fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-        ></path>
-      </svg>
-      <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
-        >Loading files...</span
-      >
-    </div>
-  {:else if filteredFiles.length === 0}
-    <div class="fluent-card py-16 text-center">
-      <svg
-        class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1"
-          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-        ></path>
-      </svg>
-      <h3 class="text-base font-semibold">{i18n.t('dashboard.noFiles')}</h3>
-      <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-        Try adjusting your filters or watch configurations.
-      </p>
-    </div>
-  {:else}
-    <FileList
-      files={filteredFiles}
-      onRefresh={() => filesState.refresh()}
-      {selectedPaths}
-      onSelectedChange={setSelected}
-    />
-  {/if}
+    <!-- Queue Content -->
+    {#if filesState.error}
+      <div class="p-6 text-center text-red-500">
+        <p class="font-semibold">Error loading files</p>
+        <p class="text-sm mt-1">{filesState.error}</p>
+      </div>
+    {:else if filesState.loading}
+      <div class="py-12 flex flex-col items-center justify-center gap-3">
+        <svg class="animate-spin h-8 w-8 text-fluent-accent" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
+          ></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          ></path>
+        </svg>
+        <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
+          >Loading files...</span
+        >
+      </div>
+    {:else if filteredFiles.length === 0}
+      <div class="fluent-card py-16 text-center">
+        <svg
+          class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          ></path>
+        </svg>
+        <h3 class="text-base font-semibold">{i18n.t('dashboard.noFiles')}</h3>
+        <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
+          Try adjusting your filters or watch configurations.
+        </p>
+      </div>
+    {:else}
+      <FileList
+        files={filteredFiles}
+        onRefresh={() => filesState.refresh()}
+        {selectedPaths}
+        onSelectedChange={setSelected}
+      />
+    {/if}
+  </div>
 
   <!-- Sticky Bulk Action Bar at Bottom of Queue -->
   {#if selectedPaths.length > 0}
