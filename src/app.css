@@ -1,0 +1,268 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-fluent-bg-light: #f3f3f3;
+  --color-fluent-bg-dark: #202020;
+  --color-fluent-card-light: #ffffff;
+  --color-fluent-card-dark: #2d2d2d;
+  --color-fluent-sidebar-light: #ececec;
+  --color-fluent-sidebar-dark: #2c2c2c;
+  --color-fluent-accent: #0078d4;
+  --color-fluent-accent-hover: #106ebe;
+  --color-fluent-text-light: #202020;
+  --color-fluent-text-dark: #f5f5f5;
+  --color-fluent-muted-light: #5f5f5f;
+  --color-fluent-muted-dark: #a1a1a1;
+  --color-fluent-border-light: rgba(0, 0, 0, 0.08);
+  --color-fluent-border-dark: rgba(255, 255, 255, 0.08);
+  --color-fluent-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html,
+  body {
+    font-family:
+      'Segoe UI Variable Text',
+      'Segoe UI',
+      -apple-system,
+      BlinkMacSystemFont,
+      Roboto,
+      Helvetica,
+      Arial,
+      sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
+  }
+
+  body {
+    background-color: var(--color-fluent-bg-light);
+    color: var(--color-fluent-text-light);
+  }
+
+  html.dark body {
+    background-color: var(--color-fluent-bg-dark);
+    color: var(--color-fluent-text-dark);
+  }
+
+  /* Custom Windows 11 style scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(100, 100, 100, 0.25);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 100, 100, 0.45);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+}
+
+/* Acrylic effect background */
+.acrylic-sidebar {
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background-color: rgba(236, 236, 236, 0.8);
+}
+html.dark .acrylic-sidebar {
+  background-color: rgba(44, 44, 44, 0.8);
+}
+
+/* Acrylic effect standard card */
+.acrylic-card {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--color-fluent-border-light);
+}
+html.dark .acrylic-card {
+  background-color: rgba(45, 45, 45, 0.85);
+  border: 1px solid var(--color-fluent-border-dark);
+}
+
+/* Windows 11 style card */
+.fluent-card {
+  background-color: var(--color-fluent-card-light);
+  border: 1px solid var(--color-fluent-border-light);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+html.dark .fluent-card {
+  background-color: var(--color-fluent-card-dark);
+  border: 1px solid var(--color-fluent-border-dark);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Windows 11 style button styling */
+.fluent-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+  background-color: #ffffff;
+  color: #202020;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.fluent-button:hover {
+  background-color: #f9f9f9;
+  border-color: rgba(0, 0, 0, 0.18);
+}
+.fluent-button:active {
+  background-color: #f3f3f3;
+  transform: scale(0.98);
+}
+.fluent-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+html.dark .fluent-button {
+  background-color: #2d2d2d;
+  color: #f5f5f5;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+html.dark .fluent-button:hover {
+  background-color: #323232;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+html.dark .fluent-button:active {
+  background-color: #282828;
+}
+
+/* Primary Button */
+.fluent-button-primary {
+  background-color: var(--color-fluent-accent);
+  color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+}
+.fluent-button-primary:hover {
+  background-color: var(--color-fluent-accent-hover);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+.fluent-button-primary:active {
+  background-color: #006cbe;
+}
+html.dark .fluent-button-primary {
+  background-color: var(--color-fluent-accent);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+html.dark .fluent-button-primary:hover {
+  background-color: var(--color-fluent-accent-hover);
+}
+
+/* Windows 11 style text input */
+.fluent-input {
+  padding: 6px 10px;
+  font-size: 14px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.4);
+  color: #202020;
+  transition: all 0.15s ease;
+  outline: none;
+}
+.fluent-input:focus {
+  background-color: #ffffff;
+  border-bottom-color: var(--color-fluent-accent);
+}
+html.dark .fluent-input {
+  background-color: rgba(45, 45, 45, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.4);
+  color: #f5f5f5;
+}
+html.dark .fluent-input:focus {
+  background-color: #2d2d2d;
+  border-bottom-color: var(--color-fluent-accent);
+}
+
+/* Focus rings */
+.fluent-focus {
+  outline: 2px solid var(--color-fluent-accent);
+  outline-offset: 2px;
+}
+
+/* Fluent-style custom switch/toggle slider */
+.fluent-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+.fluent-switch-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.fluent-switch-track {
+  width: 40px;
+  height: 20px;
+  border-radius: 10px;
+  background-color: #e5e5e5;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  position: relative;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+html.dark .fluent-switch-track {
+  background-color: #454545;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.fluent-switch-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #5f5f5f;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition:
+    transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1),
+    background-color 0.2s ease;
+}
+html.dark .fluent-switch-thumb {
+  background-color: #a1a1a1;
+}
+.fluent-switch-input:checked + .fluent-switch-track {
+  background-color: var(--color-fluent-accent);
+  border-color: var(--color-fluent-accent);
+}
+.fluent-switch-input:checked + .fluent-switch-track .fluent-switch-thumb {
+  transform: translateX(20px);
+  background-color: #ffffff;
+}
+html.dark .fluent-switch-input:checked + .fluent-switch-track .fluent-switch-thumb {
+  background-color: #ffffff;
+}

@@ -3,9 +3,5 @@
   "identifier": "default",
   "description": "Capability for the main dashboard window",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "opener:default",
-    "notification:default"
-  ]
+  "permissions": ["core:default", "notification:default"]
 }

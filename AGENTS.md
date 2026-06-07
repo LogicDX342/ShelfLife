@@ -1,85 +1,162 @@
 ## Project layout
 
+**File creation policy:** You are expected to create new files as needed to follow this structure. The directory skeleton exists with stub `mod.rs` and `index.ts` files. When implementing a feature, create the appropriate file in the correct module — do not append unrelated code to an existing file just because it already exists.
+
+### Backend (Rust) — `src-tauri/src/`
+
 ```text
-ShelfLife/
-├── SPEC.md                       # Product and technical specification
-├── AGENTS.md                     # This file — dev environment and conventions
-├── package.json                  # Frontend dependencies (pnpm)
-├── pnpm-lock.yaml                # Lockfile
-├── svelte.config.js              # SvelteKit adapter-static config for Tauri SPA
-├── vite.config.js                # Vite dev server config (port 1420)
-├── tsconfig.json                 # TypeScript config
-├── static/                       # Static assets served at /
-│   └── favicon.png
-├── src/                          # Svelte 5 frontend
-│   ├── app.html                  # HTML shell
-│   └── routes/                   # SvelteKit file-based routes
-│       ├── +layout.ts            # SSR disabled (SPA mode)
-│       └── +page.svelte          # Main dashboard page
-└── src-tauri/                    # Rust backend (Tauri v2)
-    ├── Cargo.toml                # Rust dependencies
-    ├── tauri.conf.json           # Tauri app config (window, tray, bundle)
-    ├── capabilities/
-    │   └── default.json          # IPC permissions for main window
-    ├── build.rs                  # Tauri build script
-    ├── icons/                    # App icons (all sizes + .ico)
-    └── src/
-        ├── main.rs               # Windows entry point (hides console in release)
-        └── lib.rs                # App bootstrap: Tauri builder, plugin init, command registration
+src-tauri/src/
+├── main.rs                  # Windows entry point only — do not add logic here
+├── lib.rs                   # Tauri builder setup, plugin init, mod declarations
+│                            #   ONLY contains: mod statements, run() with Builder
+├── commands/                # Tauri IPC command handlers (one file per domain)
+│   ├── mod.rs               # Re-exports all command functions
+│   ├── files.rs             # get_active_files, explain_file, preview_file
+│   ├── triage.rs            # execute_triage_action, undo_audit_entry
+│   ├── rules.rs             # list_rules, save_rule, test_rule, delete_rule
+│   └── config.rs            # update_watch_targets, get_config, save_config
+├── engine/                  # File hygiene engine (no Tauri dependency)
+│   ├── mod.rs               # Re-exports
+│   ├── watcher.rs           # notify watcher setup, debounced event loop
+│   ├── quiescence.rs        # File stability checks (size + mtime confirmation)
+│   ├── reconciliation.rs    # Startup and periodic full-directory scans
+│   ├── freshness.rs         # freshness_at calculation, decay state transitions
+│   └── executor.rs          # Safe action execution (move, rename, trash)
+├── rules/                   # Rule engine (no Tauri dependency)
+│   ├── mod.rs               # Re-exports
+│   ├── evaluator.rs         # Rule matching, priority ordering, protected patterns
+│   ├── conditions.rs        # Extension, glob, regex, size, origin matching
+│   └── explanation.rs       # RuleMatchExplanation generation
+├── storage/                 # redb persistence layer
+│   ├── mod.rs               # Re-exports, Database init, table definitions
+│   ├── tracked.rs           # CRUD for TrackedFile records
+│   ├── rules.rs             # CRUD for AutomationRule records
+│   └── audit.rs             # CRUD for AuditEntry records, sequence management
+├── models/                  # Shared data types (no logic, just structs/enums)
+│   ├── mod.rs               # Re-exports all types
+│   ├── tracked_file.rs      # TrackedFile, FileDecayState, Expiry
+│   ├── rule.rs              # AutomationRule, RuleMode, RuleAction, RuleConditions
+│   ├── audit.rs             # AuditEntry, AuditActionKind, UndoStatus
+│   ├── origin.rs            # OriginEvidence
+│   ├── config.rs            # AppConfig, WatchTarget
+│   ├── preview.rs           # FilePreview, FilePreviewContent
+│   └── error.rs             # AppError, error codes
+└── tray.rs                  # System tray menu setup and event handling
 ```
 
-### Key entry points
+**Rules:**
 
-| Layer    | File                            | Purpose                                              |
-|----------|---------------------------------|------------------------------------------------------|
-| Frontend | `src/routes/+page.svelte`       | Main dashboard view                                  |
-| Frontend | `src/app.html`                  | HTML shell for SvelteKit                             |
-| Backend  | `src-tauri/src/lib.rs`          | Tauri app builder, plugin registration, IPC handlers |
-| Backend  | `src-tauri/src/main.rs`         | Windows process entry point                          |
-| Config   | `src-tauri/tauri.conf.json`     | Window size, tray icon, CSP, bundle targets          |
-| Config   | `src-tauri/capabilities/*.json` | Per-window IPC permission grants                     |
+- `lib.rs` only contains `mod` declarations and the `run()` function that builds the Tauri app. No business logic.
+- `main.rs` only calls `shelflife_lib::run()`. Never modify it.
+- `commands/` files are thin wrappers — they validate input, call into `engine/` or `storage/`, and return results.
+- `engine/` and `rules/` must NOT depend on Tauri types. They are pure Rust libraries testable without Tauri.
+- `models/` contains only data structures with `serde` derives. No methods beyond basic constructors.
+- `storage/` owns all redb access. Other modules never open database transactions directly.
 
-### Where to add new things
+### Frontend (Svelte 5) — `src/`
 
-* **New Tauri command**: Define in `src-tauri/src/lib.rs` (or a module imported there), register in `tauri::generate_handler![]`.
-* **New Rust module**: Create `src-tauri/src/<module>.rs`, add `mod <module>;` to `lib.rs`.
-* **New redb table**: Define `TableDefinition` constant alongside existing ones, create table in the database init function.
-* **New Svelte route**: Add `src/routes/<name>/+page.svelte`.
-* **New frontend component**: Add to `src/lib/components/<Name>.svelte`.
-* **New static asset**: Place in `static/`.
+```text
+src/
+├── app.html                      # HTML shell — do not modify unless changing <head>
+├── app.css                       # Global styles, CSS custom properties, reset
+├── routes/                       # SvelteKit file-based routing
+│   ├── +layout.svelte            # Root layout: sidebar/nav, global providers
+│   ├── +layout.ts                # SSR disabled (SPA mode)
+│   ├── +page.svelte              # Dashboard (main landing page only)
+│   ├── rules/
+│   │   └── +page.svelte          # Rule editor / rule list page
+│   ├── audit/
+│   │   └── +page.svelte          # Audit log / undo page
+│   └── settings/
+│       └── +page.svelte          # Watch targets, preferences, config
+└── lib/                          # Shared code (NOT route pages)
+    ├── components/               # Reusable Svelte 5 components
+    │   ├── FileCard.svelte       # Single file card (decay state, actions)
+    │   ├── FileList.svelte       # Grouped file list with filters
+    │   ├── RuleEditor.svelte     # Single rule create/edit form
+    │   ├── AuditRow.svelte       # Single audit entry with undo button
+    │   ├── PreviewPanel.svelte   # Lazy file preview (text/image/pdf/unknown)
+    │   ├── ExplanationBadge.svelte  # Rule match explanation tooltip/card
+    │   ├── ConfirmDialog.svelte  # Action confirmation modal
+    │   └── StatusBar.svelte      # Watch status, file counts summary
+    ├── stores/                   # Svelte 5 reactive state ($state wrappers)
+    │   ├── files.svelte.ts       # Tracked file list state, refresh logic
+    │   ├── rules.svelte.ts       # Rule list state
+    │   └── audit.svelte.ts       # Audit entries state
+    ├── api/                      # Tauri IPC call wrappers (typed invoke calls)
+    │   ├── files.ts              # invoke("get_active_files"), invoke("explain_file"), etc.
+    │   ├── triage.ts             # invoke("execute_triage_action"), invoke("undo_audit_entry")
+    │   ├── rules.ts              # invoke("list_rules"), invoke("save_rule"), etc.
+    │   └── config.ts             # invoke("update_watch_targets"), invoke("get_config")
+    ├── types/                    # TypeScript type definitions mirroring Rust models
+    │   └── index.ts              # TrackedFile, AutomationRule, AuditEntry, etc.
+    └── utils/                    # Pure helper functions
+        ├── format.ts             # File size formatting, date display
+        └── decay.ts              # Decay state label/color derivation
+```
+
+**Rules:**
+
+- Route `+page.svelte` files are page-level composition only — they import components and wire up data. Keep them under ~100 lines.
+- All reusable UI goes in `src/lib/components/`. If a piece of UI appears in more than one page, extract it.
+- All Tauri IPC calls go through `src/lib/api/`. Components never call `invoke()` directly.
+- All TypeScript types mirroring Rust structs go in `src/lib/types/`.
+- Use Svelte 5 runes exclusively: `$state`, `$derived`, `$effect`. Do NOT use Svelte 4 `$:` reactive statements or `$` store subscriptions.
+- Stores use `.svelte.ts` extension for rune support.
+
+### Config files (root)
+
+```text
+ShelfLife/
+├── package.json              # Frontend deps (pnpm)
+├── pnpm-lock.yaml            # Lockfile
+├── svelte.config.js          # SvelteKit adapter-static (SPA mode for Tauri)
+├── vite.config.js            # Vite dev server (port 1420, ignores src-tauri/)
+├── tsconfig.json             # TypeScript config
+├── static/                   # Static assets served at /
+│   └── favicon.png
+└── src-tauri/
+    ├── Cargo.toml            # Rust dependencies
+    ├── tauri.conf.json       # Tauri app config (window, tray, bundle)
+    ├── build.rs              # Tauri build script
+    ├── capabilities/
+    │   └── default.json      # IPC permissions for main window
+    └── icons/                # App icons (all sizes + .ico)
+```
 
 ---
 
 ## Dev environment tips
 
-* Run `cargo tauri dev` from the root directory to spin up the Rust backend daemon and the Svelte 5 HMR frontend simultaneously.
-* Run `cargo add <crate_name> --manifest-path src-tauri/Cargo.toml` to add pure-Rust dependencies (like `redb` or `notify`) directly to the backend layer.
-* Use `pnpm add -D <package_name>` at the root to add frontend utilities, Tailwind extensions, or UI plugins so Vite and Svelte can index them.
-* Check `src-tauri/Cargo.toml` to manage backend feature flags and `src/` for Svelte 5 application views.
-* When working in Svelte components, exclusively use Svelte 5 runes (`$state`, `$derived`, `$effect`). Do not use legacy Svelte 4 `$` stores or `$` reactive assignments.
+- Run `cargo tauri dev` from the root directory to spin up the Rust backend daemon and the Svelte 5 HMR frontend simultaneously.
+- Run `cargo add <crate_name> --manifest-path src-tauri/Cargo.toml` to add pure-Rust dependencies (like `redb` or `notify`) directly to the backend layer.
+- Use `pnpm add -D <package_name>` at the root to add frontend utilities, Tailwind extensions, or UI plugins so Vite and Svelte can index them.
+- Check `src-tauri/Cargo.toml` to manage backend feature flags and `src/` for Svelte 5 application views.
+- When working in Svelte components, exclusively use Svelte 5 runes (`$state`, `$derived`, `$effect`). Do not use legacy Svelte 4 `$` stores or `$` reactive assignments.
 
 ### Windows-specific notes
 
-* The target platform for v1 is **Windows only**. Do not add macOS- or Linux-specific code paths unless gated behind `#[cfg(target_os)]`.
-* Long paths (> 260 chars) may fail on older Windows configurations — use `\\?\` prefix or `std::fs::canonicalize` when handling user paths.
-* Zone.Identifier alternate data streams are read via `<filepath>:Zone.Identifier:$DATA`. Test with files downloaded through Edge/Chrome.
-* The Recycle Bin integration uses the `trash` crate which calls `IFileOperation` on Windows.
+- The target platform for v1 is **Windows only**. Do not add macOS- or Linux-specific code paths unless gated behind `#[cfg(target_os)]`.
+- Long paths (> 260 chars) may fail on older Windows configurations — use `\\?\` prefix or `std::fs::canonicalize` when handling user paths.
+- Zone.Identifier alternate data streams are read via `<filepath>:Zone.Identifier:$DATA`. Test with files downloaded through Edge/Chrome.
+- The Recycle Bin integration uses the `trash` crate which calls `IFileOperation` on Windows.
 
 ---
 
 ## Testing instructions
 
-* Run `cargo test --manifest-path src-tauri/Cargo.toml` to run all native Rust unit tests for the `redb` storage engines, file age calculations, and regex whitelist filters.
-* Run `pnpm test` to execute frontend tests (when configured).
-* Run `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings` before committing to catch any non-idiomatic Rust, potential thread blocks, or unhandled Result types.
-* Run `pnpm lint && pnpm check` to validate that ESLint, Prettier, and Svelte-Check pass without warnings across all `.svelte` and `.ts` files.
-* To test platform-specific file watching locally, create a temporary directory (e.g., `test-watch/`) in the project root, configure it as a watch target, then drop sample files into it and monitor terminal logs from the `notify` watcher thread.
-* Fix all compiler warnings, clippy lints, and frontend type mismatches until the entire validation pipeline turns green.
+- Only write tests for critical logic
+- Run `cargo test --manifest-path src-tauri/Cargo.toml` to run all native Rust unit tests for the `redb` storage engines, file age calculations, and regex whitelist filters.
+- Run `pnpm test` to execute frontend tests (when configured).
+- Run `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings` before committing to catch any non-idiomatic Rust, potential thread blocks, or unhandled Result types.
+- Run `pnpm lint && pnpm check` to validate that ESLint, Prettier, and Svelte-Check pass without warnings across all `.svelte` and `.ts` files.
+- To test platform-specific file watching locally, create a temporary directory (e.g., `test-watch/`) in the project root, configure it as a watch target, then drop sample files into it and monitor terminal logs from the `notify` watcher thread.
+- Fix all compiler warnings, clippy lints, and frontend type mismatches until the entire validation pipeline turns green.
 
 ---
 
 ## PR instructions
 
-* Use conventional commits.
-* Always run `cargo clippy`, `pnpm lint`, and a test execution pass before staging commits.
-* Run a trial production compile using `cargo tauri build --no-bundle` to guarantee that the application compiles under strict release profiling before opening a Pull Request.
+- Use conventional commits.
+- Always run `cargo clippy`, `pnpm lint`, and a test execution pass before submitting commits.
+- Run a trial production compile using `pnpm tauri build --no-bundle` to guarantee that the application compiles under strict release profiling before opening a Pull Request.

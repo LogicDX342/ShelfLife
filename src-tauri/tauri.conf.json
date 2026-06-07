@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "shelflife",
+  "productName": "ShelfLife",
   "version": "0.1.0",
-  "identifier": "com.shelflife.app",
+  "identifier": "com.shelflife.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -48,7 +48,5 @@
       }
     }
   },
-  "plugins": {
-    "notification": {}
-  }
+  "plugins": {}
 }

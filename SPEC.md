@@ -30,6 +30,7 @@ The first release does not include:
 - Monthly ZIP archiving automation.
 - Fully automatic rule execution by default.
 - Dependence on source-origin metadata for correctness.
+- Process runtime diagnostics and system resource consumption metrics (memory RSS, CPU usage).
 
 These features are deferred until the core file-safety loop is stable.
 
@@ -112,30 +113,19 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 +----------------------------------------------------------+
 ```
 
-### 2.1 Process model
-
-The long-lived process is the Tauri/Rust core. The Svelte dashboard is opened only when needed.
-
-Runtime memory targets are split by mode:
-
-```text
-Rust core idle, dashboard closed: target under 15 MB RSS
-Dashboard open: measured separately per platform and WebView
-Idle CPU: near zero outside watcher events and reconciliation scans
-```
-
-The sub-15 MB target applies to the closed-dashboard Rust core, not the full dashboard with WebView open.
-
 ---
 
 ## 3. Technology Stack
 
 ### 3.1 Frontend
 
-- Svelte 5.
-- Svelte runes for derived visual state.
-- TailwindCSS for styling.
-- Low-frequency UI refresh pulses.
+- Svelte 5 (utilizing `$state`, `$derived`, and `$effect` runes exclusively).
+- Tailwind CSS v4 for styling.
+- OS-adaptive Fluent Design guidelines (Mica material styling, custom scrollbars, toggle switches).
+- Centralized reactive internationalization (i18n) translation registry (supporting English and Simplified Chinese).
+- Dynamic theme switching (supporting Manual Light/Dark and System Sync settings).
+- Memory-safe component lifecycle event handling (properly cleaning up Tauri IPC event listener promises on component unmount).
+- Low-frequency UI refresh pulses on window focus.
 - No high-frequency ticking timers.
 
 ### 3.2 Backend
@@ -1131,6 +1121,8 @@ OCR text extraction metrics
 Image conversion savings
 Metadata stripping savings
 Monthly ZIP archive savings
+Process runtime diagnostics and resource consumption metrics
+
 ```
 
 ### 18.3 Computation strategy
@@ -1477,8 +1469,6 @@ App exposes undo status for every logged action.
 App does not perform automatic destructive actions by default.
 App keeps frontend filesystem permissions narrow.
 App validates all paths in Rust.
-App runs with low idle CPU.
-App separates Rust-core memory target from dashboard-open memory.
 ```
 
 ---
@@ -1489,8 +1479,6 @@ These should be resolved during Phase 0 and Phase 1:
 
 ```text
 Which debounce implementation produces the fewest false positives per platform?
-What is the measured Rust-core RSS when dashboard is closed?
-What is the measured dashboard-open memory footprint per platform?
 How reliable is trash undo on each supported OS?
 Should cloud-synced subfolders within Downloads be auto-detected and excluded?
 How should cloud-synced folders be detected and warned about?
