@@ -1,9 +1,14 @@
 use crate::models::{AutomationRule, RuleMatchExplanation};
 use crate::rules::conditions::ConditionMatch;
 
-pub fn protected_explanation(file_path: &str, protected_pattern: String) -> RuleMatchExplanation {
+pub fn protected_explanation(
+    file_path: &str,
+    size_bytes: u64,
+    protected_pattern: String,
+) -> RuleMatchExplanation {
     RuleMatchExplanation {
         file_path: file_path.to_string(),
+        size_bytes: Some(size_bytes),
         rule_id: None,
         rule_name: None,
         matched_extension: false,
@@ -21,6 +26,7 @@ pub fn protected_explanation(file_path: &str, protected_pattern: String) -> Rule
 
 pub fn rule_explanation(
     file_path: &str,
+    size_bytes: u64,
     rule: &AutomationRule,
     condition_match: ConditionMatch,
 ) -> RuleMatchExplanation {
@@ -35,6 +41,7 @@ pub fn rule_explanation(
 
     RuleMatchExplanation {
         file_path: file_path.to_string(),
+        size_bytes: Some(size_bytes),
         rule_id: Some(rule.id.clone()),
         rule_name: Some(rule.name.clone()),
         matched_extension: condition_match.matched_extension,

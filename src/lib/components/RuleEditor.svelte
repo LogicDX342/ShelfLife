@@ -9,7 +9,7 @@
     RuleMode,
     SizeCondition,
   } from '$lib/types';
-  import ExplanationBadge from './ExplanationBadge.svelte';
+  import { formatBytes } from '$lib/utils/format';
 
   let {
     onSaved,
@@ -468,9 +468,13 @@
             <span class="truncate font-medium flex-1" title={result.file_path}
               >{result.file_path.split('\\').pop() || result.file_path}</span
             >
-            <div class="flex-shrink-0">
-              <ExplanationBadge explanation={result} />
-            </div>
+            {#if result.size_bytes !== null}
+              <span
+                class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark flex-shrink-0"
+              >
+                {formatBytes(result.size_bytes)}
+              </span>
+            {/if}
           </div>
         {/each}
       </div>

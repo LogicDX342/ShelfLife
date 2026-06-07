@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 use crate::models::{
@@ -34,17 +34,17 @@ pub async fn save_rule(
 
 #[tauri::command]
 pub async fn test_rule(
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
     state: State<'_, AppState>,
     rule: AutomationRule,
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
     validate_rule(&rule, &storage::get_config(&state.db)?)?;
-    let (explanations, entries) = build_rule_preview_entries(&state.db, &rule)?;
-    for entry in entries {
-        let _ = app_handle.emit("rule_preview_generated", &entry);
-        let _ = app_handle.emit("audit_updated", &entry);
-    }
-    Ok(explanations)
+    let (explanations, _entries) = build_rule_preview_entries(&state.db, &rule)?;
+    let matched_explanations = explanations
+        .into_iter()
+        .filter(|exp| exp.proposed_action.is_some())
+        .collect();
+    Ok(matched_explanations)
 }
 
 fn build_rule_preview_entries(
@@ -64,7 +64,7 @@ fn build_rule_preview_entries(
             if explanation.proposed_action.is_some() {
                 let entry = AuditEntry {
                     id: Uuid::new_v4().to_string(),
-                    sequence: storage::audit::next_audit_sequence(db)?,
+                    sequence: 0,
                     timestamp: crate::engine::now_seconds(),
                     action_kind: AuditActionKind::RulePreview,
                     source_path: file.path.clone(),
@@ -78,7 +78,6 @@ fn build_rule_preview_entries(
                         reason: String::from("Preview did not change the file."),
                     },
                 };
-                storage::audit::append_audit_entry(db, &entry)?;
                 entries.push(entry);
             }
         }
@@ -252,7 +251,7 @@ mod tests {
             storage::audit::list_audit_entries(&fixture.db)
                 .expect("audit list should work")
                 .len(),
-            1
+            0
         );
     }
 

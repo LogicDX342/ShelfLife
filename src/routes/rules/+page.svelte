@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import ExplanationBadge from '$lib/components/ExplanationBadge.svelte';
+  import { formatBytes } from '$lib/utils/format';
   import RuleEditor from '$lib/components/RuleEditor.svelte';
   import { deleteRule, testRule, saveRule } from '$lib/api/rules';
   import { rulesState } from '$lib/stores/rules.svelte';
@@ -307,15 +307,14 @@
                 <p class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark truncate">
                   {result.file_path}
                 </p>
-                <p
-                  class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark mt-1 italic"
+              </div>
+              {#if result.size_bytes !== null}
+                <span
+                  class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark flex-shrink-0"
                 >
-                  {result.message}
-                </p>
-              </div>
-              <div class="flex flex-wrap gap-1 flex-shrink-0">
-                <ExplanationBadge explanation={result} />
-              </div>
+                  {formatBytes(result.size_bytes)}
+                </span>
+              {/if}
             </div>
           {/each}
         </div>

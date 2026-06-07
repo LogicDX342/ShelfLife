@@ -13,7 +13,11 @@ pub fn explain_file_against_rules(
     rules: &[AutomationRule],
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
     if let Some(pattern) = protected_pattern_match(&file.file_name, &config.protected_patterns)? {
-        return Ok(vec![protected_explanation(&file.path, pattern)]);
+        return Ok(vec![protected_explanation(
+            &file.path,
+            file.size_bytes,
+            pattern,
+        )]);
     }
 
     let mut enabled_rules: Vec<AutomationRule> =
@@ -32,12 +36,18 @@ pub fn explain_file_against_rules(
             &file.origin,
             &rule.conditions,
         )?;
-        explanations.push(rule_explanation(&file.path, &rule, condition_match));
+        explanations.push(rule_explanation(
+            &file.path,
+            file.size_bytes,
+            &rule,
+            condition_match,
+        ));
     }
 
     if explanations.is_empty() {
         explanations.push(RuleMatchExplanation {
             file_path: file.path.clone(),
+            size_bytes: Some(file.size_bytes),
             rule_id: None,
             rule_name: None,
             matched_extension: false,
@@ -69,28 +79,59 @@ pub fn matching_rule_ids(
         .collect())
 }
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+thread_local! {
+    static REGEX_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
+}
+
 pub fn protected_pattern_match(
     file_name: &str,
     patterns: &[String],
 ) -> Result<Option<String>, AppError> {
-    for pattern in patterns {
-        let regex = Regex::new(pattern).map_err(|error| {
-            AppError::with_details(
-                "RULE_INVALID_REGEX",
-                "Protected pattern could not be parsed.",
-                true,
-                error.to_string(),
-            )
-        })?;
-        if regex.is_match(file_name) {
-            return Ok(Some(pattern.clone()));
-        }
-    }
+    REGEX_CACHE.with(|cache| {
+        for pattern in patterns {
+            let mut cache_borrow = cache.borrow_mut();
+            let regex = if cache_borrow.contains_key(pattern) {
+                cache_borrow.get(pattern).unwrap()
+            } else {
+                let re = Regex::new(pattern).map_err(|error| {
+                    AppError::with_details(
+                        "RULE_INVALID_REGEX",
+                        "Protected pattern could not be parsed.",
+                        true,
+                        error.to_string(),
+                    )
+                })?;
+                cache_borrow.insert(pattern.clone(), re);
+                cache_borrow.get(pattern).unwrap()
+            };
 
-    Ok(None)
+            if regex.is_match(file_name) {
+                return Ok(Some(pattern.clone()));
+            }
+        }
+        Ok(None)
+    })
 }
 
 fn path_is_inside(path: &Path, root: &Path) -> bool {
+    // Fast path: string prefix check
+    let path_str = path.to_string_lossy().to_lowercase().replace('/', "\\");
+    let root_str = root.to_string_lossy().to_lowercase().replace('/', "\\");
+
+    // Ensure root ends with a separator to avoid partial folder match (e.g., /foo matching /foobar)
+    let root_prefix = if root_str.ends_with('\\') {
+        root_str.clone()
+    } else {
+        format!("{}\\", root_str)
+    };
+
+    if !path_str.starts_with(&root_prefix) && path_str != root_str {
+        return false;
+    }
+
     let Ok(path) = path.canonicalize() else {
         return false;
     };

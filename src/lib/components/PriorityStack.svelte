@@ -23,7 +23,7 @@
 
   // Filter only Stale and Decaying files
   let reviewFiles = $derived(
-    filesState.files.filter((file) => file.state === 'Stale' || file.state === 'Decaying')
+    filesState.files.filter((file) => file.state === 'Stale' || file.state === 'Decaying'),
   );
 
   // Sort by expiry (urgency)
@@ -37,7 +37,7 @@
         return Infinity; // Permanent
       };
       return getExpiryTime(a.expiry) - getExpiryTime(b.expiry);
-    })
+    }),
   );
 
   // Filter sorted files by search query
@@ -45,11 +45,8 @@
     sortedFiles.filter((file) => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
-      return (
-        file.file_name.toLowerCase().includes(q) ||
-        file.path.toLowerCase().includes(q)
-      );
-    })
+      return file.file_name.toLowerCase().includes(q) || file.path.toLowerCase().includes(q);
+    }),
   );
 
   onMount(() => {
@@ -81,14 +78,16 @@
 
 <div class="h-full flex flex-col min-h-0 relative gap-6">
   <!-- Header -->
-  <header class="flex flex-col md:flex-row md:items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0 gap-4">
+  <header
+    class="flex flex-col md:flex-row md:items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0 gap-4"
+  >
     <div>
       <h1 class="text-2xl font-bold tracking-tight">{i18n.t('nav.queue')}</h1>
       <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
         {i18n.t('dashboard.subtitle')}
       </p>
     </div>
-    
+
     <!-- Search Input -->
     <div class="relative w-full md:max-w-md">
       <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -130,10 +129,17 @@
     {:else if filesState.loading && filesState.files.length === 0}
       <div class="py-12 flex flex-col items-center justify-center gap-3">
         <svg class="animate-spin h-8 w-8 text-fluent-accent" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
+          ></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          ></path>
         </svg>
-        <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark">Loading queue...</span>
+        <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
+          >Loading queue...</span
+        >
       </div>
     {:else if filteredFiles.length === 0}
       <div class="fluent-card py-16 text-center">
@@ -158,11 +164,7 @@
     {:else}
       <div class="space-y-4">
         {#each filteredFiles.slice(0, visibleLimit) as file (file.path)}
-          <FileCard
-            {file}
-            onRefresh={() => filesState.refresh()}
-            selectable={false}
-          />
+          <FileCard {file} onRefresh={() => filesState.refresh()} selectable={false} />
         {/each}
 
         {#if filteredFiles.length > visibleLimit}
@@ -170,7 +172,7 @@
             <button
               type="button"
               class="fluent-button w-full justify-center text-xs font-semibold py-2.5"
-              onclick={() => visibleLimit += 100}
+              onclick={() => (visibleLimit += 100)}
             >
               Load More ({filteredFiles.length - visibleLimit} remaining)
             </button>

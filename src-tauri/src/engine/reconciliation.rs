@@ -45,7 +45,12 @@ pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppE
         let canonical_root = root.canonicalize().ok();
         let target_config = config_for_target(&config, target.default_ttl_seconds);
 
-        for path in scan_target_paths(&root, target.recursive, ignore_set.as_ref(), hidden_whitelist.as_ref())? {
+        for path in scan_target_paths(
+            &root,
+            target.recursive,
+            ignore_set.as_ref(),
+            hidden_whitelist.as_ref(),
+        )? {
             if is_transient_path(&path) {
                 continue;
             }
@@ -85,7 +90,9 @@ pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppE
             tracked.matched_rule_ids = if metadata_changed {
                 matching_rule_ids(&tracked, &config, &rules)?
             } else {
-                existing.map(|e| e.matched_rule_ids.clone()).unwrap_or_default()
+                existing
+                    .map(|e| e.matched_rule_ids.clone())
+                    .unwrap_or_default()
             };
 
             match existing {
@@ -167,7 +174,11 @@ pub fn reconcile_paths(
     let mut to_upsert: Vec<TrackedFile> = Vec::new();
 
     // Deduplicate paths.
-    let paths: Vec<PathBuf> = paths.into_iter().collect::<HashSet<_>>().into_iter().collect();
+    let paths: Vec<PathBuf> = paths
+        .into_iter()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
 
     for path in &paths {
         if is_transient_path(path) {
@@ -228,7 +239,10 @@ pub fn reconcile_paths(
         tracked.matched_rule_ids = if metadata_changed {
             matching_rule_ids(&tracked, &config, &rules)?
         } else {
-            existing.as_ref().map(|e| e.matched_rule_ids.clone()).unwrap_or_default()
+            existing
+                .as_ref()
+                .map(|e| e.matched_rule_ids.clone())
+                .unwrap_or_default()
         };
 
         match &existing {
@@ -310,7 +324,10 @@ fn scan_target_paths_inner(
             }
             // Hidden directories are skipped by default; allowed if whitelisted.
             if is_hidden_directory(&path) {
-                let dir_name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
+                let dir_name = path
+                    .file_name()
+                    .and_then(|v| v.to_str())
+                    .unwrap_or_default();
                 let whitelisted = hidden_whitelist
                     .map(|set| set.is_match(dir_name))
                     .unwrap_or(false);
@@ -320,7 +337,10 @@ fn scan_target_paths_inner(
             }
             // Non-hidden dirs can be excluded by ignore_patterns.
             if let Some(set) = ignore_set {
-                let dir_name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
+                let dir_name = path
+                    .file_name()
+                    .and_then(|v| v.to_str())
+                    .unwrap_or_default();
                 if set.is_match(dir_name) {
                     continue;
                 }
@@ -396,7 +416,6 @@ fn target_ignores_path(
         .unwrap_or(path);
     ignore_set.is_match(file_name) || ignore_set.is_match(relative)
 }
-
 
 fn tracked_file_changed(existing: &TrackedFile, next: &TrackedFile) -> bool {
     existing.file_name != next.file_name

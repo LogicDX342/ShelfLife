@@ -66,6 +66,7 @@ export type AutomationRule = {
 
 export type RuleMatchExplanation = {
   file_path: string;
+  size_bytes: number | null;
   rule_id: string | null;
   rule_name: string | null;
   matched_extension: boolean;

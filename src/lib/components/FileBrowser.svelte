@@ -64,17 +64,17 @@
   });
 
   let watchTargets = $derived(
-    config ? config.watch_targets.filter((t) => t.enabled).map((t) => t.path) : []
+    config ? config.watch_targets.filter((t) => t.enabled).map((t) => t.path) : [],
   );
 
   function getWorstState(state1: string, state2: string): string {
     const priority: Record<string, number> = {
-      'Decaying': 5,
-      'Stale': 4,
-      'Fresh': 3,
-      'Pinned': 2,
-      'Ignored': 1,
-      'Missing': 0,
+      Decaying: 5,
+      Stale: 4,
+      Fresh: 3,
+      Pinned: 2,
+      Ignored: 1,
+      Missing: 0,
     };
     return (priority[state1] || 0) >= (priority[state2] || 0) ? state1 : state2;
   }
@@ -158,9 +158,7 @@
     }
 
     // Sort folders alphabetically
-    const sortedFolders = Object.values(foldersMap).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    const sortedFolders = Object.values(foldersMap).sort((a, b) => a.name.localeCompare(b.name));
 
     // Sort immediate files by name
     const sortedFiles = immediateFiles.sort((a, b) => a.file_name.localeCompare(b.file_name));
@@ -201,12 +199,13 @@
   let selectedSize = $derived(
     filesState.files
       .filter((file) => selectedPaths.includes(file.path))
-      .reduce((sum, file) => sum + file.size_bytes, 0)
+      .reduce((sum, file) => sum + file.size_bytes, 0),
   );
 
   let currentFolderFiles = $derived(directoryContents.files);
   let allSelected = $derived(
-    currentFolderFiles.length > 0 && currentFolderFiles.every((f) => selectedPaths.includes(f.path))
+    currentFolderFiles.length > 0 &&
+      currentFolderFiles.every((f) => selectedPaths.includes(f.path)),
   );
 
   function toggleSelectAll(checked: boolean) {
@@ -273,18 +272,25 @@
 
 <div class="h-full flex flex-col min-h-0 relative gap-6">
   <!-- Header & Breadcrumbs -->
-  <header class="border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0">
+  <header
+    class="border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0"
+  >
     <h1 class="text-2xl font-bold tracking-tight">{i18n.t('nav.browser')}</h1>
-    
+
     <!-- Breadcrumbs Navigation -->
-    <nav class="flex items-center flex-wrap gap-1 mt-2 text-sm text-fluent-muted-light dark:text-fluent-muted-dark">
+    <nav
+      class="flex items-center flex-wrap gap-1 mt-2 text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
+    >
       {#each breadcrumbs as crumb, index (crumb.path)}
         {#if index > 0}
           <span class="opacity-50 mx-1">/</span>
         {/if}
         <button
           onclick={() => (currentDirectory = crumb.path)}
-          class="hover:text-fluent-accent hover:underline transition-colors font-medium {index === breadcrumbs.length - 1 ? 'text-fluent-text-light dark:text-fluent-text-dark font-semibold' : ''}"
+          class="hover:text-fluent-accent hover:underline transition-colors font-medium {index ===
+          breadcrumbs.length - 1
+            ? 'text-fluent-text-light dark:text-fluent-text-dark font-semibold'
+            : ''}"
         >
           {crumb.name}
         </button>
@@ -294,12 +300,16 @@
 
   <!-- Error / Success Messages -->
   {#if bulkError}
-    <div class="p-3 text-sm rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/50 flex-shrink-0">
+    <div
+      class="p-3 text-sm rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/50 flex-shrink-0"
+    >
       {bulkError}
     </div>
   {/if}
   {#if bulkSummary}
-    <div class="p-3 text-sm rounded bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-900/50 flex-shrink-0">
+    <div
+      class="p-3 text-sm rounded bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-900/50 flex-shrink-0"
+    >
       {bulkSummary}
     </div>
   {/if}
@@ -309,7 +319,11 @@
     <!-- Folders Section -->
     {#if directoryContents.folders.length > 0}
       <div>
-        <h2 class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark mb-3">Folders</h2>
+        <h2
+          class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark mb-3"
+        >
+          Folders
+        </h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {#each directoryContents.folders.slice(0, visibleFoldersCount) as folder (folder.path)}
             <button
@@ -318,14 +332,30 @@
             >
               <div class="flex items-center gap-3 min-w-0">
                 <!-- Folder Icon -->
-                <svg class="w-8 h-8 text-fluent-accent/80 group-hover:scale-105 transition-transform flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                <svg
+                  class="w-8 h-8 text-fluent-accent/80 group-hover:scale-105 transition-transform flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
                 </svg>
                 <div class="min-w-0">
-                  <h3 class="text-sm font-semibold truncate text-fluent-text-light dark:text-fluent-text-dark" title={folder.name}>
+                  <h3
+                    class="text-sm font-semibold truncate text-fluent-text-light dark:text-fluent-text-dark"
+                    title={folder.name}
+                  >
                     {folder.name}
                   </h3>
-                  <p class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark truncate mt-0.5" title={folder.path}>
+                  <p
+                    class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark truncate mt-0.5"
+                    title={folder.path}
+                  >
                     {folder.filesCount} file{folder.filesCount === 1 ? '' : 's'}
                   </p>
                 </div>
@@ -334,9 +364,17 @@
               <!-- Worst state indicator dot -->
               <span class="flex h-2 w-2 relative flex-shrink-0">
                 {#if folder.worstState === 'Decaying' || folder.worstState === 'Stale'}
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 {getWorstStateColors(folder.worstState).split(' ')[0]}"></span>
+                  <span
+                    class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 {getWorstStateColors(
+                      folder.worstState,
+                    ).split(' ')[0]}"
+                  ></span>
                 {/if}
-                <span class="relative inline-flex rounded-full h-2 w-2 {getWorstStateColors(folder.worstState).split(' ')[0]}"></span>
+                <span
+                  class="relative inline-flex rounded-full h-2 w-2 {getWorstStateColors(
+                    folder.worstState,
+                  ).split(' ')[0]}"
+                ></span>
               </span>
             </button>
           {/each}
@@ -347,7 +385,7 @@
             <button
               type="button"
               class="fluent-button w-full justify-center text-xs font-semibold py-2"
-              onclick={() => visibleFoldersCount += 50}
+              onclick={() => (visibleFoldersCount += 50)}
             >
               Load More Folders ({directoryContents.folders.length - visibleFoldersCount} remaining)
             </button>
@@ -360,11 +398,15 @@
     {#if directoryContents.files.length > 0}
       <div>
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark">Files</h2>
-          
+          <h2
+            class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark"
+          >
+            Files
+          </h2>
+
           <!-- Bulk Select Operations -->
           <div class="flex items-center gap-3">
-            <button 
+            <button
               type="button"
               class="text-xs font-semibold text-fluent-accent hover:underline"
               onclick={selectReviewableInFolder}
@@ -372,7 +414,9 @@
               Select Reviewable
             </button>
             <span class="text-fluent-border-light dark:text-fluent-border-dark">|</span>
-            <label class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
+            <label
+              class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none"
+            >
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -401,7 +445,7 @@
             <button
               type="button"
               class="fluent-button w-full justify-center text-xs font-semibold py-2"
-              onclick={() => visibleFilesCount += 50}
+              onclick={() => (visibleFilesCount += 50)}
             >
               Load More Files ({directoryContents.files.length - visibleFilesCount} remaining)
             </button>
@@ -413,8 +457,18 @@
     <!-- Empty Folder Screen -->
     {#if directoryContents.folders.length === 0 && directoryContents.files.length === 0}
       <div class="fluent-card py-16 text-center">
-        <svg class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5M5 19a2 2 0 002-2v-5M7 10h3m-3 4h3m4-4h.01M17 14h.01" />
+        <svg
+          class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+            d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5M5 19a2 2 0 002-2v-5M7 10h3m-3 4h3m4-4h.01M17 14h.01"
+          />
         </svg>
         <h3 class="text-base font-semibold">Empty Folder</h3>
         <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
@@ -426,7 +480,9 @@
 
   <!-- Sticky Bulk Action Bar at Bottom -->
   {#if selectedPaths.length > 0}
-    <div class="fixed bottom-6 left-6 right-6 md:left-[264px] acrylic-card p-4 rounded-lg shadow-lg flex items-center justify-between border border-fluent-accent/30 z-10 animate-slide-up">
+    <div
+      class="fixed bottom-6 left-6 right-6 md:left-[264px] acrylic-card p-4 rounded-lg shadow-lg flex items-center justify-between border border-fluent-accent/30 z-10 animate-slide-up"
+    >
       <div class="flex items-center gap-4">
         <div class="flex flex-col">
           <span class="text-sm font-semibold text-fluent-accent">
@@ -458,7 +514,10 @@
           />
         {/if}
 
-        <button class="fluent-button fluent-button-primary animate-pulse" onclick={() => (confirmBulk = true)}>
+        <button
+          class="fluent-button fluent-button-primary animate-pulse"
+          onclick={() => (confirmBulk = true)}
+        >
           Apply Action
         </button>
       </div>

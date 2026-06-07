@@ -68,6 +68,13 @@ fn matches_extension(file_name: &str, extensions: &[String]) -> bool {
         .any(|candidate| candidate == ext)
 }
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+thread_local! {
+    static REGEX_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
+}
+
 fn matches_filename_pattern(
     file_name: &str,
     globs: &[String],
@@ -99,21 +106,30 @@ fn matches_filename_pattern(
         }
     }
 
-    for pattern in regexes {
-        let regex = Regex::new(pattern).map_err(|error| {
-            AppError::with_details(
-                "RULE_INVALID_REGEX",
-                "Filename regex could not be parsed.",
-                true,
-                error.to_string(),
-            )
-        })?;
-        if regex.is_match(file_name) {
-            return Ok(Some(pattern.clone()));
-        }
-    }
+    REGEX_CACHE.with(|cache| {
+        for pattern in regexes {
+            let mut cache_borrow = cache.borrow_mut();
+            let regex = if cache_borrow.contains_key(pattern) {
+                cache_borrow.get(pattern).unwrap()
+            } else {
+                let re = Regex::new(pattern).map_err(|error| {
+                    AppError::with_details(
+                        "RULE_INVALID_REGEX",
+                        "Filename regex could not be parsed.",
+                        true,
+                        error.to_string(),
+                    )
+                })?;
+                cache_borrow.insert(pattern.clone(), re);
+                cache_borrow.get(pattern).unwrap()
+            };
 
-    Ok(None)
+            if regex.is_match(file_name) {
+                return Ok(Some(pattern.clone()));
+            }
+        }
+        Ok(None)
+    })
 }
 
 fn matches_origin(origin: &OriginEvidence, domains: &[String]) -> Option<String> {

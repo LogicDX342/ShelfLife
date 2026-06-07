@@ -62,6 +62,7 @@ pub struct AutomationRule {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct RuleMatchExplanation {
     pub file_path: String,
+    pub size_bytes: Option<u64>,
     pub rule_id: Option<String>,
     pub rule_name: Option<String>,
     pub matched_extension: bool,
