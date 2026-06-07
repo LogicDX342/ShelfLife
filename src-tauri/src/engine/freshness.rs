@@ -103,7 +103,15 @@ pub fn tracked_file_from_metadata(
         expiry,
         state,
         matched_rule_ids: Vec::new(),
-        origin: read_origin_evidence(path),
+        // Reuse existing origin evidence when already resolved — avoids an ADS
+        // syscall per file on every scan. A replaced file will have a changed mtime
+        // which causes a full re-evaluation including a fresh origin read.
+        origin: match existing {
+            Some(file) if !matches!(file.origin, crate::models::OriginEvidence::Unknown) => {
+                file.origin.clone()
+            }
+            _ => read_origin_evidence(path),
+        },
     }
 }
 

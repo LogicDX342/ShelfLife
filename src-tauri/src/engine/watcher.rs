@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -93,7 +93,7 @@ fn watch_event_loop(
                     .flat_map(|event| event.paths.iter().cloned())
                     .collect::<Vec<_>>();
 
-                match process_debounced_paths(&db, paths, Duration::from_millis(1_000)) {
+                match process_debounced_paths(&db, paths, Duration::from_secs(1)) {
                     Ok(report) => event_sink(WatcherEvent::Reconciled(report)),
                     Err(error) => event_sink(WatcherEvent::Error(error)),
                 }
@@ -118,29 +118,25 @@ pub fn process_debounced_paths(
     paths: Vec<PathBuf>,
     stability_delay: Duration,
 ) -> Result<ReconciliationReport, AppError> {
-    for path in paths {
-        wait_for_event_path_stability(&path, stability_delay);
-    }
-
-    engine::reconcile_with_report(db)
+    // Wait for each changed path to stabilise before processing. Already-deleted
+    // paths pass through immediately (deletion is a valid stable event).
+    let stable_paths = wait_for_paths_stability(paths, stability_delay);
+    engine::reconcile_paths(db, stable_paths)
 }
 
-fn wait_for_event_path_stability(path: &Path, stability_delay: Duration) {
-    if crate::engine::quiescence::is_transient_path(path) {
-        return;
-    }
-
-    let Ok(before) = std::fs::metadata(path) else {
-        return;
-    };
-    thread::sleep(stability_delay);
-    let Ok(after) = std::fs::metadata(path) else {
-        return;
-    };
-
-    if before.len() != after.len() || before.modified().ok() != after.modified().ok() {
-        thread::sleep(stability_delay);
-    }
+/// For each path, poll until size and mtime are stable across two checks or the
+/// file has been deleted. Returns only the paths that are ready to process.
+fn wait_for_paths_stability(paths: Vec<PathBuf>, delay: Duration) -> Vec<PathBuf> {
+    paths
+        .into_iter()
+        .filter(|path| {
+            // Deleted files are stable — they represent a removal event.
+            if !path.exists() {
+                return true;
+            }
+            crate::engine::quiescence::wait_for_stability_sync(path, delay, 3)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -245,6 +241,7 @@ mod tests {
                     recursive,
                     default_ttl_seconds: None,
                     ignore_patterns: Vec::new(),
+                    include_hidden_patterns: Vec::new(),
                     rule_ids: Vec::new(),
                 }],
                 safe_folder_path: path_string(&self.root.join("safe")),

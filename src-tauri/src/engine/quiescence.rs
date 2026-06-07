@@ -1,8 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::models::AppError;
-
+/// Returns true if the path is a transient/partial file that should never be indexed.
 pub fn is_transient_path(path: &Path) -> bool {
     let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
         return true;
@@ -20,27 +19,78 @@ pub fn is_transient_path(path: &Path) -> bool {
         || lower.starts_with("~$")
 }
 
-#[allow(dead_code)]
-pub async fn wait_until_stable(path: &Path, delay: Duration) -> Result<(), AppError> {
+/// Returns true if the directory is a system-critical directory that must always be
+/// skipped during recursive traversal. No user override is possible for these.
+pub fn is_system_directory(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+        return false;
+    };
+    let lower = name.to_lowercase();
+    lower == "$recycle.bin" || lower == "system volume information"
+}
+
+/// Returns true if the directory is hidden and should be skipped by default.
+/// On Windows, checks `FILE_ATTRIBUTE_HIDDEN`. On other platforms, checks for
+/// a leading dot in the directory name.
+#[cfg(target_os = "windows")]
+pub fn is_hidden_directory(path: &Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return false;
+    };
+    meta.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn is_hidden_directory(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with('.'))
+}
+
+/// Block until the file's size and mtime are stable across two consecutive checks
+/// separated by `delay`. Returns `true` if the file stabilised, `false` if it is
+/// still changing after `max_attempts` retries or if the file disappeared.
+pub fn wait_for_stability_sync(path: &Path, delay: Duration, max_attempts: u32) -> bool {
     if is_transient_path(path) {
-        return Err(AppError::new(
-            "FILE_NOT_STABLE",
-            "The file is a transient or partial file. No file was changed.",
-            true,
-        ));
+        return false;
+    }
+    for _ in 0..max_attempts {
+        let Ok(before) = std::fs::metadata(path) else {
+            return false;
+        };
+        std::thread::sleep(delay);
+        let Ok(after) = std::fs::metadata(path) else {
+            return false;
+        };
+        if before.len() == after.len() && before.modified().ok() == after.modified().ok() {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn transient_extensions_are_detected() {
+        assert!(is_transient_path(Path::new("file.crdownload")));
+        assert!(is_transient_path(Path::new("file.part")));
+        assert!(is_transient_path(Path::new("file.tmp")));
+        assert!(is_transient_path(Path::new("~$document.docx")));
+        assert!(!is_transient_path(Path::new("report.pdf")));
     }
 
-    let before = std::fs::metadata(path)?;
-    tokio::time::sleep(delay).await;
-    let after = std::fs::metadata(path)?;
-
-    if before.len() == after.len() && before.modified().ok() == after.modified().ok() {
-        Ok(())
-    } else {
-        Err(AppError::new(
-            "FILE_NOT_STABLE",
-            "The file is still changing. No file was changed.",
-            true,
-        ))
+    #[test]
+    fn system_directory_matches_recycle_bin_case_insensitive() {
+        assert!(is_system_directory(Path::new("$RECYCLE.BIN")));
+        assert!(is_system_directory(Path::new("$recycle.bin")));
+        assert!(is_system_directory(Path::new("System Volume Information")));
+        assert!(!is_system_directory(Path::new("Downloads")));
+        assert!(!is_system_directory(Path::new(".git")));
     }
 }

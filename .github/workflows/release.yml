@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -51,5 +51,5 @@ jobs:
           tagName: v__VERSION__
           releaseName: 'ShelfLife v__VERSION__'
           releaseBody: 'Release version v__VERSION__'
-          releaseDraft: true
           prerelease: false
+          releaseAssetNamePattern: '[name]_[version]_[arch][setup][ext]'

@@ -54,6 +54,40 @@ pub fn remove_tracked_file(db: &Database, path: &str) -> Result<(), AppError> {
     rebuild_tracked_indexes(db)
 }
 
+/// Write all files in a single transaction then rebuild indexes once.
+/// Use this during reconciliation to avoid N separate disk flushes.
+pub fn upsert_tracked_files_batch(db: &Database, files: &[TrackedFile]) -> Result<(), AppError> {
+    if files.is_empty() {
+        return Ok(());
+    }
+    let write_txn = db.begin_write()?;
+    {
+        let mut table = write_txn.open_table(TRACKED_BY_PATH_TABLE)?;
+        for file in files {
+            let bytes = bincode::serialize(file)?;
+            table.insert(file.path.as_str(), bytes.as_slice())?;
+        }
+    }
+    write_txn.commit()?;
+    rebuild_tracked_indexes(db)
+}
+
+/// Remove all given paths in a single transaction then rebuild indexes once.
+pub fn remove_tracked_files_batch(db: &Database, paths: &[&str]) -> Result<(), AppError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let write_txn = db.begin_write()?;
+    {
+        let mut table = write_txn.open_table(TRACKED_BY_PATH_TABLE)?;
+        for path in paths {
+            table.remove(*path)?;
+        }
+    }
+    write_txn.commit()?;
+    rebuild_tracked_indexes(db)
+}
+
 pub fn rebuild_tracked_indexes(db: &Database) -> Result<(), AppError> {
     let files = {
         let read_txn = db.begin_read()?;

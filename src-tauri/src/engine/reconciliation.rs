@@ -1,12 +1,12 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use globset::{Glob, GlobSetBuilder};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use redb::Database;
 
 use crate::engine::freshness::tracked_file_from_metadata;
-use crate::engine::quiescence::is_transient_path;
+use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
 use crate::models::{
     AppConfig, AppError, FileDecayState, ReconciliationReport, TrackedFile, WatchTarget,
 };
@@ -20,90 +20,316 @@ pub fn reconcile(db: &Database) -> Result<Vec<String>, AppError> {
 pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
     let rules = storage::rules::list_rules(db)?;
-    let mut observed_paths = HashSet::new();
+    let mut observed_paths: HashSet<String> = HashSet::new();
     let mut report = ReconciliationReport::default();
 
-    for target in config.watch_targets.iter().filter(|target| target.enabled) {
+    // Load all currently-tracked files into memory once (single read transaction).
+    let existing_map: HashMap<String, TrackedFile> = storage::tracked::list_tracked_files(db)?
+        .into_iter()
+        .map(|f| (f.path.clone(), f))
+        .collect();
+
+    let mut to_upsert: Vec<TrackedFile> = Vec::new();
+    let mut to_mark_ignored: Vec<String> = Vec::new();
+
+    for target in config.watch_targets.iter().filter(|t| t.enabled) {
         let root = PathBuf::from(&target.path);
         if !root.exists() {
             continue;
         }
-        let ignore_set = build_ignore_set(target)?;
 
-        for path in scan_target_paths(&root, target.recursive)? {
+        // Hoist pattern set construction outside the file loop.
+        let ignore_set = build_ignore_set(target)?;
+        let hidden_whitelist = build_hidden_whitelist(target)?;
+        // Canonicalize root once — reused inside target_ignores_path.
+        let canonical_root = root.canonicalize().ok();
+        let target_config = config_for_target(&config, target.default_ttl_seconds);
+
+        for path in scan_target_paths(&root, target.recursive, ignore_set.as_ref(), hidden_whitelist.as_ref())? {
             if is_transient_path(&path) {
                 continue;
             }
-            if target_ignores_path(target, &path, ignore_set.as_ref()) {
-                mark_existing_ignored(db, &path, &mut report)?;
+            if target_ignores_path(&path, ignore_set.as_ref(), canonical_root.as_deref()) {
+                // File-level ignore pattern matched — mark existing as Ignored.
+                let path_string = path.to_string_lossy().to_string();
+                if let Some(existing) = existing_map.get(&path_string) {
+                    if !matches!(existing.state, FileDecayState::Ignored) {
+                        to_mark_ignored.push(path_string.clone());
+                        report.updated.push(path_string);
+                    }
+                }
                 continue;
             }
-            if fs::symlink_metadata(&path)?.file_type().is_symlink() {
-                continue;
-            }
-            let metadata = fs::metadata(&path)?;
-            if !metadata.is_file() {
+
+            // Single stat — symlink_metadata covers both symlink detection and file metadata.
+            let metadata = match fs::symlink_metadata(&path) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
                 continue;
             }
 
             let path_string = path.to_string_lossy().to_string();
-            let existing = storage::tracked::get_tracked_file(db, &path_string)?;
-            let target_config = config_for_target(&config, target.default_ttl_seconds);
-            let mut tracked =
-                tracked_file_from_metadata(&path, &metadata, existing.as_ref(), &target_config);
-            tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
-            match &existing {
-                Some(existing) if tracked_file_changed(existing, &tracked) => {
-                    report.updated.push(path_string.clone());
-                }
-                Some(_) => {}
-                None => report.indexed.push(path_string.clone()),
-            }
-            storage::tracked::upsert_tracked_file(db, &tracked)?;
             observed_paths.insert(path_string.clone());
+
+            let existing = existing_map.get(&path_string);
+            let mut tracked =
+                tracked_file_from_metadata(&path, &metadata, existing, &target_config);
+
+            // Only re-run rule matching when the file is new or its metadata changed.
+            let metadata_changed = existing
+                .map(|e| tracked_file_changed(e, &tracked))
+                .unwrap_or(true);
+
+            tracked.matched_rule_ids = if metadata_changed {
+                matching_rule_ids(&tracked, &config, &rules)?
+            } else {
+                existing.map(|e| e.matched_rule_ids.clone()).unwrap_or_default()
+            };
+
+            match existing {
+                Some(e) if tracked_file_changed(e, &tracked) => {
+                    report.updated.push(path_string);
+                }
+                None => {
+                    report.indexed.push(path_string);
+                }
+                _ => {}
+            }
+            to_upsert.push(tracked);
         }
     }
 
-    for file in storage::tracked::list_tracked_files(db)? {
-        if !observed_paths.contains(&file.path) {
-            let path = Path::new(&file.path);
-            let in_active_scope = config
-                .watch_targets
-                .iter()
-                .filter(|target| target.enabled)
-                .any(|target| root_contains(&target.path, path))
-                || root_contains(&config.safe_folder_path, path);
-
-            if !in_active_scope {
-                if !matches!(file.state, FileDecayState::Missing) {
-                    report.removed.push(file.path.clone());
-                }
-                storage::tracked::remove_tracked_file(db, &file.path)?;
-            } else if !path.exists() {
-                if !matches!(file.state, FileDecayState::Missing) {
-                    report.removed.push(file.path.clone());
-                }
-                let mut updated_file = file;
-                updated_file.state = FileDecayState::Missing;
-                storage::tracked::upsert_tracked_file(db, &updated_file)?;
-            }
+    // Apply Ignored state updates gathered during the scan.
+    for path_string in to_mark_ignored {
+        if let Some(existing) = existing_map.get(&path_string) {
+            let mut updated = existing.clone();
+            updated.state = FileDecayState::Ignored;
+            to_upsert.push(updated);
         }
+    }
+
+    // Handle previously-tracked files that were not observed in this scan.
+    let mut to_remove: Vec<String> = Vec::new();
+    let mut to_mark_missing: Vec<TrackedFile> = Vec::new();
+
+    for (path_string, file) in &existing_map {
+        if observed_paths.contains(path_string) {
+            continue;
+        }
+        let path = Path::new(path_string);
+        let in_active_scope = config
+            .watch_targets
+            .iter()
+            .filter(|t| t.enabled)
+            .any(|t| root_contains(&t.path, path))
+            || root_contains(&config.safe_folder_path, path);
+
+        if !in_active_scope {
+            if !matches!(file.state, FileDecayState::Missing) {
+                report.removed.push(path_string.clone());
+            }
+            to_remove.push(path_string.clone());
+        } else if !path.exists() {
+            if !matches!(file.state, FileDecayState::Missing) {
+                report.removed.push(path_string.clone());
+            }
+            let mut updated = file.clone();
+            updated.state = FileDecayState::Missing;
+            to_mark_missing.push(updated);
+        }
+    }
+
+    to_upsert.extend(to_mark_missing);
+
+    // Single batch write for all upserts + one batch remove.
+    if !to_upsert.is_empty() {
+        storage::tracked::upsert_tracked_files_batch(db, &to_upsert)?;
+    }
+    if !to_remove.is_empty() {
+        let refs: Vec<&str> = to_remove.iter().map(|s| s.as_str()).collect();
+        storage::tracked::remove_tracked_files_batch(db, &refs)?;
     }
 
     Ok(report)
 }
 
-fn scan_target_paths(root: &Path, recursive: bool) -> Result<Vec<PathBuf>, AppError> {
+/// Incremental reconciliation for watcher events: processes only the given paths
+/// instead of scanning the full watch tree. Used by the debounced event loop.
+pub fn reconcile_paths(
+    db: &Database,
+    paths: Vec<PathBuf>,
+) -> Result<ReconciliationReport, AppError> {
+    let config = storage::get_config(db)?;
+    let rules = storage::rules::list_rules(db)?;
+    let mut report = ReconciliationReport::default();
+    let mut to_upsert: Vec<TrackedFile> = Vec::new();
+
+    // Deduplicate paths.
+    let paths: Vec<PathBuf> = paths.into_iter().collect::<HashSet<_>>().into_iter().collect();
+
+    for path in &paths {
+        if is_transient_path(path) {
+            continue;
+        }
+
+        let path_string = path.to_string_lossy().to_string();
+
+        // Find the matching watch target for scope validation.
+        let target = config
+            .watch_targets
+            .iter()
+            .filter(|t| t.enabled)
+            .find(|t| root_contains(&t.path, path));
+
+        // File deleted (or outside scope) — mark Missing if we're tracking it.
+        if !path.exists() {
+            if let Some(mut tracked) = storage::tracked::get_tracked_file(db, &path_string)? {
+                if !matches!(tracked.state, FileDecayState::Missing) {
+                    report.removed.push(path_string.clone());
+                    tracked.state = FileDecayState::Missing;
+                    to_upsert.push(tracked);
+                }
+            }
+            continue;
+        }
+
+        // Ignore paths outside any enabled watch target scope.
+        let Some(target) = target else {
+            continue;
+        };
+
+        let ignore_set = build_ignore_set(target)?;
+        let canonical_root = PathBuf::from(&target.path).canonicalize().ok();
+
+        if target_ignores_path(path, ignore_set.as_ref(), canonical_root.as_deref()) {
+            continue;
+        }
+
+        let metadata = match fs::symlink_metadata(path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            continue;
+        }
+
+        let existing = storage::tracked::get_tracked_file(db, &path_string)?;
+        let target_config = config_for_target(&config, target.default_ttl_seconds);
+        let mut tracked =
+            tracked_file_from_metadata(path, &metadata, existing.as_ref(), &target_config);
+
+        let metadata_changed = existing
+            .as_ref()
+            .map(|e| tracked_file_changed(e, &tracked))
+            .unwrap_or(true);
+
+        tracked.matched_rule_ids = if metadata_changed {
+            matching_rule_ids(&tracked, &config, &rules)?
+        } else {
+            existing.as_ref().map(|e| e.matched_rule_ids.clone()).unwrap_or_default()
+        };
+
+        match &existing {
+            Some(e) if tracked_file_changed(e, &tracked) => {
+                report.updated.push(path_string);
+            }
+            None => {
+                report.indexed.push(path_string);
+            }
+            _ => {}
+        }
+        to_upsert.push(tracked);
+    }
+
+    if !to_upsert.is_empty() {
+        storage::tracked::upsert_tracked_files_batch(db, &to_upsert)?;
+    }
+
+    Ok(report)
+}
+
+fn scan_target_paths(
+    root: &Path,
+    recursive: bool,
+    ignore_set: Option<&GlobSet>,
+    hidden_whitelist: Option<&GlobSet>,
+) -> Result<Vec<PathBuf>, AppError> {
+    scan_target_paths_inner(root, recursive, true, ignore_set, hidden_whitelist)
+}
+
+fn scan_target_paths_inner(
+    root: &Path,
+    recursive: bool,
+    is_root: bool,
+    ignore_set: Option<&GlobSet>,
+    hidden_whitelist: Option<&GlobSet>,
+) -> Result<Vec<PathBuf>, AppError> {
     let mut paths = Vec::new();
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) => {
+            if is_root {
+                return Err(error.into());
+            } else {
+                return Ok(paths);
+            }
+        }
+    };
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(error) => {
+                if is_root {
+                    return Err(error.into());
+                } else {
+                    continue;
+                }
+            }
+        };
         let path = entry.path();
-        let file_type = entry.file_type()?;
+        let file_type = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(error) => {
+                if is_root {
+                    return Err(error.into());
+                } else {
+                    continue;
+                }
+            }
+        };
         if file_type.is_symlink() {
             continue;
         }
         if file_type.is_dir() && recursive {
-            paths.extend(scan_target_paths(&path, recursive)?);
+            // System directories are always skipped — no override.
+            if is_system_directory(&path) {
+                continue;
+            }
+            // Hidden directories are skipped by default; allowed if whitelisted.
+            if is_hidden_directory(&path) {
+                let dir_name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
+                let whitelisted = hidden_whitelist
+                    .map(|set| set.is_match(dir_name))
+                    .unwrap_or(false);
+                if !whitelisted {
+                    continue;
+                }
+            }
+            // Non-hidden dirs can be excluded by ignore_patterns.
+            if let Some(set) = ignore_set {
+                let dir_name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
+                if set.is_match(dir_name) {
+                    continue;
+                }
+            }
+            if let Ok(sub_paths) =
+                scan_target_paths_inner(&path, recursive, false, ignore_set, hidden_whitelist)
+            {
+                paths.extend(sub_paths);
+            }
         } else {
             paths.push(path);
         }
@@ -119,17 +345,24 @@ fn config_for_target(config: &AppConfig, default_ttl_seconds: Option<u64>) -> Ap
     config
 }
 
-fn build_ignore_set(target: &WatchTarget) -> Result<Option<globset::GlobSet>, AppError> {
-    if target.ignore_patterns.is_empty() {
+fn build_ignore_set(target: &WatchTarget) -> Result<Option<GlobSet>, AppError> {
+    build_glob_set(&target.ignore_patterns)
+}
+
+fn build_hidden_whitelist(target: &WatchTarget) -> Result<Option<GlobSet>, AppError> {
+    build_glob_set(&target.include_hidden_patterns)
+}
+
+fn build_glob_set(patterns: &[String]) -> Result<Option<GlobSet>, AppError> {
+    if patterns.is_empty() {
         return Ok(None);
     }
-
     let mut builder = GlobSetBuilder::new();
-    for pattern in &target.ignore_patterns {
+    for pattern in patterns {
         builder.add(Glob::new(pattern).map_err(|error| {
             AppError::with_details(
                 "RULE_INVALID_REGEX",
-                "Watch target ignore pattern could not be parsed.",
+                "Watch target pattern could not be parsed.",
                 true,
                 error.to_string(),
             )
@@ -138,34 +371,17 @@ fn build_ignore_set(target: &WatchTarget) -> Result<Option<globset::GlobSet>, Ap
     Ok(Some(builder.build().map_err(|error| {
         AppError::with_details(
             "RULE_INVALID_REGEX",
-            "Watch target ignore pattern set could not be built.",
+            "Watch target pattern set could not be built.",
             true,
             error.to_string(),
         )
     })?))
 }
 
-fn mark_existing_ignored(
-    db: &Database,
-    path: &Path,
-    report: &mut ReconciliationReport,
-) -> Result<(), AppError> {
-    let path_string = path.to_string_lossy().to_string();
-    let Some(mut tracked) = storage::tracked::get_tracked_file(db, &path_string)? else {
-        return Ok(());
-    };
-    if !matches!(tracked.state, FileDecayState::Ignored) {
-        tracked.state = FileDecayState::Ignored;
-        storage::tracked::upsert_tracked_file(db, &tracked)?;
-        report.updated.push(path_string);
-    }
-    Ok(())
-}
-
 fn target_ignores_path(
-    target: &WatchTarget,
     path: &Path,
-    ignore_set: Option<&globset::GlobSet>,
+    ignore_set: Option<&GlobSet>,
+    canonical_root: Option<&Path>,
 ) -> bool {
     let Some(ignore_set) = ignore_set else {
         return false;
@@ -174,13 +390,13 @@ fn target_ignores_path(
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or_default();
-    let relative = Path::new(&target.path)
-        .canonicalize()
-        .ok()
+    // Use the pre-canonicalized root to avoid a per-file syscall.
+    let relative = canonical_root
         .and_then(|root| path.strip_prefix(root).ok())
         .unwrap_or(path);
     ignore_set.is_match(file_name) || ignore_set.is_match(relative)
 }
+
 
 fn tracked_file_changed(existing: &TrackedFile, next: &TrackedFile) -> bool {
     existing.file_name != next.file_name
@@ -356,6 +572,28 @@ mod tests {
         assert_eq!(error.code, "RULE_INVALID_REGEX");
     }
 
+    #[test]
+    fn reconcile_skips_system_subdirectory_during_recursive_scan() {
+        let fixture = Fixture::new();
+        let system_dir = fixture.watch.join("$RECYCLE.BIN");
+        fs::create_dir_all(&system_dir).expect("system dir should be created");
+        let system_file = system_dir.join("deleted.txt");
+        fs::write(&system_file, "trash").expect("system file should be written");
+        fixture.write_watch_file("keep.txt", "kept");
+        fixture.save_config_recursive();
+
+        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
+
+        // Only the non-system file should be indexed.
+        assert_eq!(indexed.len(), 1);
+        assert!(indexed[0].ends_with("keep.txt"));
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&system_file))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn reconcile_skips_symlink_files() {
@@ -441,6 +679,24 @@ mod tests {
             self.save_config_with_ignore_patterns(Vec::new());
         }
 
+        fn save_config_recursive(&self) {
+            let config = AppConfig {
+                watch_targets: vec![WatchTarget {
+                    id: String::from("watch"),
+                    path: path_string(&self.watch),
+                    enabled: true,
+                    recursive: true,
+                    default_ttl_seconds: None,
+                    ignore_patterns: Vec::new(),
+                    include_hidden_patterns: Vec::new(),
+                    rule_ids: Vec::new(),
+                }],
+                safe_folder_path: path_string(&self.root.join("safe")),
+                ..AppConfig::default()
+            };
+            storage::save_config(&self.db, &config).expect("config should save");
+        }
+
         fn save_config_with_ignore_patterns(&self, ignore_patterns: Vec<String>) {
             let config = AppConfig {
                 watch_targets: vec![WatchTarget {
@@ -450,6 +706,7 @@ mod tests {
                     recursive: false,
                     default_ttl_seconds: None,
                     ignore_patterns,
+                    include_hidden_patterns: Vec::new(),
                     rule_ids: Vec::new(),
                 }],
                 safe_folder_path: path_string(&self.root.join("safe")),

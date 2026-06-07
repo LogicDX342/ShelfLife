@@ -3,6 +3,7 @@
   import { getConfig, saveConfig, updateWatchTargets } from '$lib/api/config';
   import { selectDirectory } from '$lib/api/files';
   import { i18n } from '$lib/i18n/i18n.svelte';
+  import { getErrorMessage } from '$lib/utils/format';
   import type { AppConfig, WatchTarget } from '$lib/types';
 
   let config = $state<AppConfig | null>(null);
@@ -24,7 +25,7 @@
         safeFolderPath = selected;
       }
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not select folder.';
+      error = getErrorMessage(reason, 'Could not select folder.');
     }
   }
 
@@ -35,7 +36,7 @@
         targetPath = selected;
       }
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not select folder.';
+      error = getErrorMessage(reason, 'Could not select folder.');
     }
   }
 
@@ -73,7 +74,7 @@
       await refreshConfig();
       targetPath = '';
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not update watch targets.';
+      error = getErrorMessage(reason, 'Could not update watch targets.');
     } finally {
       addingTarget = false;
     }
@@ -97,7 +98,7 @@
       successMessage = i18n.t('settings.saved');
       setTimeout(() => (successMessage = null), 4000);
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not save preferences.';
+      error = getErrorMessage(reason, 'Could not save preferences.');
     } finally {
       savingPrefs = false;
     }
@@ -111,7 +112,7 @@
       );
       await refreshConfig();
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not update watch target.';
+      error = getErrorMessage(reason, 'Could not update watch target.');
     }
   }
 
@@ -122,7 +123,7 @@
       await updateWatchTargets(config.watch_targets.filter((target) => target.id !== id));
       await refreshConfig();
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not remove watch target.';
+      error = getErrorMessage(reason, 'Could not remove watch target.');
     }
   }
 </script>

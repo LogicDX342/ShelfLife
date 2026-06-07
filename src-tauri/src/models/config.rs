@@ -8,6 +8,11 @@ pub struct WatchTarget {
     pub recursive: bool,
     pub default_ttl_seconds: Option<u64>,
     pub ignore_patterns: Vec<String>,
+    /// Glob patterns for hidden directories that should be included in recursive scanning.
+    /// By default all hidden directories are skipped. Add patterns like `.git` or `.vscode`
+    /// to allow scanning into specific hidden subdirectories.
+    #[serde(default)]
+    pub include_hidden_patterns: Vec<String>,
     pub rule_ids: Vec<String>,
 }
 

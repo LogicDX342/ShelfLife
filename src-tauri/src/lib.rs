@@ -23,7 +23,10 @@ pub fn run() {
                 commands::watcher_event_sink(app.handle().clone()),
             )
             .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
-            let _ = engine::reconcile(&state.db);
+            let db = state.db.clone();
+            std::thread::spawn(move || {
+                let _ = engine::reconcile(&db);
+            });
             commands::start_periodic_reconciliation(app.handle().clone(), state);
             Ok(())
         })
