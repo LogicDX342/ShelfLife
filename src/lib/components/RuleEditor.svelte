@@ -230,7 +230,7 @@
             bind:value={watchPath}
             required
             placeholder="C:\Users\Name\Downloads"
-            class="fluent-input flex-1"
+            class="fluent-input flex-1 min-w-0"
           />
           <button
             type="button"
@@ -395,7 +395,7 @@
             <input
               bind:value={destinationPath}
               placeholder="C:\SafeFolder"
-              class="fluent-input flex-1"
+              class="fluent-input flex-1 min-w-0"
               required
             />
             <button

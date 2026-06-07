@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   release:
@@ -23,6 +24,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
+          version: 11
           cache: true
 
       - name: Install Rust

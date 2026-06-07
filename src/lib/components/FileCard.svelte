@@ -336,7 +336,7 @@
               id="rename-in-{file.file_name}"
               bind:value={renameTemplate}
               placeholder="New name or template..."
-              class="fluent-input flex-1 text-xs"
+              class="fluent-input flex-1 text-xs min-w-0"
             />
             <button
               class="fluent-button text-xs font-semibold"
@@ -366,7 +366,7 @@
               id="move-in-{file.file_name}"
               bind:value={moveDestination}
               placeholder="Absolute folder path..."
-              class="fluent-input flex-1 text-xs"
+              class="fluent-input flex-1 text-xs min-w-0"
             />
             <button
               class="fluent-button text-xs font-semibold"
@@ -394,7 +394,7 @@
           <select
             id="snooze-in-{file.file_name}"
             bind:value={snoozeDays}
-            class="fluent-input flex-1 text-xs"
+            class="fluent-input flex-1 text-xs min-w-0"
           >
             {#each snoozeOptions as days (days)}
               <option value={days}

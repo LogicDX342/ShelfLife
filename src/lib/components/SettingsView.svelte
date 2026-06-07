@@ -160,7 +160,7 @@
                   >{i18n.t('settings.safeFolder')}</span
                 >
                 <div class="flex gap-2">
-                  <input bind:value={safeFolderPath} class="fluent-input text-xs flex-1" />
+                  <input bind:value={safeFolderPath} class="fluent-input text-xs flex-1 min-w-0" />
                   <button
                     type="button"
                     class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
@@ -302,7 +302,7 @@
                 <input
                   bind:value={targetPath}
                   placeholder={i18n.t('settings.path')}
-                  class="fluent-input flex-1 text-xs"
+                  class="fluent-input flex-1 text-xs min-w-0"
                 />
                 <button
                   type="button"

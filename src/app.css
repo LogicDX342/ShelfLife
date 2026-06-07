@@ -189,6 +189,7 @@ html.dark .fluent-button-primary:hover {
   color: #202020;
   transition: all 0.15s ease;
   outline: none;
+  min-width: 0;
 }
 .fluent-input:focus {
   background-color: #ffffff;

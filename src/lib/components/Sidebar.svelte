@@ -51,7 +51,10 @@
   class="acrylic-sidebar w-16 md:w-60 flex-shrink-0 flex flex-col border-r border-fluent-border-light dark:border-fluent-border-dark select-none h-full overflow-y-auto overflow-x-hidden"
 >
   <!-- Brand / Header -->
-  <div class="px-3 md:px-6 pt-5 pb-2 flex items-center justify-center md:justify-start gap-3" data-tauri-drag-region>
+  <div
+    class="px-3 md:px-6 pt-5 pb-2 flex items-center justify-center md:justify-start gap-3"
+    data-tauri-drag-region
+  >
     <svg
       class="w-6 h-6 text-fluent-accent flex-shrink-0"
       fill="none"
@@ -68,7 +71,10 @@
         d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
       ></path>
     </svg>
-    <span class="hidden md:inline text-lg font-bold tracking-wide whitespace-nowrap" data-tauri-drag-region>ShelfLife</span>
+    <span
+      class="hidden md:inline text-lg font-bold tracking-wide whitespace-nowrap"
+      data-tauri-drag-region>ShelfLife</span
+    >
   </div>
 
   <!-- Navigation -->
@@ -132,7 +138,9 @@
       <button
         onclick={toggleWatchStatus}
         class="w-10 h-10 flex items-center justify-center rounded-md transition-all duration-150 text-fluent-muted-light dark:text-fluent-muted-dark hover:bg-black/5 dark:hover:bg-white/5 relative group focus:outline-none"
-        title="{i18n.t('status.watchStatus')}: {isPaused ? i18n.t('status.paused') : i18n.t('status.active')}"
+        title="{i18n.t('status.watchStatus')}: {isPaused
+          ? i18n.t('status.paused')
+          : i18n.t('status.active')}"
       >
         {#if isPaused}
           <svg
@@ -171,7 +179,8 @@
               d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"
             ></path>
           </svg>
-          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
+          ></span>
         {/if}
       </button>
     </div>
