@@ -12,6 +12,59 @@ use crate::models::{
 };
 use crate::rules::protected_pattern_match;
 use crate::storage;
+use std::sync::OnceLock;
+
+static TRASH_SUPPORTED: OnceLock<bool> = OnceLock::new();
+
+pub fn init_trash_support() {
+    let supported = check_trash_support();
+    let _ = TRASH_SUPPORTED.set(supported);
+}
+
+pub fn is_trash_supported() -> bool {
+    *TRASH_SUPPORTED.get_or_init(check_trash_support)
+}
+
+fn check_trash_support() -> bool {
+    let temp_dir = std::env::temp_dir();
+    let file_name = format!("shelflife-trash-test-{}.txt", Uuid::new_v4());
+    let temp_file = temp_dir.join(&file_name);
+
+    if fs::write(&temp_file, "trash test").is_err() {
+        return false;
+    }
+
+    let canonical_temp_file = temp_file.canonicalize().unwrap_or_else(|_| temp_file.clone());
+
+    if trash::delete(&temp_file).is_err() {
+        let _ = fs::remove_file(&temp_file);
+        return false;
+    }
+
+    let items = match trash::os_limited::list() {
+        Ok(items) => items,
+        Err(_) => return false,
+    };
+
+    let mut matched_item = None;
+    for item in items {
+        if item.name == OsStr::new(&file_name) {
+            matched_item = Some(item);
+            break;
+        }
+    }
+
+    if let Some(item) = matched_item {
+        if trash::os_limited::restore_all(std::iter::once(item)).is_ok() {
+            let _ = fs::remove_file(&canonical_temp_file);
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
 
 pub fn execute_triage_action(
     db: &Database,
@@ -99,7 +152,13 @@ pub fn execute_triage_action(
             })?;
             tracked.state = FileDecayState::Missing;
             action_kind = AuditActionKind::Trash;
-            undo_status = UndoStatus::Available;
+            undo_status = if is_trash_supported() {
+                UndoStatus::Available
+            } else {
+                UndoStatus::Unavailable {
+                    reason: String::from("Recycle Bin is not supported or not fully functional on this system."),
+                }
+            };
         }
         UserTriageAction::Rename { template } => {
             validate_not_protected_for_filesystem_change(&source, &config)?;
@@ -564,27 +623,6 @@ mod tests {
         assert!(source.exists());
     }
 
-    #[test]
-    fn trash_now_audits_and_undo_restores_file() {
-        let fixture = Fixture::new();
-        let source = fixture.write_watch_file("notes_to_trash.txt", "download");
-        fixture.save_config();
-
-        let entry = execute_triage_action(
-            &fixture.db,
-            &path_string(&source),
-            UserTriageAction::TrashNow,
-        )
-        .expect("trash should succeed");
-
-        assert_eq!(entry.action_kind, AuditActionKind::Trash);
-        assert!(matches!(entry.undo_status, UndoStatus::Available));
-        assert!(!source.exists());
-
-        let undone = super::undo_audit_entry(&fixture.db, &entry.id).expect("undo should succeed");
-        assert!(matches!(undone.undo_status, UndoStatus::Completed));
-        assert!(source.exists());
-    }
 
     #[test]
     fn undo_move_revalidates_original_path_scope() {

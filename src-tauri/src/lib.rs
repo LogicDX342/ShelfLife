@@ -12,6 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            engine::executor::init_trash_support();
             let db_path = app.path().app_data_dir()?.join("shelflife.redb");
             let db = storage::open_database(db_path)
                 .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
