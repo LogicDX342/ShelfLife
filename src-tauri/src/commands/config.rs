@@ -97,7 +97,7 @@ fn emit_indexed_files(app_handle: &AppHandle, paths: &[String]) {
     }
 }
 
-fn emit_reconciliation_report(app_handle: &AppHandle, report: &ReconciliationReport) {
+pub fn emit_reconciliation_report(app_handle: &AppHandle, report: &ReconciliationReport) {
     emit_indexed_files(app_handle, &report.indexed);
     for path in &report.updated {
         let _ = app_handle.emit("file_updated", path);

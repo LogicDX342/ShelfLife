@@ -47,9 +47,14 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify code (Format, Lint, Svelte Check, Clippy, Tests)
-        run: |
-          pnpm validate
-          pnpm cargo:fmt:check
-          cargo clippy --release --manifest-path src-tauri/Cargo.toml -- -D warnings
-          cargo test --release --manifest-path src-tauri/Cargo.toml
+      - name: Run frontend validation (Format, Lint, Svelte Check)
+        run: pnpm validate
+
+      - name: Check Rust formatting
+        run: pnpm cargo:fmt:check
+
+      - name: Run Clippy
+        run: cargo clippy --release --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: Run tests
+        run: cargo test --release --manifest-path src-tauri/Cargo.toml

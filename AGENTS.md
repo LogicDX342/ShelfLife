@@ -139,18 +139,13 @@ ShelfLife/
 - The target platform for v1 is **Windows only**. Do not add macOS- or Linux-specific code paths unless gated behind `#[cfg(target_os)]`.
 - Long paths (> 260 chars) may fail on older Windows configurations — use `\\?\` prefix or `std::fs::canonicalize` when handling user paths.
 - Zone.Identifier alternate data streams are read via `<filepath>:Zone.Identifier:$DATA`. Test with files downloaded through Edge/Chrome.
-- The Recycle Bin integration uses the `trash` crate which calls `IFileOperation` on Windows.
 
 ---
 
 ## Testing instructions
 
 - Only write tests for critical logic
-- Run `cargo test --manifest-path src-tauri/Cargo.toml` to run all native Rust unit tests for the `redb` storage engines, file age calculations, and regex whitelist filters.
-- Run `pnpm test` to execute frontend tests (when configured).
-- Run `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings` before committing to catch any non-idiomatic Rust, potential thread blocks, or unhandled Result types.
-- Run `pnpm lint && pnpm check` to validate that ESLint, Prettier, and Svelte-Check pass without warnings across all `.svelte` and `.ts` files.
-- To test platform-specific file watching locally, create a temporary directory (e.g., `test-watch/`) in the project root, configure it as a watch target, then drop sample files into it and monitor terminal logs from the `notify` watcher thread.
+- Run `pnpm verify` to catch any non-idiomatic Rust, potential thread blocks, or unhandled Result types.
 - Fix all compiler warnings, clippy lints, and frontend type mismatches until the entire validation pipeline turns green.
 
 ---
@@ -158,5 +153,4 @@ ShelfLife/
 ## PR instructions
 
 - Use conventional commits.
-- Always run `cargo clippy`, `pnpm lint`, and a test execution pass before submitting commits.
-- Run a trial production compile using `pnpm tauri build --no-bundle` to guarantee that the application compiles under strict release profiling before opening a Pull Request.
+- Always run `pnpm verify` before submitting commits.

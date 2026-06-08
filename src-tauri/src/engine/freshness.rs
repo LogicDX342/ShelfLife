@@ -61,6 +61,51 @@ pub fn classify_decay_state(
     }
 }
 
+pub fn apply_rules_to_tracked_file(
+    tracked: &mut TrackedFile,
+    rules: &[crate::models::AutomationRule],
+    target_config: &AppConfig,
+    now: u64,
+) {
+    let is_pinned_or_snoozed = match &tracked.expiry {
+        Expiry::Permanent => true,
+        Expiry::SnoozedUntil(until) if *until > now => true,
+        _ => false,
+    };
+
+    let mut matched_rule_ttl = None;
+    let mut matched_rule_is_ignore = false;
+
+    if !tracked.matched_rule_ids.is_empty() {
+        let first_rule_id = &tracked.matched_rule_ids[0];
+        if let Some(rule) = rules.iter().find(|r| &r.id == first_rule_id) {
+            matched_rule_ttl = Some(rule.ttl_seconds);
+            if matches!(rule.action, crate::models::RuleAction::Ignore) {
+                matched_rule_is_ignore = true;
+            }
+        }
+    }
+
+    if !is_pinned_or_snoozed {
+        if let Some(ttl) = matched_rule_ttl {
+            tracked.expiry = Expiry::At(tracked.freshness_at + ttl);
+        } else {
+            tracked.expiry = Expiry::At(tracked.freshness_at + target_config.default_ttl_seconds);
+        }
+    }
+
+    if matches!(tracked.expiry, Expiry::Permanent) {
+        tracked.state = FileDecayState::Pinned;
+    } else if matched_rule_is_ignore {
+        tracked.state = FileDecayState::Ignored;
+    } else if matches!(tracked.state, FileDecayState::Ignored) {
+        // Keep as Ignored if it was already marked as Ignored (e.g. by target ignore patterns).
+    } else {
+        tracked.state =
+            classify_decay_state(tracked.freshness_at, &tracked.expiry, now, target_config);
+    }
+}
+
 pub fn tracked_file_from_metadata(
     path: &Path,
     metadata: &Metadata,

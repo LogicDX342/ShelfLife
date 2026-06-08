@@ -82,18 +82,16 @@ pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppE
             let mut tracked =
                 tracked_file_from_metadata(&path, &metadata, existing, &target_config);
 
-            // Only re-run rule matching when the file is new or its metadata changed.
-            let metadata_changed = existing
-                .map(|e| tracked_file_changed(e, &tracked))
-                .unwrap_or(true);
+            // Always run rule matching to ensure we match new/deleted/modified rules
+            tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
 
-            tracked.matched_rule_ids = if metadata_changed {
-                matching_rule_ids(&tracked, &config, &rules)?
-            } else {
-                existing
-                    .map(|e| e.matched_rule_ids.clone())
-                    .unwrap_or_default()
-            };
+            // Apply rules to adjust expiry & state
+            crate::engine::freshness::apply_rules_to_tracked_file(
+                &mut tracked,
+                &rules,
+                &target_config,
+                crate::engine::freshness::now_seconds(),
+            );
 
             match existing {
                 Some(e) if tracked_file_changed(e, &tracked) => {
@@ -231,19 +229,16 @@ pub fn reconcile_paths(
         let mut tracked =
             tracked_file_from_metadata(path, &metadata, existing.as_ref(), &target_config);
 
-        let metadata_changed = existing
-            .as_ref()
-            .map(|e| tracked_file_changed(e, &tracked))
-            .unwrap_or(true);
+        // Always run rule matching to ensure we match new/deleted/modified rules
+        tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
 
-        tracked.matched_rule_ids = if metadata_changed {
-            matching_rule_ids(&tracked, &config, &rules)?
-        } else {
-            existing
-                .as_ref()
-                .map(|e| e.matched_rule_ids.clone())
-                .unwrap_or_default()
-        };
+        // Apply rules to adjust expiry & state
+        crate::engine::freshness::apply_rules_to_tracked_file(
+            &mut tracked,
+            &rules,
+            &target_config,
+            crate::engine::freshness::now_seconds(),
+        );
 
         match &existing {
             Some(e) if tracked_file_changed(e, &tracked) => {
@@ -745,6 +740,55 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn reconcile_applies_rule_ttl_to_decay_state() {
+        let fixture = Fixture::new();
+        let file = fixture.write_watch_file("download.zip", "body");
+        fixture.save_config();
+
+        // 1. Save an enabled rule matching "zip" extension with 1 day TTL
+        let rule = crate::models::AutomationRule {
+            id: String::from("zip-rule"),
+            name: String::from("Zip downloads"),
+            enabled: true,
+            priority: 10,
+            watch_path: path_string(&fixture.watch),
+            ttl_seconds: 24 * 60 * 60, // 1 day
+            conditions: crate::models::RuleConditions {
+                extensions: vec![String::from("zip")],
+                filename_globs: Vec::new(),
+                filename_regexes: Vec::new(),
+                source_domains: Vec::new(),
+                size: crate::models::SizeCondition::Any,
+            },
+            action: crate::models::RuleAction::Trash,
+            mode: crate::models::RuleMode::PreviewOnly,
+            created_at: 1,
+            updated_at: 1,
+        };
+        storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
+
+        // Set config decay thresholds: buffer = 48 hours
+        let mut config = storage::get_config(&fixture.db).expect("config should load");
+        config.decaying_threshold_seconds = 48 * 60 * 60; // 48h warning buffer
+        storage::save_config(&fixture.db, &config).expect("config should save");
+
+        // Run reconciliation
+        reconcile(&fixture.db).expect("reconciliation should succeed");
+
+        // Verify the file state is Decaying and expiry is 1 day from now/freshness_at
+        let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
+            .expect("tracked lookup should work")
+            .expect("tracked file should exist");
+
+        assert_eq!(tracked.matched_rule_ids, vec![String::from("zip-rule")]);
+        assert_eq!(
+            tracked.expiry,
+            crate::models::Expiry::At(tracked.freshness_at + 24 * 60 * 60)
+        );
+        assert_eq!(tracked.state, FileDecayState::Decaying);
     }
 
     fn path_string(path: &Path) -> String {

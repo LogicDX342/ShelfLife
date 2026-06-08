@@ -16,6 +16,7 @@ pub async fn list_rules(state: State<'_, AppState>) -> Result<Vec<AutomationRule
 
 #[tauri::command]
 pub async fn save_rule(
+    app_handle: AppHandle,
     state: State<'_, AppState>,
     mut rule: AutomationRule,
 ) -> Result<AutomationRule, AppError> {
@@ -29,6 +30,12 @@ pub async fn save_rule(
     rule.updated_at = now;
     validate_rule(&rule, &config)?;
     storage::rules::save_rule(&state.db, &rule)?;
+
+    // Run reconciliation and emit report immediately to update file expiries/states.
+    if let Ok(report) = crate::engine::reconcile_with_report(&state.db) {
+        crate::commands::config::emit_reconciliation_report(&app_handle, &report);
+    }
+
     Ok(rule)
 }
 
@@ -88,8 +95,19 @@ fn build_rule_preview_entries(
 }
 
 #[tauri::command]
-pub async fn delete_rule(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
-    storage::rules::delete_rule(&state.db, &id)
+pub async fn delete_rule(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), AppError> {
+    storage::rules::delete_rule(&state.db, &id)?;
+
+    // Run reconciliation and emit report immediately to update file expiries/states.
+    if let Ok(report) = crate::engine::reconcile_with_report(&state.db) {
+        crate::commands::config::emit_reconciliation_report(&app_handle, &report);
+    }
+
+    Ok(())
 }
 
 fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppError> {

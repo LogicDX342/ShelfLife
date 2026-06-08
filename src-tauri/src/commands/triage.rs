@@ -105,6 +105,12 @@ pub async fn undo_audit_entry(
                 "Audit updated",
                 format!("Undo status is now {}.", entry.undo_status.label()),
             );
+
+            // Run reconciliation and emit report immediately to update file expiries/states.
+            if let Ok(report) = engine::reconcile_with_report(&state.db) {
+                crate::commands::config::emit_reconciliation_report(&app_handle, &report);
+            }
+
             Ok(entry)
         }
         Err(error) => {

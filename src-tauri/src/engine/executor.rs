@@ -34,7 +34,9 @@ fn check_trash_support() -> bool {
         return false;
     }
 
-    let canonical_temp_file = temp_file.canonicalize().unwrap_or_else(|_| temp_file.clone());
+    let canonical_temp_file = temp_file
+        .canonicalize()
+        .unwrap_or_else(|_| temp_file.clone());
 
     if trash::delete(&temp_file).is_err() {
         let _ = fs::remove_file(&temp_file);
@@ -156,7 +158,9 @@ pub fn execute_triage_action(
                 UndoStatus::Available
             } else {
                 UndoStatus::Unavailable {
-                    reason: String::from("Recycle Bin is not supported or not fully functional on this system."),
+                    reason: String::from(
+                        "Recycle Bin is not supported or not fully functional on this system.",
+                    ),
                 }
             };
         }
@@ -622,7 +626,6 @@ mod tests {
         assert!(matches!(undone.undo_status, UndoStatus::Completed));
         assert!(source.exists());
     }
-
 
     #[test]
     fn undo_move_revalidates_original_path_scope() {
