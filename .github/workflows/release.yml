@@ -1,16 +1,20 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["CI Checks"]
+    types:
+      - completed
 
 jobs:
   release:
     permissions:
       contents: write
     runs-on: windows-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
 
     steps:
       - name: Checkout repository
@@ -29,8 +33,6 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -39,9 +41,6 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Verify code (Format, Lint, Svelte Check, Clippy, Tests)
-        run: pnpm verify
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0.6.2

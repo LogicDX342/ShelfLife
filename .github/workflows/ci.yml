@@ -1,0 +1,55 @@
+name: CI Checks
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+          cache: true
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust cache (Seeds the release cache!)
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify code (Format, Lint, Svelte Check, Clippy, Tests)
+        run: |
+          pnpm validate
+          pnpm cargo:fmt:check
+          cargo clippy --release --manifest-path src-tauri/Cargo.toml -- -D warnings
+          cargo test --release --manifest-path src-tauri/Cargo.toml
