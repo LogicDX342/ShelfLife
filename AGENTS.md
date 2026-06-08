@@ -142,15 +142,22 @@ ShelfLife/
 
 ---
 
-## Testing instructions
+## Testing & Validation Instructions
 
-- Only write tests for critical logic
-- Run `pnpm verify` to catch any non-idiomatic Rust, potential thread blocks, or unhandled Result types.
-- Fix all compiler warnings, clippy lints, and frontend type mismatches until the entire validation pipeline turns green.
+- **Test Coverage:** Only write tests for critical business logic. Do not test boilerplate.
+- **Strict Validation:** Fix all compiler warnings, clippy lints, and frontend type mismatches until the relevant validation commands are green.
+- **Frontend Commands:** When modifying web/UI files, run:
+  - `npx prettier --check .`
+  - `pnpm lint`
+  - `pnpm check`
+- **Backend Commands (Tauri):** When modifying Rust code, run:
+  - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
+  - `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings`
+  - `cargo test --manifest-path src-tauri/Cargo.toml`
 
 ---
 
-## PR instructions
+## PR & Commit Instructions
 
-- Use conventional commits.
-- Always run `pnpm verify` before submitting commits.
+- **Commit Style:** Strictly use conventional commits (e.g., `feat:`, `fix:`, `chore:`).
+- **Pre-Commit Checks:** Always run the relevant frontend or backend validation commands listed above to ensure a green build before generating commits.

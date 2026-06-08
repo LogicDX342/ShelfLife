@@ -30,12 +30,11 @@ pub async fn execute_triage_action(
         }
         Err(error) => {
             let _ = app_handle.emit("action_failed", &error);
-            notify_if_enabled(
-                &app_handle,
-                &state,
-                "Action failed",
-                format!("{} No file was silently deleted.", error.message),
-            );
+            let mut body = format!("{} No file was silently deleted.", error.message);
+            if let Some(details) = &error.details {
+                body = format!("{} Details: {}", body, details);
+            }
+            notify_if_enabled(&app_handle, &state, "Action failed", body);
             Err(error)
         }
     }
@@ -115,12 +114,11 @@ pub async fn undo_audit_entry(
         }
         Err(error) => {
             let _ = app_handle.emit("action_failed", &error);
-            notify_if_enabled(
-                &app_handle,
-                &state,
-                "Undo needs attention",
-                error.message.clone(),
-            );
+            let mut body = error.message.clone();
+            if let Some(details) = &error.details {
+                body = format!("{} Details: {}", body, details);
+            }
+            notify_if_enabled(&app_handle, &state, "Undo needs attention", body);
             Err(error)
         }
     }

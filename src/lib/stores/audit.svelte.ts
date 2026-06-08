@@ -1,5 +1,6 @@
 import { listAuditEntries } from '$lib/api/triage';
 import type { AuditEntry } from '$lib/types';
+import { getErrorMessage } from '$lib/utils/format';
 
 class AuditState {
   entries = $state<AuditEntry[]>([]);
@@ -12,7 +13,7 @@ class AuditState {
     try {
       this.entries = await listAuditEntries();
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Could not load audit entries.';
+      this.error = getErrorMessage(error, 'Could not load audit entries.');
     } finally {
       this.loading = false;
     }

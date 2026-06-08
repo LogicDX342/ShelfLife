@@ -10,13 +10,21 @@ export function formatDate(seconds: number) {
 }
 
 export function getErrorMessage(error: unknown, fallback: string): string {
-  if (
-    error &&
-    typeof error === 'object' &&
-    'message' in error &&
-    typeof (error as { message: unknown }).message === 'string'
-  ) {
-    return (error as { message: string }).message;
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object') {
+    const errObj = error as Record<string, unknown>;
+    const message = typeof errObj.message === 'string' ? errObj.message : null;
+    const details = typeof errObj.details === 'string' ? errObj.details : null;
+
+    if (message) {
+      let finalMessage = message;
+      if (details) {
+        finalMessage += ` (Details: ${details})`;
+      }
+      return finalMessage;
+    }
   }
   if (error instanceof Error) {
     return error.message;

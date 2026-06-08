@@ -6,7 +6,7 @@
   import { getConfig } from '$lib/api/config';
   import { executeBulkTriageAction } from '$lib/api/triage';
   import type { AppConfig, TrackedFile, UserTriageAction } from '$lib/types';
-  import { formatBytes } from '$lib/utils/format';
+  import { formatBytes, getErrorMessage } from '$lib/utils/format';
   import FileCard from './FileCard.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
 
@@ -248,7 +248,7 @@
       selectedPaths = [];
       await filesState.refresh();
     } catch (reason) {
-      bulkError = reason instanceof Error ? reason.message : 'Bulk action failed.';
+      bulkError = getErrorMessage(reason, 'Bulk action failed.');
     }
   }
 

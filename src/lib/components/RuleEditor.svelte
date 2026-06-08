@@ -9,7 +9,7 @@
     RuleMode,
     SizeCondition,
   } from '$lib/types';
-  import { formatBytes } from '$lib/utils/format';
+  import { formatBytes, getErrorMessage } from '$lib/utils/format';
 
   let {
     onSaved,
@@ -48,7 +48,7 @@
         watchPath = selected;
       }
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not select folder.';
+      error = getErrorMessage(reason, 'Could not select folder.');
     }
   }
 
@@ -59,7 +59,7 @@
         destinationPath = selected;
       }
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not select folder.';
+      error = getErrorMessage(reason, 'Could not select folder.');
     }
   }
 
@@ -175,7 +175,7 @@
       if (!rule) reset();
       await onSaved();
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not save rule.';
+      error = getErrorMessage(reason, 'Could not save rule.');
     } finally {
       saving = false;
     }
@@ -187,7 +187,7 @@
     try {
       testResults = await testRule(buildRule());
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not test rule.';
+      error = getErrorMessage(reason, 'Could not test rule.');
     } finally {
       testing = false;
     }

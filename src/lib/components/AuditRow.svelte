@@ -2,7 +2,7 @@
   import { undoAuditEntry } from '$lib/api/triage';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { AuditEntry } from '$lib/types';
-  import { formatBytes, formatDate } from '$lib/utils/format';
+  import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
 
   let { entry, onRefresh } = $props<{ entry: AuditEntry; onRefresh: () => Promise<void> }>();
   let busy = $state(false);
@@ -15,7 +15,7 @@
       await undoAuditEntry(entry.id);
       await onRefresh();
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Undo failed';
+      error = getErrorMessage(reason, 'Undo failed');
     } finally {
       busy = false;
     }

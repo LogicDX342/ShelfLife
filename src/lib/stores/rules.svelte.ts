@@ -1,5 +1,6 @@
 import { listRules } from '$lib/api/rules';
 import type { AutomationRule } from '$lib/types';
+import { getErrorMessage } from '$lib/utils/format';
 
 class RulesState {
   rules = $state<AutomationRule[]>([]);
@@ -12,7 +13,7 @@ class RulesState {
     try {
       this.rules = await listRules();
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Could not load rules.';
+      this.error = getErrorMessage(error, 'Could not load rules.');
     } finally {
       this.loading = false;
     }

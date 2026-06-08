@@ -1,5 +1,6 @@
 import { getActiveFiles } from '$lib/api/files';
 import type { TrackedFile } from '$lib/types';
+import { getErrorMessage } from '$lib/utils/format';
 
 class FilesState {
   files = $state<TrackedFile[]>([]);
@@ -48,7 +49,7 @@ class FilesState {
       this.files = await getActiveFiles();
       this.hasLoadedOnce = true;
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Could not load files.';
+      this.error = getErrorMessage(error, 'Could not load files.');
     } finally {
       if (this.loadingTimeout) {
         clearTimeout(this.loadingTimeout);

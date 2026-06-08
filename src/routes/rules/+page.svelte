@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { formatBytes } from '$lib/utils/format';
+  import { formatBytes, getErrorMessage } from '$lib/utils/format';
   import RuleEditor from '$lib/components/RuleEditor.svelte';
   import { deleteRule, testRule, saveRule } from '$lib/api/rules';
   import { rulesState } from '$lib/stores/rules.svelte';
@@ -28,7 +28,7 @@
       }
       await rulesState.refresh();
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not delete rule.';
+      error = getErrorMessage(reason, 'Could not delete rule.');
     }
   }
 
@@ -39,7 +39,7 @@
       await saveRule(updated);
       await rulesState.refresh();
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not update rule status.';
+      error = getErrorMessage(reason, 'Could not update rule status.');
     }
   }
 
@@ -50,7 +50,7 @@
     try {
       previewResults = await testRule(rule);
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Could not test rule.';
+      error = getErrorMessage(reason, 'Could not test rule.');
     } finally {
       testingRuleId = null;
     }

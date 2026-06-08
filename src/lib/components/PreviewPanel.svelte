@@ -2,6 +2,7 @@
   import { previewFile } from '$lib/api/files';
   import type { FilePreview } from '$lib/types';
   import { onMount } from 'svelte';
+  import { getErrorMessage } from '$lib/utils/format';
 
   let { path } = $props<{ path: string }>();
   let preview = $state<FilePreview | null>(null);
@@ -14,7 +15,7 @@
     try {
       preview = await previewFile(path);
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : 'Preview unavailable';
+      error = getErrorMessage(reason, 'Preview unavailable');
     } finally {
       loading = false;
     }

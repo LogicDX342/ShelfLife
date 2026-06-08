@@ -6,7 +6,7 @@
   import { filesState } from '$lib/stores/files.svelte';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { UserTriageAction } from '$lib/types';
-  import { formatBytes } from '$lib/utils/format';
+  import { formatBytes, getErrorMessage } from '$lib/utils/format';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import FileList from './FileList.svelte';
   import StatusBar from './StatusBar.svelte';
@@ -117,7 +117,7 @@
       selectedPaths = [];
       await filesState.refresh();
     } catch (reason) {
-      bulkError = reason instanceof Error ? reason.message : 'Bulk action failed.';
+      bulkError = getErrorMessage(reason, 'Bulk action failed.');
     }
   }
 </script>
