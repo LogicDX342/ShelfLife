@@ -99,9 +99,7 @@ pub fn execute_triage_action(
             })?;
             tracked.state = FileDecayState::Missing;
             action_kind = AuditActionKind::Trash;
-            undo_status = UndoStatus::Unavailable {
-                reason: String::from("Recycle Bin restore location is not exposed reliably."),
-            };
+            undo_status = UndoStatus::Available;
         }
         UserTriageAction::Rename { template } => {
             validate_not_protected_for_filesystem_change(&source, &config)?;
@@ -163,7 +161,8 @@ pub fn undo_audit_entry(db: &Database, audit_id: &str) -> Result<AuditEntry, App
         AuditActionKind::Pin | AuditActionKind::Snooze | AuditActionKind::Ignore => {
             undo_state_only(db, &entry)
         }
-        AuditActionKind::Trash | AuditActionKind::RulePreview => Err(AppError::new(
+        AuditActionKind::Trash => undo_trash(db, &entry),
+        AuditActionKind::RulePreview => Err(AppError::new(
             "UNDO_UNAVAILABLE",
             "This audit entry has no reliable filesystem undo path.",
             true,
@@ -242,6 +241,89 @@ fn undo_state_only(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
             Expiry::At(tracked.freshness_at + storage::get_config(db)?.default_ttl_seconds);
         storage::tracked::upsert_tracked_file(db, &tracked)?;
     }
+    Ok(())
+}
+
+fn undo_trash(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
+    let source_path = Path::new(&entry.source_path);
+    let parent = source_path.parent().unwrap_or_else(|| Path::new(""));
+    let canonical_parent = parent
+        .canonicalize()
+        .unwrap_or_else(|_| parent.to_path_buf());
+    let file_name = source_path.file_name().unwrap_or_default();
+    let target_original_path = canonical_parent.join(file_name);
+
+    let items = trash::os_limited::list().map_err(|error| {
+        AppError::with_details(
+            "UNDO_FAILED",
+            "Could not read the Recycle Bin.",
+            true,
+            error.to_string(),
+        )
+    })?;
+
+    let mut best_match = None;
+    let mut closest_time_diff = i64::MAX;
+
+    for item in items {
+        let item_parent = &item.original_parent;
+        let canonical_item_parent = item_parent
+            .canonicalize()
+            .unwrap_or_else(|_| item_parent.to_path_buf());
+        let normalized_item_path = canonical_item_parent.join(&item.name);
+
+        let paths_match = if cfg!(target_os = "windows") {
+            let path_a = normalized_item_path.to_string_lossy().to_string();
+            let path_b = target_original_path.to_string_lossy().to_string();
+            path_a
+                .replace('\\', "/")
+                .eq_ignore_ascii_case(&path_b.replace('\\', "/"))
+        } else {
+            normalized_item_path == target_original_path
+        };
+
+        if paths_match {
+            let time_diff = (item.time_deleted - entry.timestamp as i64).abs();
+            if time_diff < closest_time_diff {
+                closest_time_diff = time_diff;
+                best_match = Some(item);
+            }
+        }
+    }
+
+    let matched_item = best_match.ok_or_else(|| {
+        AppError::new(
+            "UNDO_FAILED",
+            "The deleted file could not be found in the Recycle Bin.",
+            true,
+        )
+    })?;
+
+    trash::os_limited::restore_all(std::iter::once(matched_item)).map_err(|error| {
+        if let trash::Error::RestoreCollision { path, .. } = &error {
+            AppError::with_details(
+                "UNDO_FAILED",
+                "A file already exists at the restore location.",
+                true,
+                path.to_string_lossy().to_string(),
+            )
+        } else {
+            AppError::with_details(
+                "UNDO_FAILED",
+                "Failed to restore the file from the Recycle Bin.",
+                true,
+                error.to_string(),
+            )
+        }
+    })?;
+
+    if let Some(mut tracked) = storage::tracked::get_tracked_file(db, &entry.source_path)? {
+        tracked.state = FileDecayState::Fresh;
+        tracked.expiry =
+            Expiry::At(tracked.freshness_at + storage::get_config(db)?.default_ttl_seconds);
+        storage::tracked::upsert_tracked_file(db, &tracked)?;
+    }
+
     Ok(())
 }
 
@@ -476,6 +558,28 @@ mod tests {
         assert!(matches!(entry.undo_status, UndoStatus::Available));
         assert!(!source.exists());
         assert!(Path::new(entry.destination_path.as_ref().unwrap()).exists());
+
+        let undone = super::undo_audit_entry(&fixture.db, &entry.id).expect("undo should succeed");
+        assert!(matches!(undone.undo_status, UndoStatus::Completed));
+        assert!(source.exists());
+    }
+
+    #[test]
+    fn trash_now_audits_and_undo_restores_file() {
+        let fixture = Fixture::new();
+        let source = fixture.write_watch_file("notes_to_trash.txt", "download");
+        fixture.save_config();
+
+        let entry = execute_triage_action(
+            &fixture.db,
+            &path_string(&source),
+            UserTriageAction::TrashNow,
+        )
+        .expect("trash should succeed");
+
+        assert_eq!(entry.action_kind, AuditActionKind::Trash);
+        assert!(matches!(entry.undo_status, UndoStatus::Available));
+        assert!(!source.exists());
 
         let undone = super::undo_audit_entry(&fixture.db, &entry.id).expect("undo should succeed");
         assert!(matches!(undone.undo_status, UndoStatus::Completed));
