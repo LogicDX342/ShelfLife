@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⏳ ShelfLife
+# ShelfLife
 
 ### _Keep your files tidy_.
 
