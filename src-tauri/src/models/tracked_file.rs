@@ -34,5 +34,3 @@ pub struct TrackedFile {
     pub matched_rule_ids: Vec<String>,
     pub origin: OriginEvidence,
 }
-
-pub type TrackedFileView = TrackedFile;

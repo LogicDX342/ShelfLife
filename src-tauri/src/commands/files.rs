@@ -5,20 +5,17 @@ use tauri::State;
 
 use crate::engine::paths::{normalize_configured_path, root_contains};
 use crate::models::{
-    AppError, FileDecayState, FilePreview, FilePreviewContent, RuleMatchExplanation,
-    TrackedFileView,
+    AppError, FileDecayState, FilePreview, FilePreviewContent, RuleMatchExplanation, TrackedFile,
 };
 use crate::rules::explain_file_against_rules;
 use crate::storage::{self, AppState};
 
 #[tauri::command]
-pub async fn get_active_files(
-    state: State<'_, AppState>,
-) -> Result<Vec<TrackedFileView>, AppError> {
+pub async fn get_active_files(state: State<'_, AppState>) -> Result<Vec<TrackedFile>, AppError> {
     active_files(&state.db)
 }
 
-fn active_files(db: &redb::Database) -> Result<Vec<TrackedFileView>, AppError> {
+fn active_files(db: &redb::Database) -> Result<Vec<TrackedFile>, AppError> {
     Ok(storage::tracked::list_tracked_files(db)?
         .into_iter()
         .filter(|file| {
