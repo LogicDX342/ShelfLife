@@ -79,9 +79,11 @@ pub fn apply_rules_to_tracked_file(
     if !tracked.matched_rule_ids.is_empty() {
         let first_rule_id = &tracked.matched_rule_ids[0];
         if let Some(rule) = rules.iter().find(|r| &r.id == first_rule_id) {
-            matched_rule_ttl = Some(rule.ttl_seconds);
-            if matches!(rule.action, crate::models::RuleAction::Ignore) {
-                matched_rule_is_ignore = true;
+            if !matches!(rule.mode, crate::models::RuleMode::PreviewOnly) {
+                matched_rule_ttl = Some(rule.ttl_seconds);
+                if matches!(rule.action, crate::models::RuleAction::Ignore) {
+                    matched_rule_is_ignore = true;
+                }
             }
         }
     }
@@ -98,8 +100,10 @@ pub fn apply_rules_to_tracked_file(
         tracked.state = FileDecayState::Pinned;
     } else if matched_rule_is_ignore {
         tracked.state = FileDecayState::Ignored;
-    } else if matches!(tracked.state, FileDecayState::Ignored) {
-        // Keep as Ignored if it was already marked as Ignored (e.g. by target ignore patterns).
+    } else if matches!(tracked.state, FileDecayState::Ignored)
+        && tracked.last_user_action_at.is_some()
+    {
+        // Keep as Ignored if it was manually ignored by the user.
     } else {
         tracked.state =
             classify_decay_state(tracked.freshness_at, &tracked.expiry, now, target_config);

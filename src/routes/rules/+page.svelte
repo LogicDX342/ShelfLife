@@ -207,11 +207,13 @@
                     Rename template: {rule.action.Rename.template}
                   </span>
                 {/if}
-                <span
-                  class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
-                >
-                  TTL: {Math.round(rule.ttl_seconds / 86400)} days
-                </span>
+                {#if rule.action !== 'Ignore'}
+                  <span
+                    class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
+                  >
+                    TTL: {Math.round(rule.ttl_seconds / 86400)} days
+                  </span>
+                {/if}
               </div>
             </div>
 

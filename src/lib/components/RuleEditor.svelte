@@ -243,18 +243,20 @@
       </label>
 
       <div class="grid grid-cols-2 gap-2">
-        <label class="flex flex-col gap-1">
+        <label class="flex flex-col gap-1 {actionKind === 'Ignore' ? 'col-span-2' : ''}">
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
             >{i18n.t('rules.priority')}</span
           >
           <input type="number" bind:value={priority} class="fluent-input" />
         </label>
-        <label class="flex flex-col gap-1">
-          <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >TTL (Days)</span
-          >
-          <input min="1" type="number" bind:value={ttlDays} class="fluent-input" />
-        </label>
+        {#if actionKind !== 'Ignore'}
+          <label class="flex flex-col gap-1">
+            <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
+              >TTL (Days)</span
+            >
+            <input min="1" type="number" bind:value={ttlDays} class="fluent-input" />
+          </label>
+        {/if}
       </div>
 
       <label class="flex flex-col gap-1">

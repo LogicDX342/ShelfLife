@@ -764,7 +764,7 @@ mod tests {
                 size: crate::models::SizeCondition::Any,
             },
             action: crate::models::RuleAction::Trash,
-            mode: crate::models::RuleMode::PreviewOnly,
+            mode: crate::models::RuleMode::Automatic,
             created_at: 1,
             updated_at: 1,
         };

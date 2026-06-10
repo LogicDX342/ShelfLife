@@ -64,9 +64,11 @@ fn build_rule_preview_entries(
     let files = storage::tracked::list_tracked_files(db)?;
     let mut explanations = Vec::new();
     let mut entries = Vec::new();
+    let mut test_rule = rule.clone();
+    test_rule.enabled = true;
     for file in files {
         let file_explanations =
-            explain_file_against_rules(&file, &config, std::slice::from_ref(rule))?;
+            explain_file_against_rules(&file, &config, std::slice::from_ref(&test_rule))?;
         for explanation in &file_explanations {
             if explanation.proposed_action.is_some() {
                 let entry = AuditEntry {
@@ -154,20 +156,16 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
 
     if let RuleAction::Move { destination_path } = &rule.action {
         let destination = std::path::PathBuf::from(destination_path);
-        let parent = destination.parent().ok_or_else(|| {
-            AppError::new(
-                "RULE_INVALID_DESTINATION",
-                "Move destination must include a parent folder. Rule was not saved.",
-                true,
-            )
-        })?;
-        if !config
-            .watch_targets
-            .iter()
-            .filter(|target| target.enabled)
-            .any(|target| canonical_root_contains(&target.path, parent))
-            && !configured_root_contains(&config.safe_folder_path, parent)
-        {
+        let has_valid_parent = destination.parent().is_some_and(|parent| {
+            config
+                .watch_targets
+                .iter()
+                .filter(|target| target.enabled)
+                .any(|target| canonical_root_contains(&target.path, parent))
+                || configured_root_contains(&config.safe_folder_path, parent)
+        });
+
+        if !has_valid_parent {
             return Err(AppError::with_details(
                 "RULE_INVALID_DESTINATION",
                 "Move destination must be inside a watch target or safe folder. Rule was not saved.",
