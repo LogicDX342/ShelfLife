@@ -128,6 +128,7 @@ ShelfLife/
 
 ## Dev environment tips
 
+- Use `rtk` if available, reference: `.agents/rules/RTK.md`
 - Run `cargo tauri dev` from the root directory to spin up the Rust backend daemon and the Svelte 5 HMR frontend simultaneously.
 - Run `cargo add <crate_name> --manifest-path src-tauri/Cargo.toml` to add pure-Rust dependencies (like `redb` or `notify`) directly to the backend layer.
 - Use `pnpm add -D <package_name>` at the root to add frontend utilities, Tailwind extensions, or UI plugins so Vite and Svelte can index them.

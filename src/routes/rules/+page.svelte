@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
   import RuleEditor from '$lib/components/RuleEditor.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { deleteRule, testRule, saveRule } from '$lib/api/rules';
   import { rulesState } from '$lib/stores/rules.svelte';
   import { i18n } from '$lib/i18n/i18n.svelte';
@@ -9,6 +10,7 @@
 
   let previewResults = $state<RuleMatchExplanation[]>([]);
   let editingRule = $state<AutomationRule | null>(null);
+  let ruleToDelete = $state<AutomationRule | null>(null);
   let showNewEditor = $state(false);
   let error = $state<string | null>(null);
   let selectedPreviewRuleName = $state<string | null>(null);
@@ -18,8 +20,14 @@
     rulesState.refresh();
   });
 
-  async function removeRule(id: string) {
-    if (!confirm('Are you sure you want to delete this rule?')) return;
+  function initiateRemoveRule(rule: AutomationRule) {
+    ruleToDelete = rule;
+  }
+
+  async function confirmRemoveRule() {
+    if (!ruleToDelete) return;
+    const id = ruleToDelete.id;
+    ruleToDelete = null;
     error = null;
     try {
       await deleteRule(id);
@@ -263,7 +271,7 @@
                 </button>
                 <button
                   class="fluent-button p-1.5 text-xs font-semibold text-red-600 dark:text-red-400"
-                  onclick={() => removeRule(rule.id)}
+                  onclick={() => initiateRemoveRule(rule)}
                   aria-label="Delete Rule"
                 >
                   Delete
@@ -324,3 +332,12 @@
     {/if}
   </div>
 </div>
+
+<ConfirmDialog
+  open={!!ruleToDelete}
+  title={i18n.t('rules.deleteConfirmTitle')}
+  message={ruleToDelete ? `${i18n.t('rules.deleteConfirmText')}\n\n${ruleToDelete.name}` : ''}
+  confirmLabel={i18n.t('rules.delete')}
+  onCancel={() => (ruleToDelete = null)}
+  onConfirm={confirmRemoveRule}
+/>

@@ -5,8 +5,10 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { getErrorMessage } from '$lib/utils/format';
   import type { AppConfig, WatchTarget } from '$lib/types';
+  import ConfirmDialog from './ConfirmDialog.svelte';
 
   let config = $state<AppConfig | null>(null);
+  let targetToRemove = $state<WatchTarget | null>(null);
   let targetPath = $state('');
   let safeFolderPath = $state('');
   let defaultTtlDays = $state(30);
@@ -34,6 +36,7 @@
       const selected = await selectDirectory('Select Watch Target Folder', targetPath);
       if (selected) {
         targetPath = selected;
+        await addTargetWithPath(selected);
       }
     } catch (reason) {
       error = getErrorMessage(reason, 'Could not select folder.');
@@ -54,14 +57,28 @@
   }
 
   async function addTarget() {
-    if (!config || !targetPath.trim()) return;
+    await addTargetWithPath(targetPath);
+  }
+
+  async function addTargetWithPath(pathToAdd: string) {
+    if (!config || !pathToAdd.trim()) return;
+
+    // Prevent duplicate watch targets
+    const isDuplicate = config.watch_targets.some(
+      (target) => target.path.toLowerCase() === pathToAdd.trim().toLowerCase(),
+    );
+    if (isDuplicate) {
+      error = 'Folder is already a watch target.';
+      return;
+    }
+
     addingTarget = true;
     error = null;
     const targets = [
       ...config.watch_targets,
       {
         id: crypto.randomUUID(),
-        path: targetPath.trim(),
+        path: pathToAdd.trim(),
         enabled: true,
         recursive: false,
         default_ttl_seconds: null,
@@ -117,11 +134,16 @@
     }
   }
 
-  async function removeTarget(id: string) {
-    if (!config) return;
-    if (!confirm('Are you sure you want to remove this watch target?')) return;
+  function initiateRemoveTarget(target: WatchTarget) {
+    targetToRemove = target;
+  }
+
+  async function confirmRemoveTarget() {
+    if (!config || !targetToRemove) return;
+    const id = targetToRemove.id;
+    targetToRemove = null;
     try {
-      await updateWatchTargets(config.watch_targets.filter((target) => target.id !== id));
+      await updateWatchTargets(config.watch_targets.filter((t) => t.id !== id));
       await refreshConfig();
     } catch (reason) {
       error = getErrorMessage(reason, 'Could not remove watch target.');
@@ -382,7 +404,7 @@
 
                       <button
                         class="fluent-button p-1.5 text-[10px] font-semibold text-red-600 dark:text-red-400"
-                        onclick={() => removeTarget(target.id)}
+                        onclick={() => initiateRemoveTarget(target)}
                       >
                         Remove
                       </button>
@@ -405,3 +427,14 @@
     {/if}
   </div>
 </div>
+
+<ConfirmDialog
+  open={!!targetToRemove}
+  title={i18n.t('settings.removeConfirmTitle')}
+  message={targetToRemove
+    ? `${i18n.t('settings.removeConfirmText')}\n\n${targetToRemove.path}`
+    : ''}
+  confirmLabel={i18n.t('settings.remove')}
+  onCancel={() => (targetToRemove = null)}
+  onConfirm={confirmRemoveTarget}
+/>
