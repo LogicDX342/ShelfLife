@@ -27,7 +27,7 @@
         safeFolderPath = selected;
       }
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not select folder.');
+      error = getErrorMessage(reason, i18n.t('settings.errorSelectFolder'));
     }
   }
 
@@ -39,7 +39,7 @@
         await addTargetWithPath(selected);
       }
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not select folder.');
+      error = getErrorMessage(reason, i18n.t('settings.errorSelectFolder'));
     }
   }
 
@@ -68,7 +68,7 @@
       (target) => target.path.toLowerCase() === pathToAdd.trim().toLowerCase(),
     );
     if (isDuplicate) {
-      error = 'Folder is already a watch target.';
+      error = i18n.t('settings.errorDuplicate');
       return;
     }
 
@@ -92,7 +92,7 @@
       await refreshConfig();
       targetPath = '';
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not update watch targets.');
+      error = getErrorMessage(reason, i18n.t('settings.errorUpdateTargets'));
     } finally {
       addingTarget = false;
     }
@@ -116,7 +116,7 @@
       successMessage = i18n.t('settings.saved');
       setTimeout(() => (successMessage = null), 4000);
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not save preferences.');
+      error = getErrorMessage(reason, i18n.t('settings.errorSavePrefs'));
     } finally {
       savingPrefs = false;
     }
@@ -130,7 +130,7 @@
       );
       await refreshConfig();
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not update watch target.');
+      error = getErrorMessage(reason, i18n.t('settings.errorUpdateTarget'));
     }
   }
 
@@ -146,7 +146,7 @@
       await updateWatchTargets(config.watch_targets.filter((t) => t.id !== id));
       await refreshConfig();
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not remove watch target.');
+      error = getErrorMessage(reason, i18n.t('settings.errorRemoveTarget'));
     }
   }
 </script>
@@ -190,7 +190,7 @@
                     class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
                     onclick={browseSafeFolder}
                   >
-                    Browse...
+                    {i18n.t('settings.browse')}
                   </button>
                 </div>
               </label>
@@ -198,7 +198,7 @@
               <label class="flex flex-col gap-1.5">
                 <span
                   class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >Default Expiry (TTL Days)</span
+                  >{i18n.t('settings.defaultTtlDays')}</span
                 >
                 <input
                   min="1"
@@ -211,7 +211,7 @@
               <label class="flex flex-col gap-1.5">
                 <span
                   class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >Stale Age (Days)</span
+                  >{i18n.t('settings.staleAge')}</span
                 >
                 <input
                   min="1"
@@ -224,7 +224,7 @@
               <label class="flex flex-col gap-1.5">
                 <span
                   class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >Decay Buffer (Hours)</span
+                  >{i18n.t('settings.decayBuffer')}</span
                 >
                 <input
                   min="1"
@@ -307,7 +307,7 @@
                 onclick={savePreferences}
                 disabled={savingPrefs}
               >
-                {savingPrefs ? 'Saving Preferences...' : i18n.t('settings.save')}
+                {savingPrefs ? i18n.t('settings.saving') : i18n.t('settings.save')}
               </button>
             </div>
           </section>
@@ -333,7 +333,7 @@
                   class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
                   onclick={browseTargetFolder}
                 >
-                  Browse...
+                  {i18n.t('settings.browse')}
                 </button>
               </div>
               <button
@@ -374,10 +374,16 @@
                               ? 'bg-green-500'
                               : 'bg-neutral-400'}"
                           ></span>
-                          {target.enabled ? 'Enabled' : 'Disabled'}
+                          {target.enabled
+                            ? i18n.t('settings.enabled')
+                            : i18n.t('settings.disabled')}
                         </span>
                         <span>•</span>
-                        <span>{target.recursive ? 'Recursive' : 'Top Level'}</span>
+                        <span
+                          >{target.recursive
+                            ? i18n.t('settings.recursiveLabel')
+                            : i18n.t('settings.topLevel')}</span
+                        >
                       </p>
                     </div>
 
@@ -399,14 +405,16 @@
                         class="fluent-button p-1.5 text-[10px] font-semibold"
                         onclick={() => replaceTarget({ ...target, recursive: !target.recursive })}
                       >
-                        {target.recursive ? 'Top level' : 'Recursive'}
+                        {target.recursive
+                          ? i18n.t('settings.topLevel')
+                          : i18n.t('settings.recursiveLabel')}
                       </button>
 
                       <button
                         class="fluent-button p-1.5 text-[10px] font-semibold text-red-600 dark:text-red-400"
                         onclick={() => initiateRemoveTarget(target)}
                       >
-                        Remove
+                        {i18n.t('settings.remove')}
                       </button>
                     </div>
                   </div>

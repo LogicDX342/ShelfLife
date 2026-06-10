@@ -34,7 +34,9 @@
         {i18n.t('audit.subtitle')}
       </p>
     </div>
-    <button class="fluent-button" onclick={() => auditState.refresh()}> Refresh </button>
+    <button class="fluent-button" onclick={() => auditState.refresh()}>
+      {i18n.t('rules.refresh')}
+    </button>
   </header>
 
   <!-- Scrollable content -->
@@ -56,7 +58,7 @@
           ></path>
         </svg>
         <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Loading audit entries...</span
+          >{i18n.t('audit.loading')}</span
         >
       </div>
     {:else if auditState.entries.length === 0}
@@ -76,7 +78,7 @@
         </svg>
         <h3 class="text-base font-semibold">{i18n.t('audit.noLogs')}</h3>
         <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-          Actions performed on files will be shown here, allowing you to review or revert them.
+          {i18n.t('audit.noLogsDesc')}
         </p>
       </div>
     {:else}

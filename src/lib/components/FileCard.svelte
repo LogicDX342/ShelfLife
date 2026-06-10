@@ -44,7 +44,7 @@
     try {
       explanations = await explainFile(file.path);
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not load explanation.');
+      error = getErrorMessage(reason, i18n.t('file.errorExplanation'));
     }
   }
 
@@ -55,7 +55,7 @@
       await executeTriageAction(file.path, action);
       await onRefresh();
     } catch (reason) {
-      error = getErrorMessage(reason, 'Action failed.');
+      error = getErrorMessage(reason, i18n.t('file.errorAction'));
     } finally {
       busy = false;
     }
@@ -67,15 +67,18 @@
     if (action === 'MoveToSafeFolder') return i18n.t('file.safeFolder');
     if (action === 'TrashNow') return i18n.t('file.trash');
     if (typeof action === 'object' && 'Snooze' in action) return i18n.t('file.snooze');
-    if (typeof action === 'object' && 'Rename' in action) return 'Rename';
-    if (typeof action === 'object' && 'Move' in action) return 'Move';
-    return 'Action';
+    if (typeof action === 'object' && 'Rename' in action) return i18n.t('file.actionRename');
+    if (typeof action === 'object' && 'Move' in action) return i18n.t('file.actionMove');
+    return i18n.t('file.actionLabel');
   }
 
   function queueAction(action: UserTriageAction) {
     pendingAction = action;
     pendingTitle = actionName(action);
-    pendingMessage = `${actionName(action)} will be recorded in the audit log for ${file.file_name}. Undo availability depends on the action and file state.`;
+    pendingMessage = i18n.t('file.confirmMsg', {
+      action: actionName(action),
+      name: file.file_name,
+    });
   }
 
   async function confirmPendingAction() {
@@ -95,7 +98,7 @@
     try {
       await openFileLocation(file.path);
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not open file location.');
+      error = getErrorMessage(reason, i18n.t('file.errorOpenLocation'));
     }
   }
 
@@ -302,7 +305,9 @@
       {i18n.t('file.trash')}
     </button>
 
-    <button class="fluent-button" type="button" onclick={openLocation}> Open Folder </button>
+    <button class="fluent-button" type="button" onclick={openLocation}>
+      {i18n.t('file.openFolder')}
+    </button>
   </div>
 
   <!-- Expandable Details / Forms Panel -->
@@ -325,19 +330,19 @@
           <label
             for="rename-in-{file.file_name}"
             class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >Rename File</label
+            >{i18n.t('file.renameTitle')}</label
           >
           <div class="flex gap-2">
             <input
               id="rename-in-{file.file_name}"
               bind:value={renameTemplate}
-              placeholder="New name or template..."
+              placeholder={i18n.t('file.renamePlaceholder')}
               class="fluent-input flex-1 text-xs min-w-0"
             />
             <button
               class="fluent-button text-xs font-semibold"
               disabled={busy || !renameTemplate.trim()}
-              type="submit">Rename</button
+              type="submit">{i18n.t('file.actionRename')}</button
             >
           </div>
         </form>
@@ -355,19 +360,19 @@
           <label
             for="move-in-{file.file_name}"
             class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >Move Destination</label
+            >{i18n.t('file.moveTitle')}</label
           >
           <div class="flex gap-2">
             <input
               id="move-in-{file.file_name}"
               bind:value={moveDestination}
-              placeholder="Absolute folder path..."
+              placeholder={i18n.t('file.movePlaceholder')}
               class="fluent-input flex-1 text-xs min-w-0"
             />
             <button
               class="fluent-button text-xs font-semibold"
               disabled={busy || !moveDestination.trim()}
-              type="submit">Move</button
+              type="submit">{i18n.t('file.actionMove')}</button
             >
           </div>
         </form>
@@ -384,7 +389,7 @@
         <label
           for="snooze-in-{file.file_name}"
           class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Snooze Expiry</label
+          >{i18n.t('file.snoozeTitle')}</label
         >
         <div class="flex gap-2">
           <select
@@ -394,7 +399,9 @@
           >
             {#each snoozeOptions as days (days)}
               <option value={days}
-                >{days === -1 ? 'Custom' : `${days} day${days === 1 ? '' : 's'}`}</option
+                >{days === -1
+                  ? i18n.t('file.snoozeCustom')
+                  : `${days} ${days === 1 ? i18n.t('file.day') : i18n.t('file.days')}`}</option
               >
             {/each}
           </select>
@@ -404,7 +411,7 @@
               type="number"
               bind:value={customSnoozeDays}
               class="fluent-input w-24 text-xs"
-              placeholder="days"
+              placeholder={i18n.t('file.days')}
             />
           {/if}
           <button class="fluent-button text-xs font-semibold" disabled={busy} type="submit"

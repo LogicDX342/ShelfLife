@@ -48,7 +48,7 @@
         watchPath = selected;
       }
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not select folder.');
+      error = getErrorMessage(reason, i18n.t('rules.errorSelectFolder'));
     }
   }
 
@@ -59,7 +59,7 @@
         destinationPath = selected;
       }
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not select folder.');
+      error = getErrorMessage(reason, i18n.t('rules.errorSelectFolder'));
     }
   }
 
@@ -175,7 +175,7 @@
       if (!rule) reset();
       await onSaved();
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not save rule.');
+      error = getErrorMessage(reason, i18n.t('rules.errorSaveRule'));
     } finally {
       saving = false;
     }
@@ -187,7 +187,7 @@
     try {
       testResults = await testRule(buildRule());
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not test rule.');
+      error = getErrorMessage(reason, i18n.t('rules.errorTest'));
     } finally {
       testing = false;
     }
@@ -206,24 +206,24 @@
     <h4
       class="text-xs font-semibold text-fluent-accent uppercase tracking-wider border-b border-fluent-border-light dark:border-fluent-border-dark pb-1"
     >
-      General Settings
+      {i18n.t('rules.generalSettings')}
     </h4>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Rule Name</span
+          >{i18n.t('rules.ruleName')}</span
         >
         <input
           bind:value={name}
           required
-          placeholder="e.g. Clean Temporary Downloads"
+          placeholder={i18n.t('rules.ruleNamePlaceholder')}
           class="fluent-input"
         />
       </label>
 
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Watch Target Path</span
+          >{i18n.t('rules.watchTargetPath')}</span
         >
         <div class="flex gap-2">
           <input
@@ -237,7 +237,7 @@
             class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
             onclick={browseWatchPath}
           >
-            Browse...
+            {i18n.t('settings.browse')}
           </button>
         </div>
       </label>
@@ -252,7 +252,7 @@
         {#if actionKind !== 'Ignore'}
           <label class="flex flex-col gap-1">
             <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-              >TTL (Days)</span
+              >{i18n.t('rules.ttlDaysLabel')}</span
             >
             <input min="1" type="number" bind:value={ttlDays} class="fluent-input" />
           </label>
@@ -264,9 +264,9 @@
           >{i18n.t('rules.mode')}</span
         >
         <select bind:value={mode} class="fluent-input">
-          <option value="PreviewOnly">PreviewOnly</option>
-          <option value="AskFirst">AskFirst</option>
-          <option value="Automatic">Automatic</option>
+          <option value="PreviewOnly">{i18n.t('rules.modePreviewOnly')}</option>
+          <option value="AskFirst">{i18n.t('rules.modeAskFirst')}</option>
+          <option value="Automatic">{i18n.t('rules.modeAutomatic')}</option>
         </select>
       </label>
 
@@ -294,41 +294,49 @@
     <h4
       class="text-xs font-semibold text-fluent-accent uppercase tracking-wider border-b border-fluent-border-light dark:border-fluent-border-dark pb-1"
     >
-      Match Conditions
+      {i18n.t('rules.matchConditions')}
     </h4>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Extensions</span
+          >{i18n.t('rules.extensions')}</span
         >
         <input
           bind:value={extensions}
-          placeholder="pdf, zip, png (comma-sep)"
+          placeholder={i18n.t('rules.extensionsPlaceholder')}
           class="fluent-input"
         />
       </label>
 
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Filename Globs</span
+          >{i18n.t('rules.filenameGlobs')}</span
         >
-        <input bind:value={filenameGlobs} placeholder="*.tmp, temp_*" class="fluent-input" />
+        <input
+          bind:value={filenameGlobs}
+          placeholder={i18n.t('rules.filenameGlobsPlaceholder')}
+          class="fluent-input"
+        />
       </label>
 
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Filename Regexes</span
+          >{i18n.t('rules.filenameRegexes')}</span
         >
-        <input bind:value={filenameRegexes} placeholder="(?i)copy" class="fluent-input" />
+        <input
+          bind:value={filenameRegexes}
+          placeholder={i18n.t('rules.filenameRegexesPlaceholder')}
+          class="fluent-input"
+        />
       </label>
 
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Source Domains</span
+          >{i18n.t('rules.sourceDomains')}</span
         >
         <input
           bind:value={sourceDomains}
-          placeholder="google.com, github.com"
+          placeholder={i18n.t('rules.sourceDomainsPlaceholder')}
           class="fluent-input"
         />
       </label>
@@ -338,20 +346,20 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >File Size Criteria</span
+          >{i18n.t('rules.fileSizeCriteria')}</span
         >
         <select bind:value={sizeKind} class="fluent-input">
-          <option value="Any">Any Size</option>
-          <option value="LessThan">Less Than</option>
-          <option value="GreaterThan">Greater Than</option>
-          <option value="Between">Between</option>
+          <option value="Any">{i18n.t('rules.anySize')}</option>
+          <option value="LessThan">{i18n.t('rules.lessThan')}</option>
+          <option value="GreaterThan">{i18n.t('rules.greaterThan')}</option>
+          <option value="Between">{i18n.t('rules.between')}</option>
         </select>
       </label>
 
       {#if sizeKind === 'GreaterThan' || sizeKind === 'Between'}
         <label class="flex flex-col gap-1">
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >Min Size (MB)</span
+            >{i18n.t('rules.minSizeMb')}</span
           >
           <input min="0" type="number" bind:value={sizeMinMb} class="fluent-input" />
         </label>
@@ -360,7 +368,7 @@
       {#if sizeKind === 'LessThan' || sizeKind === 'Between'}
         <label class="flex flex-col gap-1">
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >Max Size (MB)</span
+            >{i18n.t('rules.maxSizeMb')}</span
           >
           <input min="0" type="number" bind:value={sizeMaxMb} class="fluent-input" />
         </label>
@@ -373,7 +381,7 @@
     <h4
       class="text-xs font-semibold text-fluent-accent uppercase tracking-wider border-b border-fluent-border-light dark:border-fluent-border-dark pb-1"
     >
-      Triage Action
+      {i18n.t('rules.action')}
     </h4>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <label class="flex flex-col gap-1">
@@ -381,17 +389,17 @@
           >{i18n.t('rules.action')}</span
         >
         <select bind:value={actionKind} class="fluent-input">
-          <option value="Ignore">Ignore (Keep in place)</option>
-          <option value="Trash">Trash Now</option>
-          <option value="Move">Move to Directory</option>
-          <option value="Rename">Rename File</option>
+          <option value="Ignore">{i18n.t('rules.actionIgnoreLabel')}</option>
+          <option value="Trash">{i18n.t('file.trash')}</option>
+          <option value="Move">{i18n.t('rules.actionMoveLabel')}</option>
+          <option value="Rename">{i18n.t('rules.actionRenameLabel')}</option>
         </select>
       </label>
 
       {#if actionKind === 'Move'}
         <label class="flex flex-col gap-1">
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >Destination Path</span
+            >{i18n.t('rules.destinationPath')}</span
           >
           <div class="flex gap-2">
             <input
@@ -405,7 +413,7 @@
               class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
               onclick={browseDestinationPath}
             >
-              Browse...
+              {i18n.t('settings.browse')}
             </button>
           </div>
         </label>
@@ -414,7 +422,7 @@
       {#if actionKind === 'Rename'}
         <label class="flex flex-col gap-1">
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >Rename Template</span
+            >{i18n.t('rules.renameTemplate')}</span
           >
           <input
             bind:value={renameTemplate}
@@ -450,7 +458,7 @@
       </button>
     {/if}
     <button class="fluent-button fluent-button-primary" type="submit" disabled={saving}>
-      Save Rule
+      {i18n.t('rules.saveRule')}
     </button>
   </div>
 
@@ -460,7 +468,7 @@
       class="fluent-card p-4 space-y-3 bg-neutral-50 dark:bg-neutral-900/40 border border-fluent-accent/10"
     >
       <h5 class="text-xs font-semibold text-fluent-text-light dark:text-fluent-text-dark">
-        Dry Run Match Results ({testResults.length} files matched)
+        {i18n.t('rules.testResultsCount', { count: testResults.length })}
       </h5>
       <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
         {#each testResults as result (result.file_path)}

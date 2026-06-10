@@ -242,13 +242,15 @@
     bulkSummary = null;
     try {
       const result = await executeBulkTriageAction(selectedPaths, selectedBulkAction());
-      bulkSummary =
-        i18n.t('dashboard.bulkActions') +
-        `: ${result.entries.length} succeeded${result.failures.length ? `, ${result.failures.length} failed` : ''}.`;
+      bulkSummary = i18n.t('browser.bulkSummary', {
+        action: bulkAction,
+        succeeded: result.entries.length,
+        failed: result.failures.length,
+      });
       selectedPaths = [];
       await filesState.refresh();
     } catch (reason) {
-      bulkError = getErrorMessage(reason, 'Bulk action failed.');
+      bulkError = getErrorMessage(reason, i18n.t('browser.errorBulkAction'));
     }
   }
 
@@ -322,7 +324,7 @@
         <h2
           class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark mb-3"
         >
-          Folders
+          {i18n.t('browser.folders')}
         </h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {#each directoryContents.folders.slice(0, visibleFoldersCount) as folder (folder.path)}
@@ -356,7 +358,9 @@
                     class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark truncate mt-0.5"
                     title={folder.path}
                   >
-                    {folder.filesCount} file{folder.filesCount === 1 ? '' : 's'}
+                    {folder.filesCount === 1
+                      ? i18n.t('browser.fileCountSingular', { count: folder.filesCount })
+                      : i18n.t('browser.fileCountPlural', { count: folder.filesCount })}
                   </p>
                 </div>
               </div>
@@ -387,7 +391,9 @@
               class="fluent-button w-full justify-center text-xs font-semibold py-2"
               onclick={() => (visibleFoldersCount += 50)}
             >
-              Load More Folders ({directoryContents.folders.length - visibleFoldersCount} remaining)
+              {i18n.t('browser.loadMoreFolders', {
+                count: directoryContents.folders.length - visibleFoldersCount,
+              })}
             </button>
           </div>
         {/if}
@@ -401,7 +407,7 @@
           <h2
             class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark"
           >
-            Files
+            {i18n.t('browser.files')}
           </h2>
 
           <!-- Bulk Select Operations -->
@@ -411,7 +417,7 @@
               class="text-xs font-semibold text-fluent-accent hover:underline"
               onclick={selectReviewableInFolder}
             >
-              Select Reviewable
+              {i18n.t('browser.selectReviewable')}
             </button>
             <span class="text-fluent-border-light dark:text-fluent-border-dark">|</span>
             <label
@@ -423,7 +429,7 @@
                 onchange={(e) => toggleSelectAll(e.currentTarget.checked)}
                 class="rounded border-neutral-300 dark:border-neutral-700 text-fluent-accent focus:ring-fluent-accent"
               />
-              Select All
+              {i18n.t('browser.selectAll')}
             </label>
           </div>
         </div>
@@ -447,7 +453,9 @@
               class="fluent-button w-full justify-center text-xs font-semibold py-2"
               onclick={() => (visibleFilesCount += 50)}
             >
-              Load More Files ({directoryContents.files.length - visibleFilesCount} remaining)
+              {i18n.t('browser.loadMoreFiles', {
+                count: directoryContents.files.length - visibleFilesCount,
+              })}
             </button>
           </div>
         {/if}
@@ -470,9 +478,9 @@
             d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5M5 19a2 2 0 002-2v-5M7 10h3m-3 4h3m4-4h.01M17 14h.01"
           />
         </svg>
-        <h3 class="text-base font-semibold">Empty Folder</h3>
+        <h3 class="text-base font-semibold">{i18n.t('browser.emptyFolder')}</h3>
         <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-          This directory does not contain any tracked files or folders.
+          {i18n.t('browser.emptyFolderDesc')}
         </p>
       </div>
     {/if}
@@ -518,7 +526,7 @@
           class="fluent-button fluent-button-primary animate-pulse"
           onclick={() => (confirmBulk = true)}
         >
-          Apply Action
+          {i18n.t('browser.applyAction')}
         </button>
       </div>
     </div>
@@ -528,8 +536,12 @@
 <ConfirmDialog
   open={confirmBulk}
   title={i18n.t('dialog.confirmTitle')}
-  message={`${bulkAction} will be applied to ${selectedPaths.length} files totaling ${formatBytes(selectedSize)}. Each changed file will create its own audit row.`}
-  confirmLabel="Apply"
+  message={i18n.t('browser.bulkConfirmMsg', {
+    action: bulkAction,
+    count: selectedPaths.length,
+    size: formatBytes(selectedSize),
+  })}
+  confirmLabel={i18n.t('browser.apply')}
   onCancel={() => (confirmBulk = false)}
   onConfirm={runBulkAction}
 />
