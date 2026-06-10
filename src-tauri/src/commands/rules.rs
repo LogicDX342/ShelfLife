@@ -127,7 +127,7 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
     for glob in &rule.conditions.filename_globs {
         globset::Glob::new(glob).map_err(|error| {
             AppError::with_details(
-                "RULE_INVALID_REGEX",
+                "RULE_INVALID_GLOB",
                 "Filename glob could not be parsed. Rule was not saved.",
                 true,
                 error.to_string(),
@@ -138,7 +138,7 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
     if let SizeCondition::Between { min, max } = &rule.conditions.size {
         if min > max {
             return Err(AppError::new(
-                "RULE_INVALID_REGEX",
+                "RULE_INVALID_SIZE_RANGE",
                 "Size range minimum cannot exceed maximum. Rule was not saved.",
                 true,
             ));
@@ -245,6 +245,31 @@ mod tests {
         let error = validate_rule(&rule, &config).expect_err("invalid regex should be rejected");
 
         assert_eq!(error.code, "RULE_INVALID_REGEX");
+    }
+
+    #[test]
+    fn invalid_rule_glob_uses_glob_error_code() {
+        let fixture = Fixture::new();
+        let config = fixture.config();
+        let mut rule = fixture.rule();
+        rule.conditions.filename_globs = vec![String::from("[")];
+
+        let error = validate_rule(&rule, &config).expect_err("invalid glob should be rejected");
+
+        assert_eq!(error.code, "RULE_INVALID_GLOB");
+    }
+
+    #[test]
+    fn invalid_rule_size_range_uses_size_error_code() {
+        let fixture = Fixture::new();
+        let config = fixture.config();
+        let mut rule = fixture.rule();
+        rule.conditions.size = SizeCondition::Between { min: 10, max: 1 };
+
+        let error =
+            validate_rule(&rule, &config).expect_err("invalid size range should be rejected");
+
+        assert_eq!(error.code, "RULE_INVALID_SIZE_RANGE");
     }
 
     #[test]

@@ -377,7 +377,7 @@ fn build_glob_set(patterns: &[String]) -> Result<Option<GlobSet>, AppError> {
     for pattern in patterns {
         builder.add(Glob::new(pattern).map_err(|error| {
             AppError::with_details(
-                "RULE_INVALID_REGEX",
+                "RULE_INVALID_GLOB",
                 "Watch target pattern could not be parsed.",
                 true,
                 error.to_string(),
@@ -386,7 +386,7 @@ fn build_glob_set(patterns: &[String]) -> Result<Option<GlobSet>, AppError> {
     }
     Ok(Some(builder.build().map_err(|error| {
         AppError::with_details(
-            "RULE_INVALID_REGEX",
+            "RULE_INVALID_GLOB",
             "Watch target pattern set could not be built.",
             true,
             error.to_string(),
@@ -551,7 +551,7 @@ mod tests {
 
         let error = reconcile(&fixture.db).expect_err("invalid ignore pattern should fail");
 
-        assert_eq!(error.code, "RULE_INVALID_REGEX");
+        assert_eq!(error.code, "RULE_INVALID_GLOB");
     }
 
     #[test]

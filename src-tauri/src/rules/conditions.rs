@@ -78,7 +78,7 @@ fn matches_filename_pattern(
         for glob in globs {
             builder.add(Glob::new(glob).map_err(|error| {
                 AppError::with_details(
-                    "RULE_INVALID_REGEX",
+                    "RULE_INVALID_GLOB",
                     "Filename glob could not be parsed.",
                     true,
                     error.to_string(),
@@ -87,7 +87,7 @@ fn matches_filename_pattern(
         }
         let glob_set = builder.build().map_err(|error| {
             AppError::with_details(
-                "RULE_INVALID_REGEX",
+                "RULE_INVALID_GLOB",
                 "Filename glob set could not be built.",
                 true,
                 error.to_string(),
