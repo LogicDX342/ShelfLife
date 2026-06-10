@@ -1,5 +1,6 @@
 pub mod executor;
 pub mod freshness;
+pub mod paths;
 pub mod quiescence;
 pub mod reconciliation;
 pub mod watcher;

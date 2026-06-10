@@ -6,6 +6,7 @@ use redb::Database;
 use uuid::Uuid;
 
 use crate::engine::freshness::{now_seconds, tracked_file_from_metadata};
+use crate::engine::paths::root_contains;
 use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, Expiry, FileDecayState, TrackedFile,
     UndoStatus, UserTriageAction,
@@ -410,8 +411,8 @@ fn validate_source_scope(path: &Path, config: &AppConfig) -> Result<(), AppError
         .watch_targets
         .iter()
         .filter(|target| target.enabled)
-        .any(|target| canonical_root_contains(&target.path, &path))
-        || canonical_root_contains(&config.safe_folder_path, &path)
+        .any(|target| root_contains(&target.path, &path))
+        || root_contains(&config.safe_folder_path, &path)
     {
         return Ok(());
     }
@@ -424,8 +425,8 @@ fn validate_destination_scope(parent: &Path, config: &AppConfig) -> Result<(), A
         .watch_targets
         .iter()
         .filter(|target| target.enabled)
-        .any(|target| configured_root_contains(&target.path, parent))
-        || configured_root_contains(&config.safe_folder_path, parent)
+        .any(|target| root_contains(&target.path, parent))
+        || root_contains(&config.safe_folder_path, parent)
     {
         return Ok(());
     }
@@ -453,42 +454,6 @@ fn validate_not_protected_for_filesystem_change(
     }
 
     Ok(())
-}
-
-fn canonical_root_contains(root: &str, path: &Path) -> bool {
-    let Some(root) = normalize_configured_path(Path::new(root)) else {
-        return false;
-    };
-    let Some(path) = normalize_configured_path(path) else {
-        return false;
-    };
-    path.starts_with(root)
-}
-
-fn configured_root_contains(root: &str, path: &Path) -> bool {
-    canonical_root_contains(root, path)
-}
-
-fn normalize_configured_path(path: &Path) -> Option<PathBuf> {
-    let mut suffix = Vec::new();
-    let mut cursor = path.to_path_buf();
-
-    loop {
-        if let Ok(canonical) = cursor.canonicalize() {
-            let mut normalized = canonical;
-            for component in suffix.iter().rev() {
-                normalized.push(component);
-            }
-            return Some(normalized);
-        }
-
-        let component = cursor.file_name()?.to_os_string();
-        if component == OsStr::new(".") || component == OsStr::new("..") {
-            return None;
-        }
-        suffix.push(component);
-        cursor = cursor.parent()?.to_path_buf();
-    }
 }
 
 fn rename_destination(source: &Path, template: &str) -> Result<PathBuf, AppError> {

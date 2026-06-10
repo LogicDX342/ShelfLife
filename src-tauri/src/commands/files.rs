@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use tauri::State;
 
+use crate::engine::paths::{normalize_configured_path, root_contains};
 use crate::models::{
     AppError, FileDecayState, FilePreview, FilePreviewContent, RuleMatchExplanation,
     TrackedFileView,
@@ -267,39 +268,6 @@ fn validate_path_scope(state: &State<'_, AppState>, path: &str) -> Result<(), Ap
         Err(AppError::path_out_of_scope(
             normalized.to_string_lossy().as_ref(),
         ))
-    }
-}
-
-fn root_contains(root: &str, path: &Path) -> bool {
-    let Some(root) = normalize_configured_path(Path::new(root)) else {
-        return false;
-    };
-    let Some(path) = normalize_configured_path(path) else {
-        return false;
-    };
-    path.starts_with(root)
-}
-
-fn normalize_configured_path(path: &Path) -> Option<PathBuf> {
-    use std::ffi::OsStr;
-    let mut suffix = Vec::new();
-    let mut cursor = path.to_path_buf();
-
-    loop {
-        if let Ok(canonical) = cursor.canonicalize() {
-            let mut normalized = canonical;
-            for component in suffix.iter().rev() {
-                normalized.push(component);
-            }
-            return Some(normalized);
-        }
-
-        let component = cursor.file_name()?.to_os_string();
-        if component == OsStr::new(".") || component == OsStr::new("..") {
-            return None;
-        }
-        suffix.push(component);
-        cursor = cursor.parent()?.to_path_buf();
     }
 }
 

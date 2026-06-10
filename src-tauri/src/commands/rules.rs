@@ -1,7 +1,7 @@
-use std::ffi::OsStr;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
+use crate::engine::paths::root_contains;
 use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, RuleAction,
     RuleMatchExplanation, RuleMode, SizeCondition, UndoStatus,
@@ -149,7 +149,7 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
         .watch_targets
         .iter()
         .filter(|target| target.enabled)
-        .any(|target| canonical_root_contains(&target.path, &rule.watch_path))
+        .any(|target| root_contains(&target.path, &rule.watch_path))
     {
         return Err(AppError::path_out_of_scope(&rule.watch_path));
     }
@@ -161,8 +161,8 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
                 .watch_targets
                 .iter()
                 .filter(|target| target.enabled)
-                .any(|target| canonical_root_contains(&target.path, parent))
-                || configured_root_contains(&config.safe_folder_path, parent)
+                .any(|target| root_contains(&target.path, parent))
+                || root_contains(&config.safe_folder_path, parent)
         });
 
         if !has_valid_parent {
@@ -176,42 +176,6 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
     }
 
     Ok(())
-}
-
-fn canonical_root_contains(root: &str, path: impl AsRef<std::path::Path>) -> bool {
-    let Some(root) = normalize_configured_path(std::path::Path::new(root)) else {
-        return false;
-    };
-    let Some(path) = normalize_configured_path(path.as_ref()) else {
-        return false;
-    };
-    path.starts_with(root)
-}
-
-fn configured_root_contains(root: &str, path: impl AsRef<std::path::Path>) -> bool {
-    canonical_root_contains(root, path)
-}
-
-fn normalize_configured_path(path: &std::path::Path) -> Option<std::path::PathBuf> {
-    let mut suffix = Vec::new();
-    let mut cursor = path.to_path_buf();
-
-    loop {
-        if let Ok(canonical) = cursor.canonicalize() {
-            let mut normalized = canonical;
-            for component in suffix.iter().rev() {
-                normalized.push(component);
-            }
-            return Some(normalized);
-        }
-
-        let component = cursor.file_name()?.to_os_string();
-        if component == OsStr::new(".") || component == OsStr::new("..") {
-            return None;
-        }
-        suffix.push(component);
-        cursor = cursor.parent()?.to_path_buf();
-    }
 }
 
 #[cfg(test)]

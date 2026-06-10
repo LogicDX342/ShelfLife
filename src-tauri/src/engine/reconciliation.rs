@@ -6,6 +6,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use redb::Database;
 
 use crate::engine::freshness::tracked_file_from_metadata;
+use crate::engine::paths::root_contains;
 use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
 use crate::models::{
     AppConfig, AppError, FileDecayState, ReconciliationReport, TrackedFile, WatchTarget,
@@ -421,39 +422,6 @@ fn tracked_file_changed(existing: &TrackedFile, next: &TrackedFile) -> bool {
         || existing.state != next.state
         || existing.matched_rule_ids != next.matched_rule_ids
         || existing.origin != next.origin
-}
-
-fn root_contains(root: &str, path: &Path) -> bool {
-    let Some(root) = normalize_configured_path(Path::new(root)) else {
-        return false;
-    };
-    let Some(path) = normalize_configured_path(path) else {
-        return false;
-    };
-    path.starts_with(root)
-}
-
-fn normalize_configured_path(path: &Path) -> Option<PathBuf> {
-    use std::ffi::OsStr;
-    let mut suffix = Vec::new();
-    let mut cursor = path.to_path_buf();
-
-    loop {
-        if let Ok(canonical) = cursor.canonicalize() {
-            let mut normalized = canonical;
-            for component in suffix.iter().rev() {
-                normalized.push(component);
-            }
-            return Some(normalized);
-        }
-
-        let component = cursor.file_name()?.to_os_string();
-        if component == OsStr::new(".") || component == OsStr::new("..") {
-            return None;
-        }
-        suffix.push(component);
-        cursor = cursor.parent()?.to_path_buf();
-    }
 }
 
 #[cfg(test)]
