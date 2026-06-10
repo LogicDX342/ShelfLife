@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { RuleMatchExplanation } from '$lib/types';
+  import { i18n } from '$lib/i18n/i18n.svelte';
 
   let { explanation } = $props<{ explanation: RuleMatchExplanation }>();
 </script>
@@ -17,9 +18,9 @@
   <!-- Rule Name -->
   <span
     class="truncate max-w-[120px] font-bold text-neutral-700 dark:text-neutral-300"
-    title={explanation.rule_name ?? 'No rule matched'}
+    title={explanation.rule_name ?? i18n.t('file.noRuleMatched')}
   >
-    {explanation.rule_name ?? 'No rule'}
+    {explanation.rule_name ?? i18n.t('file.noRule')}
   </span>
 
   <span
@@ -33,7 +34,7 @@
     <span
       class="ml-1 px-1 py-0.2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded text-[9px] uppercase font-bold tracking-wider"
     >
-      Protected
+      {i18n.t('file.protected')}
     </span>
   {:else if explanation.mode}
     <span

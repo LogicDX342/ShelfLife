@@ -36,7 +36,7 @@
       }
       await rulesState.refresh();
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not delete rule.');
+      error = getErrorMessage(reason, i18n.t('rules.errorDelete'));
     }
   }
 
@@ -47,7 +47,7 @@
       await saveRule(updated);
       await rulesState.refresh();
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not update rule status.');
+      error = getErrorMessage(reason, i18n.t('rules.errorUpdateStatus'));
     }
   }
 
@@ -58,7 +58,7 @@
     try {
       previewResults = await testRule(rule);
     } catch (reason) {
-      error = getErrorMessage(reason, 'Could not test rule.');
+      error = getErrorMessage(reason, i18n.t('rules.errorTest'));
     } finally {
       testingRuleId = null;
     }
@@ -88,7 +88,9 @@
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <button class="fluent-button" onclick={() => rulesState.refresh()}> Refresh </button>
+      <button class="fluent-button" onclick={() => rulesState.refresh()}>
+        {i18n.t('rules.refresh')}
+      </button>
       <button
         class="fluent-button fluent-button-primary"
         onclick={() => {
@@ -109,7 +111,9 @@
         class="fluent-card p-6 bg-fluent-card-light dark:bg-fluent-card-dark border border-fluent-accent/20 shadow-md"
       >
         <h3 class="text-base font-semibold mb-4 text-fluent-accent">
-          {editingRule ? `Edit Rule: ${editingRule.name}` : i18n.t('rules.newRule')}
+          {editingRule
+            ? i18n.t('rules.editRule', { name: editingRule.name })
+            : i18n.t('rules.newRule')}
         </h3>
         <RuleEditor rule={editingRule} onSaved={refreshAfterSave} onCancel={handleCancel} />
       </div>
@@ -136,7 +140,7 @@
           ></path>
         </svg>
         <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Loading automation rules...</span
+          >{i18n.t('rules.loading')}</span
         >
       </div>
     {:else if rulesState.rules.length === 0}
@@ -156,7 +160,7 @@
         </svg>
         <h3 class="text-base font-semibold">{i18n.t('rules.noRules')}</h3>
         <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-          Create a rule to automate trashing, moving, or renaming files in your watch targets.
+          {i18n.t('rules.noRulesDesc')}
         </p>
       </div>
     {:else}
@@ -175,7 +179,7 @@
                 <span
                   class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-black/5 dark:bg-white/5 text-fluent-muted-light dark:text-fluent-muted-dark"
                 >
-                  Priority: {rule.priority}
+                  {i18n.t('rules.priority')}: {rule.priority}
                 </span>
               </div>
 
@@ -183,7 +187,7 @@
                 class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate"
                 title={rule.watch_path}
               >
-                Watch target: {rule.watch_path}
+                {i18n.t('rules.watchTarget', { path: rule.watch_path })}
               </p>
 
               <!-- Conditions pill row -->
@@ -193,33 +197,33 @@
                 <span
                   class="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
                 >
-                  Mode: {rule.mode}
+                  {i18n.t('rules.mode')}: {rule.mode}
                 </span>
                 {#if typeof rule.action === 'string'}
                   <span
                     class="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300"
                   >
-                    Action: {rule.action}
+                    {i18n.t('rules.action')}: {rule.action}
                   </span>
                 {:else if 'Move' in rule.action}
                   <span
                     class="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300"
                   >
-                    Move to: {rule.action.Move.destination_path.split('/').pop() ||
+                    {i18n.t('rules.action')}: {rule.action.Move.destination_path.split('/').pop() ||
                       rule.action.Move.destination_path}
                   </span>
                 {:else if 'Rename' in rule.action}
                   <span
                     class="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300"
                   >
-                    Rename template: {rule.action.Rename.template}
+                    {i18n.t('rules.action')}: {rule.action.Rename.template}
                   </span>
                 {/if}
                 {#if rule.action !== 'Ignore'}
                   <span
                     class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
                   >
-                    TTL: {Math.round(rule.ttl_seconds / 86400)} days
+                    {i18n.t('rules.ttlDays', { days: Math.round(rule.ttl_seconds / 86400) })}
                   </span>
                 {/if}
               </div>
@@ -255,7 +259,7 @@
                   }}
                   aria-label="Edit Rule"
                 >
-                  Edit
+                  {i18n.t('rules.edit')}
                 </button>
                 <button
                   class="fluent-button p-1.5 text-xs font-semibold"
@@ -264,7 +268,7 @@
                   aria-label="Test Rule"
                 >
                   {#if testingRuleId === rule.id}
-                    Testing...
+                    {i18n.t('rules.testing')}
                   {:else}
                     {i18n.t('rules.testRule')}
                   {/if}
@@ -274,7 +278,7 @@
                   onclick={() => initiateRemoveRule(rule)}
                   aria-label="Delete Rule"
                 >
-                  Delete
+                  {i18n.t('rules.delete')}
                 </button>
               </div>
             </div>
@@ -301,7 +305,7 @@
             class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark hover:underline"
             onclick={() => (previewResults = [])}
           >
-            Clear Results
+            {i18n.t('rules.clearResults')}
           </button>
         </div>
 

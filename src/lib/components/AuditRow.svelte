@@ -15,7 +15,7 @@
       await undoAuditEntry(entry.id);
       await onRefresh();
     } catch (reason) {
-      error = getErrorMessage(reason, 'Undo failed');
+      error = getErrorMessage(reason, i18n.t('audit.errorUndo'));
     } finally {
       busy = false;
     }
@@ -133,25 +133,27 @@
         class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate"
         title={entry.source_path}
       >
-        Source: {entry.source_path}
+        {i18n.t('audit.source', { path: entry.source_path })}
       </p>
       {#if entry.destination_path}
         <p
           class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate"
           title={entry.destination_path}
         >
-          Dest: {entry.destination_path}
+          {i18n.t('audit.destLabel', { path: entry.destination_path })}
         </p>
       {/if}
       <div
         class="flex items-center gap-2 pt-1 text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark"
       >
-        <span>Size: {formatBytes(entry.size_bytes)}</span>
+        <span>{i18n.t('audit.size', { size: formatBytes(entry.size_bytes) })}</span>
         <span>•</span>
         <span>{formatDate(entry.timestamp)}</span>
         {#if entry.rule_name}
           <span>•</span>
-          <span class="font-medium text-fluent-accent">Rule: {entry.rule_name}</span>
+          <span class="font-medium text-fluent-accent"
+            >{i18n.t('audit.rule', { name: entry.rule_name })}</span
+          >
         {/if}
       </div>
     </div>
@@ -164,7 +166,7 @@
     {#if undoAvailable}
       <button class="fluent-button text-xs font-bold px-3 py-1.5" onclick={undo} disabled={busy}>
         {#if busy}
-          Undoing...
+          {i18n.t('audit.undoing')}
         {:else}
           {i18n.t('audit.undo')}
         {/if}
@@ -181,7 +183,7 @@
             d="M5 13l4 4L19 7"
           />
         </svg>
-        Undone
+        {i18n.t('audit.undone')}
       </span>
     {:else}
       <span

@@ -29,7 +29,7 @@
     "trayIcon": {
       "iconPath": "icons/icon.ico",
       "iconAsTemplate": false,
-      "tooltip": "shelflife — File Hygiene Assistant"
+      "tooltip": "ShelfLife"
     }
   },
   "bundle": {

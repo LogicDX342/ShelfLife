@@ -123,7 +123,7 @@
   <div class="flex-1 overflow-y-auto space-y-4 pb-16 pr-1">
     {#if filesState.error}
       <div class="p-6 text-center text-red-500">
-        <p class="font-semibold">Error loading queue</p>
+        <p class="font-semibold">{i18n.t('dashboard.errorLoading')}</p>
         <p class="text-sm mt-1">{filesState.error}</p>
       </div>
     {:else if filesState.loading && filesState.files.length === 0}
@@ -138,7 +138,7 @@
           ></path>
         </svg>
         <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
-          >Loading queue...</span
+          >{i18n.t('dashboard.loadingQueue')}</span
         >
       </div>
     {:else if filteredFiles.length === 0}
@@ -158,7 +158,7 @@
         </svg>
         <h3 class="text-base font-semibold">{i18n.t('dashboard.noFiles')}</h3>
         <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-          No files require action at this time. Good job!
+          {i18n.t('dashboard.noFilesDesc')}
         </p>
       </div>
     {:else}
@@ -174,7 +174,7 @@
               class="fluent-button w-full justify-center text-xs font-semibold py-2.5"
               onclick={() => (visibleLimit += 100)}
             >
-              Load More ({filteredFiles.length - visibleLimit} remaining)
+              {i18n.t('dashboard.loadMore', { count: filteredFiles.length - visibleLimit })}
             </button>
           </div>
         {/if}
