@@ -135,6 +135,7 @@ export type WatchTarget = {
   recursive: boolean;
   default_ttl_seconds: number | null;
   ignore_patterns: string[];
+  include_hidden_patterns: string[];
   rule_ids: string[];
 };
 

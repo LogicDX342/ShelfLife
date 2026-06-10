@@ -66,6 +66,7 @@
         recursive: false,
         default_ttl_seconds: null,
         ignore_patterns: [],
+        include_hidden_patterns: [],
         rule_ids: [],
       },
     ];
