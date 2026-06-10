@@ -59,7 +59,6 @@ fn build_rule_preview_entries(
     rule: &AutomationRule,
 ) -> Result<(Vec<RuleMatchExplanation>, Vec<AuditEntry>), AppError> {
     let config = storage::get_config(db)?;
-    validate_rule(rule, &config)?;
 
     let files = storage::tracked::list_tracked_files(db)?;
     let mut explanations = Vec::new();
