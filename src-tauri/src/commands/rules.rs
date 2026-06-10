@@ -179,46 +179,20 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::{Path, PathBuf};
-
-    use uuid::Uuid;
-
-    use crate::engine::freshness::tracked_file_from_metadata;
-    use crate::models::{
-        AppConfig, AutomationRule, OriginEvidence, RuleAction, RuleConditions, RuleMode,
-        SizeCondition, WatchTarget,
-    };
+    use crate::models::{RuleAction, SizeCondition};
     use crate::storage;
+    use crate::storage::test_util::{path_string, Fixture};
 
     use super::{build_rule_preview_entries, validate_rule};
 
     #[test]
     fn rule_preview_creates_audit_rows_without_changing_files() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-rule");
         let file = fixture.write_watch_file("download.zip", "body");
         fixture.save_config();
         fixture.track_file(&file);
 
-        let rule = AutomationRule {
-            id: String::from("zip-rule"),
-            name: String::from("Zip downloads"),
-            enabled: true,
-            priority: 10,
-            watch_path: path_string(&fixture.watch),
-            ttl_seconds: 86_400,
-            conditions: RuleConditions {
-                extensions: vec![String::from("zip")],
-                filename_globs: Vec::new(),
-                filename_regexes: Vec::new(),
-                source_domains: Vec::new(),
-                size: SizeCondition::Any,
-            },
-            action: RuleAction::Trash,
-            mode: RuleMode::PreviewOnly,
-            created_at: 1,
-            updated_at: 1,
-        };
+        let rule = fixture.rule();
 
         let (explanations, entries) =
             build_rule_preview_entries(&fixture.db, &rule).expect("preview should build");
@@ -236,7 +210,7 @@ mod tests {
 
     #[test]
     fn invalid_rule_regex_is_rejected_before_save() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-rule");
         let config = fixture.config();
         let mut rule = fixture.rule();
         rule.conditions.filename_regexes = vec![String::from("[")];
@@ -248,7 +222,7 @@ mod tests {
 
     #[test]
     fn invalid_rule_glob_uses_glob_error_code() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-rule");
         let config = fixture.config();
         let mut rule = fixture.rule();
         rule.conditions.filename_globs = vec![String::from("[")];
@@ -260,7 +234,7 @@ mod tests {
 
     #[test]
     fn invalid_rule_size_range_uses_size_error_code() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-rule");
         let config = fixture.config();
         let mut rule = fixture.rule();
         rule.conditions.size = SizeCondition::Between { min: 10, max: 1 };
@@ -273,7 +247,7 @@ mod tests {
 
     #[test]
     fn move_rule_destination_can_be_inside_uncreated_safe_folder() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-rule");
         let config = fixture.config();
         let mut rule = fixture.rule();
         rule.action = RuleAction::Move {
@@ -285,7 +259,7 @@ mod tests {
 
     #[test]
     fn rule_watch_path_outside_configured_targets_is_rejected() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-rule");
         let config = fixture.config();
         let mut rule = fixture.rule();
         rule.watch_path = path_string(&fixture.root.join("outside"));
@@ -297,7 +271,7 @@ mod tests {
 
     #[test]
     fn move_rule_destination_with_parent_escape_is_rejected() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-rule");
         let config = fixture.config();
         let mut rule = fixture.rule();
         rule.action = RuleAction::Move {
@@ -309,89 +283,5 @@ mod tests {
         let error = validate_rule(&rule, &config).expect_err("escaped destination should fail");
 
         assert_eq!(error.code, "RULE_INVALID_DESTINATION");
-    }
-
-    struct Fixture {
-        root: PathBuf,
-        watch: PathBuf,
-        db: std::sync::Arc<redb::Database>,
-    }
-
-    impl Fixture {
-        fn new() -> Self {
-            let root = std::env::temp_dir().join(format!("shelflife-rule-{}", Uuid::new_v4()));
-            let watch = root.join("watch");
-            fs::create_dir_all(&watch).expect("watch directory should be created");
-            let db = storage::open_database(root.join("test.redb")).expect("database should open");
-            Self { root, watch, db }
-        }
-
-        fn save_config(&self) {
-            storage::save_config(&self.db, &self.config()).expect("config should save");
-        }
-
-        fn config(&self) -> AppConfig {
-            AppConfig {
-                watch_targets: vec![WatchTarget {
-                    id: String::from("watch"),
-                    path: path_string(&self.watch),
-                    enabled: true,
-                    recursive: false,
-                    default_ttl_seconds: None,
-                    ignore_patterns: Vec::new(),
-                    include_hidden_patterns: Vec::new(),
-                    rule_ids: Vec::new(),
-                }],
-                safe_folder_path: path_string(&self.root.join("safe")),
-                ..AppConfig::default()
-            }
-        }
-
-        fn rule(&self) -> AutomationRule {
-            AutomationRule {
-                id: String::from("zip-rule"),
-                name: String::from("Zip downloads"),
-                enabled: true,
-                priority: 10,
-                watch_path: path_string(&self.watch),
-                ttl_seconds: 86_400,
-                conditions: RuleConditions {
-                    extensions: vec![String::from("zip")],
-                    filename_globs: Vec::new(),
-                    filename_regexes: Vec::new(),
-                    source_domains: Vec::new(),
-                    size: SizeCondition::Any,
-                },
-                action: RuleAction::Trash,
-                mode: RuleMode::PreviewOnly,
-                created_at: 1,
-                updated_at: 1,
-            }
-        }
-
-        fn write_watch_file(&self, name: &str, content: &str) -> PathBuf {
-            let path = self.watch.join(name);
-            fs::write(&path, content).expect("test file should be written");
-            path
-        }
-
-        fn track_file(&self, path: &Path) {
-            let metadata = fs::metadata(path).expect("metadata should exist");
-            let mut tracked =
-                tracked_file_from_metadata(path, &metadata, None, &AppConfig::default());
-            tracked.origin = OriginEvidence::Unknown;
-            storage::tracked::upsert_tracked_file(&self.db, &tracked)
-                .expect("tracked file should save");
-        }
-    }
-
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    fn path_string(path: &Path) -> String {
-        path.to_string_lossy().to_string()
     }
 }

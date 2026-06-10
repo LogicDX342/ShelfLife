@@ -185,19 +185,15 @@ impl UndoStatusLabel for crate::models::UndoStatus {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::{Path, PathBuf};
-
-    use uuid::Uuid;
-
-    use crate::models::{AppConfig, FileDecayState, UserTriageAction, WatchTarget};
+    use crate::models::{FileDecayState, UserTriageAction};
     use crate::storage;
+    use crate::storage::test_util::{path_string, Fixture};
 
     use super::execute_bulk_triage;
 
     #[test]
     fn bulk_triage_records_each_success_and_reports_failures() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-bulk");
         let first = fixture.write_watch_file("first.txt", "first");
         let second = fixture.write_watch_file("second.txt", "second");
         let outside = fixture.write_outside_file("outside.txt", "outside");
@@ -231,74 +227,5 @@ mod tests {
             FileDecayState::Ignored
         );
         assert!(outside.exists());
-    }
-
-    struct Fixture {
-        root: PathBuf,
-        watch: PathBuf,
-        outside: PathBuf,
-        safe: PathBuf,
-        db: std::sync::Arc<redb::Database>,
-    }
-
-    impl Fixture {
-        fn new() -> Self {
-            let root = std::env::temp_dir().join(format!("shelflife-bulk-{}", Uuid::new_v4()));
-            let watch = root.join("watch");
-            let outside = root.join("outside");
-            let safe = root.join("safe");
-            fs::create_dir_all(&watch).expect("watch directory should be created");
-            fs::create_dir_all(&outside).expect("outside directory should be created");
-            fs::create_dir_all(&safe).expect("safe directory should be created");
-            let db = storage::open_database(root.join("test.redb")).expect("database should open");
-            Self {
-                root,
-                watch,
-                outside,
-                safe,
-                db,
-            }
-        }
-
-        fn save_config(&self) {
-            let config = AppConfig {
-                watch_targets: vec![WatchTarget {
-                    id: String::from("watch"),
-                    path: path_string(&self.watch),
-                    enabled: true,
-                    recursive: false,
-                    default_ttl_seconds: None,
-                    ignore_patterns: Vec::new(),
-                    include_hidden_patterns: Vec::new(),
-                    rule_ids: Vec::new(),
-                }],
-                safe_folder_path: path_string(&self.safe),
-                ..AppConfig::default()
-            };
-            storage::save_config(&self.db, &config).expect("config should save");
-        }
-
-        fn write_watch_file(&self, name: &str, content: &str) -> PathBuf {
-            self.write_file(&self.watch.join(name), content)
-        }
-
-        fn write_outside_file(&self, name: &str, content: &str) -> PathBuf {
-            self.write_file(&self.outside.join(name), content)
-        }
-
-        fn write_file(&self, path: &Path, content: &str) -> PathBuf {
-            fs::write(path, content).expect("test file should be written");
-            path.to_path_buf()
-        }
-    }
-
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    fn path_string(path: &Path) -> String {
-        path.to_string_lossy().to_string()
     }
 }

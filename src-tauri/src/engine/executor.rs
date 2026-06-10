@@ -524,21 +524,17 @@ fn unique_destination(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
-    use uuid::Uuid;
-
-    use crate::models::{
-        AppConfig, AuditActionKind, FileDecayState, UndoStatus, UserTriageAction, WatchTarget,
-    };
+    use crate::models::{AuditActionKind, FileDecayState, UndoStatus, UserTriageAction};
     use crate::storage;
+    use crate::storage::test_util::{path_string, Fixture};
 
     use super::execute_triage_action;
 
     #[test]
     fn rename_avoids_collision_and_updates_tracked_path() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("report (1).txt", "download");
         fixture.write_watch_file("report.txt", "existing");
         fixture.save_config();
@@ -571,7 +567,7 @@ mod tests {
 
     #[test]
     fn move_to_safe_folder_audits_and_undo_restores_file() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("notes.txt", "download");
         fixture.save_config();
 
@@ -594,7 +590,7 @@ mod tests {
 
     #[test]
     fn undo_move_revalidates_original_path_scope() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("notes.txt", "download");
         fixture.save_config();
         let entry = execute_triage_action(
@@ -615,7 +611,7 @@ mod tests {
 
     #[test]
     fn scoped_custom_move_succeeds_and_avoids_destination_collision() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("report.txt", "download");
         let existing_destination = fixture.write_watch_file("sorted.txt", "existing");
         fixture.save_config();
@@ -640,7 +636,7 @@ mod tests {
 
     #[test]
     fn scoped_custom_move_can_create_allowed_subfolder() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("report.txt", "download");
         fixture.save_config();
         let destination = fixture.watch.join("sorted").join("report.txt");
@@ -661,7 +657,7 @@ mod tests {
 
     #[test]
     fn custom_move_outside_scope_is_rejected_before_change() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("report.txt", "download");
         fixture.save_config();
         let destination = fixture.outside.join("report.txt");
@@ -682,7 +678,7 @@ mod tests {
 
     #[test]
     fn protected_pattern_blocks_filesystem_changing_action() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("tax_receipt.txt", "download");
         fixture.save_config_with_protected_patterns(vec![String::from("(?i)(tax|receipt)")]);
 
@@ -702,7 +698,7 @@ mod tests {
 
     #[test]
     fn protected_pattern_still_allows_pin() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("tax_receipt.txt", "download");
         fixture.save_config_with_protected_patterns(vec![String::from("(?i)(tax|receipt)")]);
 
@@ -716,7 +712,7 @@ mod tests {
 
     #[test]
     fn ignore_action_creates_audit_row_and_marks_file_ignored() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("scratch.tmpx", "download");
         fixture.save_config();
 
@@ -739,7 +735,7 @@ mod tests {
 
     #[test]
     fn out_of_scope_action_is_rejected_before_change() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_outside_file("outside.txt", "private");
         fixture.save_config();
 
@@ -749,94 +745,5 @@ mod tests {
 
         assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
         assert!(source.exists());
-    }
-
-    struct Fixture {
-        root: PathBuf,
-        watch: PathBuf,
-        outside: PathBuf,
-        safe: PathBuf,
-        db: std::sync::Arc<redb::Database>,
-    }
-
-    impl Fixture {
-        fn new() -> Self {
-            let root = std::env::temp_dir().join(format!("shelflife-test-{}", Uuid::new_v4()));
-            let watch = root.join("watch");
-            let outside = root.join("outside");
-            let safe = root.join("safe");
-            fs::create_dir_all(&watch).expect("watch directory should be created");
-            fs::create_dir_all(&outside).expect("outside directory should be created");
-            fs::create_dir_all(&safe).expect("safe directory should be created");
-            let db = storage::open_database(root.join("test.redb")).expect("database should open");
-            Self {
-                root,
-                watch,
-                outside,
-                safe,
-                db,
-            }
-        }
-
-        fn save_config(&self) {
-            self.save_config_with_protected_patterns(Vec::new());
-        }
-
-        fn save_config_with_protected_patterns(&self, protected_patterns: Vec<String>) {
-            self.save_config_with_targets_and_patterns(
-                vec![WatchTarget {
-                    id: String::from("watch"),
-                    path: path_string(&self.watch),
-                    enabled: true,
-                    recursive: false,
-                    default_ttl_seconds: None,
-                    ignore_patterns: Vec::new(),
-                    include_hidden_patterns: Vec::new(),
-                    rule_ids: Vec::new(),
-                }],
-                protected_patterns,
-            );
-        }
-
-        fn save_config_without_watch_targets(&self) {
-            self.save_config_with_targets_and_patterns(Vec::new(), Vec::new());
-        }
-
-        fn save_config_with_targets_and_patterns(
-            &self,
-            watch_targets: Vec<WatchTarget>,
-            protected_patterns: Vec<String>,
-        ) {
-            let config = AppConfig {
-                watch_targets,
-                safe_folder_path: path_string(&self.safe),
-                protected_patterns,
-                ..AppConfig::default()
-            };
-            storage::save_config(&self.db, &config).expect("config should save");
-        }
-
-        fn write_watch_file(&self, name: &str, content: &str) -> PathBuf {
-            self.write_file(&self.watch.join(name), content)
-        }
-
-        fn write_outside_file(&self, name: &str, content: &str) -> PathBuf {
-            self.write_file(&self.outside.join(name), content)
-        }
-
-        fn write_file(&self, path: &Path, content: &str) -> PathBuf {
-            fs::write(path, content).expect("test file should be written");
-            path.to_path_buf()
-        }
-    }
-
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
-
-    fn path_string(path: &Path) -> String {
-        path.to_string_lossy().to_string()
     }
 }

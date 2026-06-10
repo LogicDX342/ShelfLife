@@ -1,5 +1,7 @@
 pub mod audit;
 pub mod rules;
+#[cfg(test)]
+pub mod test_util;
 pub mod tracked;
 
 use std::path::Path;
