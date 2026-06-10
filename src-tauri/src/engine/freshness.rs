@@ -64,7 +64,8 @@ pub fn classify_decay_state(
 pub fn apply_rules_to_tracked_file(
     tracked: &mut TrackedFile,
     rules: &[crate::models::AutomationRule],
-    target_config: &AppConfig,
+    config: &AppConfig,
+    effective_ttl_seconds: u64,
     now: u64,
 ) {
     let is_pinned_or_snoozed = match &tracked.expiry {
@@ -92,7 +93,7 @@ pub fn apply_rules_to_tracked_file(
         if let Some(ttl) = matched_rule_ttl {
             tracked.expiry = Expiry::At(tracked.freshness_at + ttl);
         } else {
-            tracked.expiry = Expiry::At(tracked.freshness_at + target_config.default_ttl_seconds);
+            tracked.expiry = Expiry::At(tracked.freshness_at + effective_ttl_seconds);
         }
     }
 
@@ -105,8 +106,7 @@ pub fn apply_rules_to_tracked_file(
     {
         // Keep as Ignored if it was manually ignored by the user.
     } else {
-        tracked.state =
-            classify_decay_state(tracked.freshness_at, &tracked.expiry, now, target_config);
+        tracked.state = classify_decay_state(tracked.freshness_at, &tracked.expiry, now, config);
     }
 }
 
@@ -115,6 +115,7 @@ pub fn tracked_file_from_metadata(
     metadata: &Metadata,
     existing: Option<&TrackedFile>,
     config: &AppConfig,
+    effective_ttl_seconds: u64,
 ) -> TrackedFile {
     let now = now_seconds();
     let file_name = path
@@ -134,7 +135,7 @@ pub fn tracked_file_from_metadata(
     );
     let expiry = existing
         .map(|file| file.expiry.clone())
-        .unwrap_or_else(|| Expiry::At(freshness_at + config.default_ttl_seconds));
+        .unwrap_or_else(|| Expiry::At(freshness_at + effective_ttl_seconds));
     let state = existing
         .filter(|file| matches!(file.state, FileDecayState::Ignored))
         .map(|file| file.state.clone())

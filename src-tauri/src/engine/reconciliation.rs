@@ -44,7 +44,7 @@ pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppE
         let hidden_whitelist = build_hidden_whitelist(target)?;
         // Canonicalize root once — reused inside target_ignores_path.
         let canonical_root = root.canonicalize().ok();
-        let target_config = config_for_target(&config, target.default_ttl_seconds);
+        let effective_ttl_seconds = effective_ttl_seconds(&config, target);
 
         for path in scan_target_paths(
             &root,
@@ -80,8 +80,13 @@ pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppE
             observed_paths.insert(path_string.clone());
 
             let existing = existing_map.get(&path_string);
-            let mut tracked =
-                tracked_file_from_metadata(&path, &metadata, existing, &target_config);
+            let mut tracked = tracked_file_from_metadata(
+                &path,
+                &metadata,
+                existing,
+                &config,
+                effective_ttl_seconds,
+            );
 
             // Always run rule matching to ensure we match new/deleted/modified rules
             tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
@@ -90,7 +95,8 @@ pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppE
             crate::engine::freshness::apply_rules_to_tracked_file(
                 &mut tracked,
                 &rules,
-                &target_config,
+                &config,
+                effective_ttl_seconds,
                 crate::engine::freshness::now_seconds(),
             );
 
@@ -226,9 +232,14 @@ pub fn reconcile_paths(
         }
 
         let existing = storage::tracked::get_tracked_file(db, &path_string)?;
-        let target_config = config_for_target(&config, target.default_ttl_seconds);
-        let mut tracked =
-            tracked_file_from_metadata(path, &metadata, existing.as_ref(), &target_config);
+        let effective_ttl_seconds = effective_ttl_seconds(&config, target);
+        let mut tracked = tracked_file_from_metadata(
+            path,
+            &metadata,
+            existing.as_ref(),
+            &config,
+            effective_ttl_seconds,
+        );
 
         // Always run rule matching to ensure we match new/deleted/modified rules
         tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
@@ -237,7 +248,8 @@ pub fn reconcile_paths(
         crate::engine::freshness::apply_rules_to_tracked_file(
             &mut tracked,
             &rules,
-            &target_config,
+            &config,
+            effective_ttl_seconds,
             crate::engine::freshness::now_seconds(),
         );
 
@@ -353,12 +365,10 @@ fn scan_target_paths_inner(
     Ok(paths)
 }
 
-fn config_for_target(config: &AppConfig, default_ttl_seconds: Option<u64>) -> AppConfig {
-    let mut config = config.clone();
-    if let Some(ttl) = default_ttl_seconds {
-        config.default_ttl_seconds = ttl;
-    }
-    config
+fn effective_ttl_seconds(config: &AppConfig, target: &WatchTarget) -> u64 {
+    target
+        .default_ttl_seconds
+        .unwrap_or(config.default_ttl_seconds)
 }
 
 fn build_ignore_set(target: &WatchTarget) -> Result<Option<GlobSet>, AppError> {

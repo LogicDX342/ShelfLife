@@ -377,11 +377,13 @@ mod tests {
         ] {
             let metadata = fs::metadata(path)
                 .unwrap_or_else(|_| fs::metadata(&fresh).expect("metadata should exist"));
+            let config = AppConfig::default();
             let mut tracked = crate::engine::tracked_file_from_metadata(
                 path,
                 &metadata,
                 None,
-                &AppConfig::default(),
+                &config,
+                config.default_ttl_seconds,
             );
             tracked.state = state;
             storage::tracked::upsert_tracked_file(&db, &tracked).expect("tracked file should save");

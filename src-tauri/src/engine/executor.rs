@@ -402,7 +402,13 @@ fn load_or_create_tracked(
     }
 
     let metadata = fs::metadata(path)?;
-    Ok(tracked_file_from_metadata(path, &metadata, None, config))
+    Ok(tracked_file_from_metadata(
+        path,
+        &metadata,
+        None,
+        config,
+        config.default_ttl_seconds,
+    ))
 }
 
 fn validate_source_scope(path: &Path, config: &AppConfig) -> Result<(), AppError> {
