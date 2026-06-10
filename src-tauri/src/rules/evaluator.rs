@@ -1,11 +1,10 @@
 use std::cmp::Reverse;
 use std::path::Path;
 
-use regex::Regex;
-
 use crate::models::{AppConfig, AppError, AutomationRule, RuleMatchExplanation, TrackedFile};
 use crate::rules::conditions::evaluate_conditions;
 use crate::rules::explanation::{protected_explanation, rule_explanation};
+use crate::rules::regex_cache::cached_regex_is_match;
 
 pub fn explain_file_against_rules(
     file: &TrackedFile,
@@ -79,41 +78,16 @@ pub fn matching_rule_ids(
         .collect())
 }
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-
-thread_local! {
-    static REGEX_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
-}
-
 pub fn protected_pattern_match(
     file_name: &str,
     patterns: &[String],
 ) -> Result<Option<String>, AppError> {
-    REGEX_CACHE.with(|cache| {
-        for pattern in patterns {
-            let mut cache_borrow = cache.borrow_mut();
-            let regex = if cache_borrow.contains_key(pattern) {
-                cache_borrow.get(pattern).unwrap()
-            } else {
-                let re = Regex::new(pattern).map_err(|error| {
-                    AppError::with_details(
-                        "RULE_INVALID_REGEX",
-                        "Protected pattern could not be parsed.",
-                        true,
-                        error.to_string(),
-                    )
-                })?;
-                cache_borrow.insert(pattern.clone(), re);
-                cache_borrow.get(pattern).unwrap()
-            };
-
-            if regex.is_match(file_name) {
-                return Ok(Some(pattern.clone()));
-            }
+    for pattern in patterns {
+        if cached_regex_is_match(pattern, file_name, "Protected pattern could not be parsed.")? {
+            return Ok(Some(pattern.clone()));
         }
-        Ok(None)
-    })
+    }
+    Ok(None)
 }
 
 fn path_is_inside(path: &Path, root: &Path) -> bool {

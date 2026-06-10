@@ -1,7 +1,7 @@
 use globset::{Glob, GlobSetBuilder};
-use regex::Regex;
 
 use crate::models::{AppError, OriginEvidence, RuleConditions, SizeCondition};
+use crate::rules::regex_cache::cached_regex_is_match;
 
 pub struct ConditionMatch {
     pub matched_extension: bool,
@@ -68,13 +68,6 @@ fn matches_extension(file_name: &str, extensions: &[String]) -> bool {
         .any(|candidate| candidate == ext)
 }
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-
-thread_local! {
-    static REGEX_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
-}
-
 fn matches_filename_pattern(
     file_name: &str,
     globs: &[String],
@@ -106,30 +99,12 @@ fn matches_filename_pattern(
         }
     }
 
-    REGEX_CACHE.with(|cache| {
-        for pattern in regexes {
-            let mut cache_borrow = cache.borrow_mut();
-            let regex = if cache_borrow.contains_key(pattern) {
-                cache_borrow.get(pattern).unwrap()
-            } else {
-                let re = Regex::new(pattern).map_err(|error| {
-                    AppError::with_details(
-                        "RULE_INVALID_REGEX",
-                        "Filename regex could not be parsed.",
-                        true,
-                        error.to_string(),
-                    )
-                })?;
-                cache_borrow.insert(pattern.clone(), re);
-                cache_borrow.get(pattern).unwrap()
-            };
-
-            if regex.is_match(file_name) {
-                return Ok(Some(pattern.clone()));
-            }
+    for pattern in regexes {
+        if cached_regex_is_match(pattern, file_name, "Filename regex could not be parsed.")? {
+            return Ok(Some(pattern.clone()));
         }
-        Ok(None)
-    })
+    }
+    Ok(None)
 }
 
 fn matches_origin(origin: &OriginEvidence, domains: &[String]) -> Option<String> {
