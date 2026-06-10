@@ -289,7 +289,7 @@ pub async fn select_directory(
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use uuid::Uuid;
 
@@ -419,10 +419,5 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
         }
-    }
-
-    #[allow(dead_code)]
-    fn _path_guard(path: &Path) -> &Path {
-        path
     }
 }
