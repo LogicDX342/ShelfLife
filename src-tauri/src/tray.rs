@@ -63,17 +63,14 @@ fn show_main_window(app_handle: &AppHandle, route: Option<&str>) {
 
 fn pause_watching(app_handle: &AppHandle) {
     let state = app_handle.state::<AppState>();
-    state.set_watching_paused(true);
-    let watcher = state.watcher.clone();
-    if let Ok(mut watcher) = watcher.lock() {
-        *watcher = None;
-    };
+    if let Err(error) = crate::engine::watcher::pause_watching(&state) {
+        let _ = app_handle.emit("action_failed", error);
+    }
 }
 
 fn resume_watching(app_handle: &AppHandle) {
     let state = app_handle.state::<AppState>();
-    state.set_watching_paused(false);
-    if let Err(error) = crate::engine::watcher::restart_watcher(
+    if let Err(error) = crate::engine::watcher::resume_watching(
         &state,
         crate::commands::watcher_event_sink(app_handle.clone()),
     ) {

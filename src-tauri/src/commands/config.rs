@@ -57,13 +57,7 @@ pub async fn run_reconciliation_scan(
 
 #[tauri::command]
 pub async fn pause_watching(state: State<'_, AppState>) -> Result<(), AppError> {
-    state.set_watching_paused(true);
-    let mut watcher = state
-        .watcher
-        .lock()
-        .map_err(|_| AppError::new("WATCHER_ERROR", "Watcher state could not be locked.", true))?;
-    *watcher = None;
-    Ok(())
+    engine::watcher::pause_watching(&state)
 }
 
 #[tauri::command]
@@ -71,8 +65,7 @@ pub async fn resume_watching(
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    state.set_watching_paused(false);
-    engine::watcher::restart_watcher(&state, watcher_event_sink(app_handle))
+    engine::watcher::resume_watching(&state, watcher_event_sink(app_handle))
 }
 
 pub fn start_periodic_reconciliation(app_handle: AppHandle, state: AppState) {

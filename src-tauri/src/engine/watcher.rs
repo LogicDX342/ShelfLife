@@ -80,6 +80,24 @@ pub fn restart_watcher(
     Ok(())
 }
 
+pub fn pause_watching(state: &storage::AppState) -> Result<(), AppError> {
+    state.set_watching_paused(true);
+    let mut watcher = state
+        .watcher
+        .lock()
+        .map_err(|_| AppError::new("WATCHER_ERROR", "Watcher state could not be locked.", true))?;
+    *watcher = None;
+    Ok(())
+}
+
+pub fn resume_watching(
+    state: &storage::AppState,
+    event_sink: WatcherEventSink,
+) -> Result<(), AppError> {
+    state.set_watching_paused(false);
+    restart_watcher(state, event_sink)
+}
+
 fn watch_event_loop(
     db: Arc<Database>,
     rx: mpsc::Receiver<DebounceEventResult>,
