@@ -80,12 +80,5 @@ fn resume_watching(app_handle: &AppHandle) {
 
 fn run_reconciliation(app_handle: &AppHandle) {
     let state = app_handle.state::<AppState>();
-    match crate::engine::reconcile_with_report(&state.db) {
-        Ok(report) => {
-            crate::commands::config::emit_reconciliation_report(app_handle, &report);
-        }
-        Err(error) => {
-            let _ = app_handle.emit("action_failed", error);
-        }
-    }
+    crate::commands::config::run_async_reconciliation(app_handle.clone(), state.inner().clone());
 }

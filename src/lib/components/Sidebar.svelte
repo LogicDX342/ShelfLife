@@ -135,7 +135,7 @@
           <!-- Inner pulsing active indicator dot -->
           <div class="w-1.5 h-1.5 rounded-full bg-fluent-accent animate-pulse"></div>
         </div>
-        <div class="flex flex-col min-w-0">
+        <div class="flex flex-col min-w-0 w-full gap-0.5">
           <span class="text-[11px] font-semibold text-fluent-text-light dark:text-fluent-text-dark"
             >Syncing files...</span
           >
@@ -144,6 +144,14 @@
               filesState.syncDuration,
             )}s)
           </span>
+          {#if filesState.currentPath}
+            <span
+              class="text-[8px] text-fluent-muted-light/70 dark:text-fluent-muted-dark/70 truncate"
+              title={filesState.currentPath}
+            >
+              {filesState.currentPath}
+            </span>
+          {/if}
         </div>
       </div>
 
