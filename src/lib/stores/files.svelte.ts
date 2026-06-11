@@ -6,9 +6,79 @@ class FilesState {
   files = $state<TrackedFile[]>([]);
   loading = $state(false);
   error = $state<string | null>(null);
+  syncing = $state(false);
+  filesScanned = $state(0);
+  currentPath = $state('');
+  syncDuration = $state(0);
 
   private hasLoadedOnce = false;
   private loadingTimeout: ReturnType<typeof setTimeout> | null = null;
+  private timerInterval: ReturnType<typeof setInterval> | null = null;
+  private syncStartTime = 0;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      this.setupListeners();
+    }
+  }
+
+  private async setupListeners() {
+    try {
+      const { listen } = await import('@tauri-apps/api/event');
+      const { isReconciliationActive } = await import('$lib/api/config');
+
+      // Check initial active state
+      isReconciliationActive().then((active) => {
+        this.syncing = active;
+        if (active) {
+          this.startTimer();
+        }
+      });
+
+      listen('reconciliation_started', () => {
+        this.syncing = true;
+        this.filesScanned = 0;
+        this.currentPath = '';
+        this.startTimer();
+      });
+
+      listen('reconciliation_progress', (event: { payload: [string, number, number] }) => {
+        this.syncing = true;
+        const [path, current] = event.payload;
+        this.currentPath = path;
+        this.filesScanned = current;
+        if (!this.timerInterval) {
+          this.startTimer();
+        }
+      });
+
+      listen('reconciliation_completed', () => {
+        this.syncing = false;
+        this.filesScanned = 0;
+        this.currentPath = '';
+        this.stopTimer();
+        this.refresh();
+      });
+    } catch (e) {
+      console.error('Failed to set up sync listeners:', e);
+    }
+  }
+
+  private startTimer() {
+    this.stopTimer();
+    this.syncStartTime = Date.now();
+    this.syncDuration = 0;
+    this.timerInterval = setInterval(() => {
+      this.syncDuration = (Date.now() - this.syncStartTime) / 1000;
+    }, 100);
+  }
+
+  private stopTimer() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+  }
 
   counts = $derived.by(() => {
     let fresh = 0;

@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { pauseWatching, resumeWatching } from '$lib/api/config';
+  import { filesState } from '$lib/stores/files.svelte';
 
   let isPaused = $state(false);
 
@@ -120,6 +121,58 @@
 
   <!-- Controls band at the bottom -->
   <div class="p-2 md:p-4 border-t border-fluent-border-light dark:border-fluent-border-dark">
+    <!-- Global Sync Indicator (Active only during scans lasting >= 1s) -->
+    {#if filesState.syncing && filesState.syncDuration >= 1}
+      <!-- Expanded Sidebar -->
+      <div
+        class="hidden md:flex items-center gap-3 p-2.5 rounded bg-blue-500/10 dark:bg-blue-400/5 border border-blue-500/15 mb-3 transition-all duration-300"
+      >
+        <div class="relative flex items-center justify-center flex-shrink-0 w-5 h-5">
+          <!-- Outer spinning ring -->
+          <div
+            class="absolute inset-0 rounded-full border-2 border-fluent-accent/20 border-t-fluent-accent animate-spin"
+          ></div>
+          <!-- Inner pulsing active indicator dot -->
+          <div class="w-1.5 h-1.5 rounded-full bg-fluent-accent animate-pulse"></div>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="text-[11px] font-semibold text-fluent-text-light dark:text-fluent-text-dark"
+            >Syncing files...</span
+          >
+          <span class="text-[9px] text-fluent-muted-light dark:text-fluent-muted-dark truncate">
+            {filesState.filesScanned.toLocaleString()} files ({Math.floor(
+              filesState.syncDuration,
+            )}s)
+          </span>
+        </div>
+      </div>
+
+      <!-- Collapsed Sidebar -->
+      <div
+        class="flex md:hidden justify-center mb-3 relative group"
+        title="Syncing {filesState.filesScanned} files ({Math.floor(filesState.syncDuration)}s)..."
+      >
+        <div
+          class="w-10 h-10 flex items-center justify-center rounded-md bg-blue-500/10 dark:bg-blue-400/5 border border-blue-500/15"
+        >
+          <svg class="w-4 h-4 text-fluent-accent animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
+          </svg>
+          <span
+            class="absolute -top-1 -right-1 bg-fluent-accent text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full scale-75 shadow-sm"
+          >
+            {filesState.filesScanned > 999 ? '999+' : filesState.filesScanned}
+          </span>
+        </div>
+      </div>
+    {/if}
+
     <!-- Watch Status Widget - Expanded -->
     <div class="hidden md:flex items-center justify-between p-2 rounded bg-black/5 dark:bg-white/5">
       <div class="flex flex-col">

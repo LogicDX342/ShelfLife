@@ -5,7 +5,7 @@ mod rules;
 mod storage;
 mod tray;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,8 +25,39 @@ pub fn run() {
             )
             .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             let db = state.db.clone();
+            let app_handle = app.handle().clone();
+            let state_clone = state.clone();
             std::thread::spawn(move || {
-                let _ = engine::reconcile(&db);
+                state_clone
+                    .reconciliation_active
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                let _ = app_handle.emit("reconciliation_started", ());
+
+                let app = app_handle.clone();
+                let progress_emitter = move |path: &str, current: usize, total: usize| {
+                    let _ = app.emit(
+                        "reconciliation_progress",
+                        (path.to_string(), current, total),
+                    );
+                };
+
+                let report = crate::engine::reconciliation::reconcile_with_report_with_progress(
+                    &db,
+                    Some(&progress_emitter),
+                );
+
+                state_clone
+                    .reconciliation_active
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
+
+                match report {
+                    Ok(rep) => {
+                        commands::emit_reconciliation_report(&app_handle, &rep);
+                    }
+                    Err(error) => {
+                        let _ = app_handle.emit("action_failed", error);
+                    }
+                }
             });
             commands::start_periodic_reconciliation(app.handle().clone(), state);
             Ok(())
@@ -48,6 +79,7 @@ pub fn run() {
             commands::save_config,
             commands::update_watch_targets,
             commands::run_reconciliation_scan,
+            commands::is_reconciliation_active,
             commands::pause_watching,
             commands::resume_watching,
             commands::select_directory
