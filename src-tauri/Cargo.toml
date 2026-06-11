@@ -37,3 +37,4 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
 rfd = { version = "0.17.2", features = ["common-controls-v6"] }
+rayon = "1.12.0"

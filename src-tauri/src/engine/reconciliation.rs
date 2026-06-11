@@ -3,7 +3,24 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use rayon::prelude::*;
 use redb::Database;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
+
+enum PathResult {
+    Ignored(String),
+    Upsert {
+        tracked: Box<TrackedFile>,
+        change_type: ChangeType,
+    },
+}
+
+enum ChangeType {
+    None,
+    Updated(String),
+    Indexed(String),
+}
 
 use crate::engine::freshness::tracked_file_from_metadata;
 use crate::engine::paths::{root_contains, root_directly_contains};
@@ -26,7 +43,7 @@ pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppE
 #[allow(clippy::type_complexity)]
 pub fn reconcile_with_report_with_progress(
     db: &Database,
-    progress_cb: Option<&dyn Fn(&str, usize, usize)>,
+    progress_cb: Option<&(dyn Fn(&str, usize, usize) + Send + Sync)>,
 ) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
     let rules = storage::rules::list_rules(db)?;
@@ -62,77 +79,115 @@ pub fn reconcile_with_report_with_progress(
             hidden_whitelist.as_ref(),
         )?;
         let total_files = paths.len();
+        let current_count = AtomicUsize::new(0);
+        let last_emit = Mutex::new(std::time::Instant::now());
 
-        let mut last_emit = std::time::Instant::now();
-        for (i, path) in paths.into_iter().enumerate() {
-            if let Some(cb) = progress_cb {
-                let is_first = i == 0;
-                let is_last = i == total_files - 1;
-                let elapsed = last_emit.elapsed();
-                if is_first || is_last || elapsed >= std::time::Duration::from_millis(100) {
-                    cb(&target.path, i + 1, total_files);
-                    last_emit = std::time::Instant::now();
-                }
-            }
-            if is_transient_path(&path) {
-                continue;
-            }
-            if target_ignores_path(&path, ignore_set.as_ref(), canonical_root.as_deref()) {
-                // File-level ignore pattern matched — mark existing as Ignored.
-                let path_string = path.to_string_lossy().to_string();
-                if let Some(existing) = existing_map.get(&path_string) {
-                    if !matches!(existing.state, FileDecayState::Ignored) {
-                        to_mark_ignored.push(path_string.clone());
-                        report.updated.push(path_string);
+        let path_results: Result<Vec<Option<PathResult>>, AppError> = paths
+            .into_par_iter()
+            .map(|path| {
+                if let Some(cb) = progress_cb {
+                    let current = current_count.fetch_add(1, Ordering::Relaxed) + 1;
+                    let is_first = current == 1;
+                    let is_last = current == total_files;
+
+                    let should_emit = if is_first || is_last {
+                        true
+                    } else {
+                        let mut last = last_emit.lock().unwrap();
+                        if last.elapsed() >= std::time::Duration::from_millis(100) {
+                            *last = std::time::Instant::now();
+                            true
+                        } else {
+                            false
+                        }
+                    };
+
+                    if should_emit {
+                        cb(&target.path, current, total_files);
                     }
                 }
-                continue;
-            }
 
-            // Single stat — symlink_metadata covers both symlink detection and file metadata.
-            let metadata = match fs::symlink_metadata(&path) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            if metadata.file_type().is_symlink() || !metadata.is_file() {
-                continue;
-            }
+                if is_transient_path(&path) {
+                    return Ok(None);
+                }
 
-            let path_string = path.to_string_lossy().to_string();
-            observed_paths.insert(path_string.clone());
+                if target_ignores_path(&path, ignore_set.as_ref(), canonical_root.as_deref()) {
+                    // File-level ignore pattern matched — mark existing as Ignored.
+                    let path_string = path.to_string_lossy().to_string();
+                    if let Some(existing) = existing_map.get(&path_string) {
+                        if !matches!(existing.state, FileDecayState::Ignored) {
+                            return Ok(Some(PathResult::Ignored(path_string)));
+                        }
+                    }
+                    return Ok(None);
+                }
 
-            let existing = existing_map.get(&path_string);
-            let mut tracked = tracked_file_from_metadata(
-                &path,
-                &metadata,
-                existing,
-                &config,
-                effective_ttl_seconds,
-                &target.id,
-            );
+                // Single stat — symlink_metadata covers both symlink detection and file metadata.
+                let metadata = match fs::symlink_metadata(&path) {
+                    Ok(m) => m,
+                    Err(_) => return Ok(None),
+                };
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    return Ok(None);
+                }
 
-            // Always run rule matching to ensure we match new/deleted/modified rules
-            tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
+                let path_string = path.to_string_lossy().to_string();
+                let existing = existing_map.get(&path_string);
+                let mut tracked = tracked_file_from_metadata(
+                    &path,
+                    &metadata,
+                    existing,
+                    &config,
+                    effective_ttl_seconds,
+                    &target.id,
+                );
 
-            // Apply rules to adjust expiry & state
-            crate::engine::freshness::apply_rules_to_tracked_file(
-                &mut tracked,
-                &rules,
-                &config,
-                effective_ttl_seconds,
-                crate::engine::freshness::now_seconds(),
-            );
+                // Always run rule matching to ensure we match new/deleted/modified rules
+                tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
 
-            match existing {
-                Some(e) if tracked_file_changed(e, &tracked) => {
+                // Apply rules to adjust expiry & state
+                crate::engine::freshness::apply_rules_to_tracked_file(
+                    &mut tracked,
+                    &rules,
+                    &config,
+                    effective_ttl_seconds,
+                    crate::engine::freshness::now_seconds(),
+                );
+
+                let change_type = match existing {
+                    Some(e) if tracked_file_changed(e, &tracked) => {
+                        ChangeType::Updated(path_string.clone())
+                    }
+                    None => ChangeType::Indexed(path_string.clone()),
+                    _ => ChangeType::None,
+                };
+
+                Ok(Some(PathResult::Upsert {
+                    tracked: Box::new(tracked),
+                    change_type,
+                }))
+            })
+            .collect();
+
+        for res in path_results?.into_iter().flatten() {
+            match res {
+                PathResult::Ignored(path_string) => {
+                    to_mark_ignored.push(path_string.clone());
                     report.updated.push(path_string);
                 }
-                None => {
-                    report.indexed.push(path_string);
+                PathResult::Upsert {
+                    tracked,
+                    change_type,
+                } => {
+                    observed_paths.insert(tracked.path.clone());
+                    match change_type {
+                        ChangeType::Updated(p) => report.updated.push(p),
+                        ChangeType::Indexed(p) => report.indexed.push(p),
+                        ChangeType::None => {}
+                    }
+                    to_upsert.push(*tracked);
                 }
-                _ => {}
             }
-            to_upsert.push(tracked);
         }
     }
 
