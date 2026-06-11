@@ -14,11 +14,20 @@ use crate::models::{
 use crate::rules::matching_rule_ids;
 use crate::storage;
 
+#[allow(dead_code)]
 pub fn reconcile(db: &Database) -> Result<Vec<String>, AppError> {
     Ok(reconcile_with_report(db)?.indexed)
 }
 
 pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppError> {
+    reconcile_with_report_with_progress(db, None)
+}
+
+#[allow(clippy::type_complexity)]
+pub fn reconcile_with_report_with_progress(
+    db: &Database,
+    progress_cb: Option<&dyn Fn(&str, usize, usize)>,
+) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
     let rules = storage::rules::list_rules(db)?;
     let mut observed_paths: HashSet<String> = HashSet::new();
@@ -46,12 +55,25 @@ pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppE
         let canonical_root = root.canonicalize().ok();
         let effective_ttl_seconds = effective_ttl_seconds(&config, target);
 
-        for path in scan_target_paths(
+        let paths = scan_target_paths(
             &root,
             target.recursive,
             ignore_set.as_ref(),
             hidden_whitelist.as_ref(),
-        )? {
+        )?;
+        let total_files = paths.len();
+
+        let mut last_emit = std::time::Instant::now();
+        for (i, path) in paths.into_iter().enumerate() {
+            if let Some(cb) = progress_cb {
+                let is_first = i == 0;
+                let is_last = i == total_files - 1;
+                let elapsed = last_emit.elapsed();
+                if is_first || is_last || elapsed >= std::time::Duration::from_millis(100) {
+                    cb(&target.path, i + 1, total_files);
+                    last_emit = std::time::Instant::now();
+                }
+            }
             if is_transient_path(&path) {
                 continue;
             }

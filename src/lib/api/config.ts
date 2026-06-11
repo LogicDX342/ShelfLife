@@ -14,7 +14,11 @@ export function updateWatchTargets(targets: WatchTarget[]) {
 }
 
 export function runReconciliationScan() {
-  return invoke<string[]>('run_reconciliation_scan');
+  return invoke<void>('run_reconciliation_scan');
+}
+
+export function isReconciliationActive() {
+  return invoke<boolean>('is_reconciliation_active');
 }
 
 export function pauseWatching() {

@@ -31,6 +31,7 @@ pub struct AppState {
     pub db: Arc<Database>,
     pub watcher: Arc<Mutex<Option<crate::engine::watcher::ShelflifeDebouncer>>>,
     pub watching_paused: Arc<AtomicBool>,
+    pub reconciliation_active: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -39,6 +40,7 @@ impl AppState {
             db,
             watcher: Arc::new(Mutex::new(None)),
             watching_paused: Arc::new(AtomicBool::new(false)),
+            reconciliation_active: Arc::new(AtomicBool::new(false)),
         }
     }
 

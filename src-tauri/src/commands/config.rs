@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -16,6 +17,51 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, AppErro
 }
 
 #[tauri::command]
+pub async fn is_reconciliation_active(state: State<'_, AppState>) -> Result<bool, AppError> {
+    Ok(state.reconciliation_active.load(Ordering::Relaxed))
+}
+
+pub fn run_async_reconciliation(app_handle: AppHandle, state: AppState) {
+    if state.reconciliation_active.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    let db = state.db.clone();
+    let app_handle_clone = app_handle.clone();
+    let state_clone = state.clone();
+
+    let _ = app_handle.emit("reconciliation_started", ());
+
+    tauri::async_runtime::spawn(async move {
+        let app = app_handle_clone.clone();
+        let progress_emitter = move |path: &str, current: usize, total: usize| {
+            let _ = app.emit(
+                "reconciliation_progress",
+                (path.to_string(), current, total),
+            );
+        };
+
+        let result = crate::engine::reconciliation::reconcile_with_report_with_progress(
+            &db,
+            Some(&progress_emitter),
+        );
+
+        state_clone
+            .reconciliation_active
+            .store(false, Ordering::SeqCst);
+
+        match result {
+            Ok(report) => {
+                emit_reconciliation_report(&app_handle_clone, &report);
+            }
+            Err(error) => {
+                let _ = app_handle_clone.emit("action_failed", error);
+            }
+        }
+    });
+}
+
+#[tauri::command]
 pub async fn save_config(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -24,8 +70,7 @@ pub async fn save_config(
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
     engine::watcher::restart_watcher(&state, watcher_event_sink(app_handle.clone()))?;
-    let report = engine::reconcile_with_report(&state.db)?;
-    emit_reconciliation_report(&app_handle, &report);
+    run_async_reconciliation(app_handle, state.inner().clone());
     Ok(config)
 }
 
@@ -40,8 +85,7 @@ pub async fn update_watch_targets(
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
     engine::watcher::restart_watcher(&state, watcher_event_sink(app_handle.clone()))?;
-    let report = engine::reconcile_with_report(&state.db)?;
-    emit_reconciliation_report(&app_handle, &report);
+    run_async_reconciliation(app_handle, state.inner().clone());
     Ok(())
 }
 
@@ -49,10 +93,9 @@ pub async fn update_watch_targets(
 pub async fn run_reconciliation_scan(
     app_handle: AppHandle,
     state: State<'_, AppState>,
-) -> Result<Vec<String>, AppError> {
-    let report = engine::reconcile_with_report(&state.db)?;
-    emit_reconciliation_report(&app_handle, &report);
-    Ok(report.indexed)
+) -> Result<(), AppError> {
+    run_async_reconciliation(app_handle, state.inner().clone());
+    Ok(())
 }
 
 #[tauri::command]
@@ -75,12 +118,7 @@ pub fn start_periodic_reconciliation(app_handle: AppHandle, state: AppState) {
             continue;
         }
 
-        match engine::reconcile_with_report(&state.db) {
-            Ok(report) => emit_reconciliation_report(&app_handle, &report),
-            Err(error) => {
-                let _ = app_handle.emit("action_failed", error);
-            }
-        }
+        run_async_reconciliation(app_handle.clone(), state.clone());
     });
 }
 
