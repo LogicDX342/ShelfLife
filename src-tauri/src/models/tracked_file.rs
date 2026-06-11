@@ -23,6 +23,7 @@ pub enum FileDecayState {
 pub struct TrackedFile {
     pub path: String,
     pub file_name: String,
+    pub watch_target_id: String,
     pub size_bytes: u64,
     pub first_seen_at: u64,
     pub last_observed_mtime: Option<u64>,

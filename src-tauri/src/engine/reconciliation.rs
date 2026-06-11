@@ -6,7 +6,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use redb::Database;
 
 use crate::engine::freshness::tracked_file_from_metadata;
-use crate::engine::paths::root_contains;
+use crate::engine::paths::{root_contains, root_directly_contains};
 use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
 use crate::models::{
     AppConfig, AppError, FileDecayState, ReconciliationReport, TrackedFile, WatchTarget,
@@ -108,6 +108,7 @@ pub fn reconcile_with_report_with_progress(
                 existing,
                 &config,
                 effective_ttl_seconds,
+                &target.id,
             );
 
             // Always run rule matching to ensure we match new/deleted/modified rules
@@ -153,12 +154,25 @@ pub fn reconcile_with_report_with_progress(
             continue;
         }
         let path = Path::new(path_string);
-        let in_active_scope = config
+
+        // Scope check using watch_target_id: find the owning target and
+        // respect its recursive flag. Non-recursive targets only keep
+        // direct children in scope.
+        let owning_target = config
             .watch_targets
             .iter()
-            .filter(|t| t.enabled)
-            .any(|t| root_contains(&t.path, path))
-            || root_contains(&config.safe_folder_path, path);
+            .find(|t| t.id == file.watch_target_id);
+
+        let in_active_scope = match owning_target {
+            Some(target) if target.enabled => {
+                if target.recursive {
+                    root_contains(&target.path, path)
+                } else {
+                    root_directly_contains(&target.path, path)
+                }
+            }
+            _ => false,
+        } || root_contains(&config.safe_folder_path, path);
 
         if !in_active_scope {
             if !matches!(file.state, FileDecayState::Missing) {
@@ -177,13 +191,17 @@ pub fn reconcile_with_report_with_progress(
 
     to_upsert.extend(to_mark_missing);
 
-    // Single batch write for all upserts + one batch remove.
+    // Single batch write for all upserts + one batch remove, with a single
+    // index rebuild at the end instead of rebuilding after each operation.
     if !to_upsert.is_empty() {
-        storage::tracked::upsert_tracked_files_batch(db, &to_upsert)?;
+        storage::tracked::upsert_tracked_files_batch_no_reindex(db, &to_upsert)?;
     }
     if !to_remove.is_empty() {
         let refs: Vec<&str> = to_remove.iter().map(|s| s.as_str()).collect();
-        storage::tracked::remove_tracked_files_batch(db, &refs)?;
+        storage::tracked::remove_tracked_files_batch_no_reindex(db, &refs)?;
+    }
+    if !to_upsert.is_empty() || !to_remove.is_empty() {
+        storage::tracked::rebuild_tracked_indexes(db)?;
     }
 
     Ok(report)
@@ -261,6 +279,7 @@ pub fn reconcile_paths(
             existing.as_ref(),
             &config,
             effective_ttl_seconds,
+            &target.id,
         );
 
         // Always run rule matching to ensure we match new/deleted/modified rules
@@ -789,6 +808,72 @@ mod tests {
             crate::models::Expiry::At(tracked.freshness_at + 24 * 60 * 60)
         );
         assert_eq!(tracked.state, FileDecayState::Decaying);
+    }
+
+    #[test]
+    fn reconcile_removes_subfolder_files_when_switched_to_non_recursive() {
+        let fixture = Fixture::new();
+        // Create files in root and subfolder
+        let root_file = fixture.write_watch_file("root.txt", "root");
+        let sub_dir = fixture.watch.join("sub");
+        fs::create_dir_all(&sub_dir).expect("sub directory should be created");
+        let sub_file = sub_dir.join("nested.txt");
+        fs::write(&sub_file, "nested").expect("nested file should be written");
+
+        // Index in recursive mode
+        fixture.save_config_recursive();
+        reconcile(&fixture.db).expect("recursive reconciliation should succeed");
+
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&root_file))
+                .expect("tracked lookup should work")
+                .is_some(),
+            "root file should be tracked in recursive mode"
+        );
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&sub_file))
+                .expect("tracked lookup should work")
+                .is_some(),
+            "nested file should be tracked in recursive mode"
+        );
+
+        // Switch to non-recursive (top-level only)
+        fixture.save_config();
+        let report = reconcile_with_report(&fixture.db)
+            .expect("non-recursive reconciliation should succeed");
+
+        // Root file stays, subfolder file is removed
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&root_file))
+                .expect("tracked lookup should work")
+                .is_some(),
+            "root file should remain tracked in top-level mode"
+        );
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&sub_file))
+                .expect("tracked lookup should work")
+                .is_none(),
+            "nested file should be removed in top-level mode"
+        );
+        assert!(
+            report.removed.contains(&path_string(&sub_file)),
+            "nested file should appear in removed report"
+        );
+    }
+
+    #[test]
+    fn reconcile_sets_and_uses_watch_target_id() {
+        let fixture = Fixture::new();
+        let file = fixture.write_watch_file("download.txt", "body");
+        fixture.save_config();
+
+        reconcile(&fixture.db).expect("reconciliation should succeed");
+
+        let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
+            .expect("tracked lookup should work")
+            .expect("tracked file should exist");
+
+        assert_eq!(tracked.watch_target_id, "watch");
     }
 
     fn path_string(path: &Path) -> String {

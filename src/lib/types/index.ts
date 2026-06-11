@@ -17,6 +17,7 @@ export type OriginEvidence =
 export type TrackedFile = {
   path: string;
   file_name: string;
+  watch_target_id: string;
   size_bytes: number;
   first_seen_at: number;
   last_observed_mtime: number | null;

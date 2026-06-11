@@ -127,8 +127,14 @@ impl Fixture {
     pub fn track_file(&self, path: &Path) {
         let metadata = fs::metadata(path).expect("metadata should exist");
         let config = AppConfig::default();
-        let mut tracked =
-            tracked_file_from_metadata(path, &metadata, None, &config, config.default_ttl_seconds);
+        let mut tracked = tracked_file_from_metadata(
+            path,
+            &metadata,
+            None,
+            &config,
+            config.default_ttl_seconds,
+            "",
+        );
         tracked.origin = OriginEvidence::Unknown;
         storage::tracked::upsert_tracked_file(&self.db, &tracked)
             .expect("tracked file should save");
