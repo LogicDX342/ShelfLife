@@ -31,10 +31,8 @@ pub async fn save_rule(
     validate_rule(&rule, &config)?;
     storage::rules::save_rule(&state.db, &rule)?;
 
-    // Run reconciliation and emit report immediately to update file expiries/states.
-    if let Ok(report) = crate::engine::reconcile_with_report(&state.db) {
-        crate::commands::config::emit_reconciliation_report(&app_handle, &report);
-    }
+    // Run reconciliation asynchronously and report progress/completion.
+    crate::commands::config::run_async_reconciliation(app_handle, state.inner().clone());
 
     Ok(rule)
 }
@@ -103,10 +101,8 @@ pub async fn delete_rule(
 ) -> Result<(), AppError> {
     storage::rules::delete_rule(&state.db, &id)?;
 
-    // Run reconciliation and emit report immediately to update file expiries/states.
-    if let Ok(report) = crate::engine::reconcile_with_report(&state.db) {
-        crate::commands::config::emit_reconciliation_report(&app_handle, &report);
-    }
+    // Run reconciliation asynchronously and report progress/completion.
+    crate::commands::config::run_async_reconciliation(app_handle, state.inner().clone());
 
     Ok(())
 }
