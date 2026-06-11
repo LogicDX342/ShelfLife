@@ -60,6 +60,7 @@ pub fn open_database(path: impl AsRef<Path>) -> Result<Arc<Database>, AppError> 
 
     let db = Arc::new(Database::create(path)?);
     initialize_tables(&db)?;
+    migrate_tracked_files(&db)?;
     Ok(db)
 }
 
@@ -73,6 +74,40 @@ pub fn initialize_tables(db: &Database) -> Result<(), AppError> {
         write_txn.open_table(TRACKED_BY_RULE_TABLE)?;
         write_txn.open_table(AUDIT_BY_SEQUENCE_TABLE)?;
         write_txn.open_table(AUDIT_BY_TIME_TABLE)?;
+    }
+    write_txn.commit()?;
+    Ok(())
+}
+
+/// One-time migration: if any tracked files were serialized without the
+/// `watch_target_id` field (old schema), they will fail bincode deserialization.
+/// Clear those stale entries — they'll be re-indexed by the startup reconciliation.
+fn migrate_tracked_files(db: &Database) -> Result<(), AppError> {
+    use redb::ReadableTable;
+
+    let stale_keys: Vec<String> = {
+        let read_txn = db.begin_read()?;
+        let table = read_txn.open_table(TRACKED_BY_PATH_TABLE)?;
+        let mut keys = Vec::new();
+        for item in table.iter()? {
+            let (key, value) = item?;
+            if bincode::deserialize::<crate::models::TrackedFile>(value.value()).is_err() {
+                keys.push(key.value().to_string());
+            }
+        }
+        keys
+    };
+
+    if stale_keys.is_empty() {
+        return Ok(());
+    }
+
+    let write_txn = db.begin_write()?;
+    {
+        let mut table = write_txn.open_table(TRACKED_BY_PATH_TABLE)?;
+        for key in &stale_keys {
+            table.remove(key.as_str())?;
+        }
     }
     write_txn.commit()?;
     Ok(())

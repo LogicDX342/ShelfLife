@@ -116,6 +116,7 @@ pub fn tracked_file_from_metadata(
     existing: Option<&TrackedFile>,
     config: &AppConfig,
     effective_ttl_seconds: u64,
+    watch_target_id: &str,
 ) -> TrackedFile {
     let now = now_seconds();
     let file_name = path
@@ -144,6 +145,9 @@ pub fn tracked_file_from_metadata(
     TrackedFile {
         path: path.to_string_lossy().to_string(),
         file_name,
+        watch_target_id: existing
+            .map(|f| f.watch_target_id.clone())
+            .unwrap_or_else(|| watch_target_id.to_string()),
         size_bytes: metadata.len(),
         first_seen_at,
         last_observed_mtime,

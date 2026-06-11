@@ -408,6 +408,7 @@ fn load_or_create_tracked(
         None,
         config,
         config.default_ttl_seconds,
+        "",
     ))
 }
 

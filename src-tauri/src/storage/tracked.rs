@@ -57,6 +57,16 @@ pub fn remove_tracked_file(db: &Database, path: &str) -> Result<(), AppError> {
 /// Write all files in a single transaction then rebuild indexes once.
 /// Use this during reconciliation to avoid N separate disk flushes.
 pub fn upsert_tracked_files_batch(db: &Database, files: &[TrackedFile]) -> Result<(), AppError> {
+    upsert_tracked_files_batch_no_reindex(db, files)?;
+    rebuild_tracked_indexes(db)
+}
+
+/// Write all files in a single transaction without rebuilding indexes.
+/// Caller is responsible for calling `rebuild_tracked_indexes` when ready.
+pub fn upsert_tracked_files_batch_no_reindex(
+    db: &Database,
+    files: &[TrackedFile],
+) -> Result<(), AppError> {
     if files.is_empty() {
         return Ok(());
     }
@@ -69,11 +79,22 @@ pub fn upsert_tracked_files_batch(db: &Database, files: &[TrackedFile]) -> Resul
         }
     }
     write_txn.commit()?;
-    rebuild_tracked_indexes(db)
+    Ok(())
 }
 
 /// Remove all given paths in a single transaction then rebuild indexes once.
+#[allow(dead_code)]
 pub fn remove_tracked_files_batch(db: &Database, paths: &[&str]) -> Result<(), AppError> {
+    remove_tracked_files_batch_no_reindex(db, paths)?;
+    rebuild_tracked_indexes(db)
+}
+
+/// Remove all given paths in a single transaction without rebuilding indexes.
+/// Caller is responsible for calling `rebuild_tracked_indexes` when ready.
+pub fn remove_tracked_files_batch_no_reindex(
+    db: &Database,
+    paths: &[&str],
+) -> Result<(), AppError> {
     if paths.is_empty() {
         return Ok(());
     }
@@ -85,7 +106,7 @@ pub fn remove_tracked_files_batch(db: &Database, paths: &[&str]) -> Result<(), A
         }
     }
     write_txn.commit()?;
-    rebuild_tracked_indexes(db)
+    Ok(())
 }
 
 pub fn rebuild_tracked_indexes(db: &Database) -> Result<(), AppError> {
