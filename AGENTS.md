@@ -157,11 +157,4 @@ ShelfLife/
 
 ## PR & Commit Instructions
 
-- Before generating a commit, run these commands to ensure a green build:
-  - `npx prettier --check .`
-  - `pnpm lint`
-  - `pnpm check`
-  - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
-  - `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings`
-  - `cargo test --manifest-path src-tauri/Cargo.toml`
 - **Commit Style:** Strictly use conventional commits (e.g., `feat:`, `fix:`, `chore:`).
