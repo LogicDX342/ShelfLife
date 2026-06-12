@@ -82,13 +82,6 @@ pub fn upsert_tracked_files_batch_no_reindex(
     Ok(())
 }
 
-/// Remove all given paths in a single transaction then rebuild indexes once.
-#[allow(dead_code)]
-pub fn remove_tracked_files_batch(db: &Database, paths: &[&str]) -> Result<(), AppError> {
-    remove_tracked_files_batch_no_reindex(db, paths)?;
-    rebuild_tracked_indexes(db)
-}
-
 /// Remove all given paths in a single transaction without rebuilding indexes.
 /// Caller is responsible for calling `rebuild_tracked_indexes` when ready.
 pub fn remove_tracked_files_batch_no_reindex(

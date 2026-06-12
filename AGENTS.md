@@ -1,3 +1,7 @@
+## Workspace rules
+
+- Default to `rtk` for every shell command despite powershell command, and reference `.agents/rules/RTK.md`.
+
 ## Project layout
 
 **File creation policy:** You are expected to create new files as needed to follow this structure. The directory skeleton exists with stub `mod.rs` and `index.ts` files. When implementing a feature, create the appropriate file in the correct module — do not append unrelated code to an existing file just because it already exists.
@@ -128,12 +132,12 @@ ShelfLife/
 
 ## Dev environment tips
 
-- Use `rtk` if available, reference: `.agents/rules/RTK.md`
 - Run `cargo tauri dev` from the root directory to spin up the Rust backend daemon and the Svelte 5 HMR frontend simultaneously.
 - Run `cargo add <crate_name> --manifest-path src-tauri/Cargo.toml` to add pure-Rust dependencies (like `redb` or `notify`) directly to the backend layer.
 - Use `pnpm add -D <package_name>` at the root to add frontend utilities, Tailwind extensions, or UI plugins so Vite and Svelte can index them.
 - Check `src-tauri/Cargo.toml` to manage backend feature flags and `src/` for Svelte 5 application views.
 - When working in Svelte components, exclusively use Svelte 5 runes (`$state`, `$derived`, `$effect`). Do not use legacy Svelte 4 `$` stores or `$` reactive assignments.
+- Do not add `#[allow(dead_code)]` annotations to code to bypass compiler warnings or lints. Fix the code instead.
 
 ### Windows-specific notes
 
