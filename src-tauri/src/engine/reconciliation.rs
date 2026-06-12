@@ -31,15 +31,6 @@ use crate::models::{
 use crate::rules::matching_rule_ids;
 use crate::storage;
 
-#[allow(dead_code)]
-pub fn reconcile(db: &Database) -> Result<Vec<String>, AppError> {
-    Ok(reconcile_with_report(db)?.indexed)
-}
-
-pub fn reconcile_with_report(db: &Database) -> Result<ReconciliationReport, AppError> {
-    reconcile_with_report_with_progress(db, None)
-}
-
 #[allow(clippy::type_complexity)]
 pub fn reconcile_with_report_with_progress(
     db: &Database,
@@ -537,10 +528,15 @@ mod tests {
 
     use uuid::Uuid;
 
-    use crate::models::{AppConfig, FileDecayState, WatchTarget};
+    use crate::models::{AppConfig, AppError, FileDecayState, WatchTarget};
     use crate::storage;
+    use redb::Database;
 
-    use super::{reconcile, reconcile_with_report};
+    use super::reconcile_with_report_with_progress;
+
+    fn reconcile(db: &Database) -> Result<Vec<String>, AppError> {
+        Ok(reconcile_with_report_with_progress(db, None)?.indexed)
+    }
 
     #[test]
     fn reconcile_indexes_existing_files_and_marks_missing_rows() {
@@ -585,7 +581,8 @@ mod tests {
         };
         storage::save_config(&fixture.db, &config).expect("config should save");
 
-        let report = reconcile_with_report(&fixture.db).expect("reconciliation should succeed");
+        let report = reconcile_with_report_with_progress(&fixture.db, None)
+            .expect("reconciliation should succeed");
         assert_eq!(report.removed, vec![path_string(&file)]);
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
@@ -638,7 +635,8 @@ mod tests {
             .any(|tracked| tracked.file_name == "skip.me"));
 
         fixture.save_config_with_ignore_patterns(vec![String::from("*.me")]);
-        let report = reconcile_with_report(&fixture.db).expect("reconciliation should succeed");
+        let report = reconcile_with_report_with_progress(&fixture.db, None)
+            .expect("reconciliation should succeed");
         let tracked = storage::tracked::list_tracked_files(&fixture.db)
             .expect("tracked list should work")
             .into_iter()
@@ -736,7 +734,8 @@ mod tests {
         fs::write(&updated, "new content").expect("tracked file should be updated");
         fs::remove_file(&removed).expect("tracked file should be removed");
 
-        let report = reconcile_with_report(&fixture.db).expect("report should build");
+        let report =
+            reconcile_with_report_with_progress(&fixture.db, None).expect("report should build");
 
         assert_eq!(report.indexed, vec![path_string(&indexed)]);
         assert_eq!(report.updated, vec![path_string(&updated)]);
@@ -894,7 +893,7 @@ mod tests {
 
         // Switch to non-recursive (top-level only)
         fixture.save_config();
-        let report = reconcile_with_report(&fixture.db)
+        let report = reconcile_with_report_with_progress(&fixture.db, None)
             .expect("non-recursive reconciliation should succeed");
 
         // Root file stays, subfolder file is removed
