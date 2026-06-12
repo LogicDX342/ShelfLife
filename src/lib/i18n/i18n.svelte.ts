@@ -156,6 +156,11 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.notifications': 'Enable Notifications',
     'settings.removeConfirmTitle': 'Remove Watch Target',
     'settings.removeConfirmText': 'Are you sure you want to remove this watch target?',
+    'settings.overlapConfirmTitle': 'Overlapping Watch Target',
+    'settings.overlapConfirmText':
+      'This folder overlaps existing watch targets. Use the new folder to remove the overlapping targets and add this one, or keep your current targets.\n\nNew folder:\n{path}\n\nOverlapping targets:\n{paths}',
+    'settings.overlapUseNew': 'Use New Folder',
+    'settings.overlapKeepExisting': 'Keep Existing',
     'settings.remove': 'Remove',
     'rules.deleteConfirmTitle': 'Delete Automation Rule',
     'rules.deleteConfirmText': 'Are you sure you want to delete this rule?',
@@ -348,6 +353,11 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.notifications': '启用桌面通知',
     'settings.removeConfirmTitle': '移除监控目标',
     'settings.removeConfirmText': '您确定要移除该监控目标文件夹吗？',
+    'settings.overlapConfirmTitle': '监控目标重叠',
+    'settings.overlapConfirmText':
+      '该文件夹与现有监控目标重叠。选择使用新文件夹会移除重叠的监控目标并添加此文件夹，也可以保留当前目标。\n\n新文件夹:\n{path}\n\n重叠目标:\n{paths}',
+    'settings.overlapUseNew': '使用新文件夹',
+    'settings.overlapKeepExisting': '保留现有目标',
     'settings.remove': '移除',
     'rules.deleteConfirmTitle': '删除自动化规则',
     'rules.deleteConfirmText': '您确定要删除该自动化规则吗？',

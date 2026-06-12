@@ -6,6 +6,7 @@
     title = '',
     message = '',
     confirmLabel = 'Confirm',
+    cancelLabel = i18n.t('dialog.no'),
     onConfirm,
     onCancel,
   } = $props<{
@@ -13,6 +14,7 @@
     title: string;
     message?: string;
     confirmLabel?: string;
+    cancelLabel?: string;
     onConfirm: () => void;
     onCancel: () => void;
   }>();
@@ -57,7 +59,7 @@
         class="px-6 py-4 bg-black/5 dark:bg-white/5 border-t border-fluent-border-light dark:border-fluent-border-dark flex items-center justify-end gap-2"
       >
         <button onclick={onCancel} class="fluent-button text-xs font-semibold">
-          {i18n.t('dialog.no')}
+          {cancelLabel}
         </button>
         <button
           onclick={onConfirm}
