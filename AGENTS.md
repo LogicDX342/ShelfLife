@@ -1,6 +1,6 @@
 ## Workspace rules
 
-- Default to `rtk` for every shell command despite powershell command, and reference `.agents/rules/RTK.md`.
+- Default to `rtk` for every shell command except powershell command, and reference `.agents/rules/RTK.md`.
 
 ## Project layout
 

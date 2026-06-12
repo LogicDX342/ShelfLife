@@ -13,8 +13,14 @@
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { filesState } from '$lib/stores/files.svelte';
 
+  type PendingWatchTarget = {
+    target: WatchTarget;
+    overlappingTargets: WatchTarget[];
+  };
+
   let config = $state<AppConfig | null>(null);
   let targetToRemove = $state<WatchTarget | null>(null);
+  let pendingWatchTarget = $state<PendingWatchTarget | null>(null);
   let targetPath = $state('');
   let safeFolderPath = $state('');
   let defaultTtlDays = $state(30);
@@ -69,32 +75,70 @@
   async function addTargetWithPath(pathToAdd: string) {
     if (!config || !pathToAdd.trim()) return;
 
+    const trimmedPath = pathToAdd.trim();
+
     // Prevent duplicate watch targets
     const isDuplicate = config.watch_targets.some(
-      (target) => target.path.toLowerCase() === pathToAdd.trim().toLowerCase(),
+      (target) => normalizeWatchPath(target.path) === normalizeWatchPath(trimmedPath),
     );
     if (isDuplicate) {
       error = i18n.t('settings.errorDuplicate');
       return;
     }
 
+    const target = createWatchTarget(trimmedPath);
+    const overlappingTargets = findOverlappingTargets(trimmedPath, config.watch_targets);
+    if (overlappingTargets.length > 0) {
+      error = null;
+      pendingWatchTarget = { target, overlappingTargets };
+      return;
+    }
+
+    await saveAddedTarget(target, config.watch_targets);
+  }
+
+  function createWatchTarget(path: string): WatchTarget {
+    return {
+      id: crypto.randomUUID(),
+      path,
+      enabled: true,
+      recursive: false,
+      default_ttl_seconds: null,
+      ignore_patterns: [],
+      include_hidden_patterns: [],
+      rule_ids: [],
+    };
+  }
+
+  function normalizeWatchPath(path: string): string {
+    const normalized = path.trim().replaceAll('/', '\\').replace(/\\+$/, '');
+    if (/^[a-z]:$/i.test(normalized)) {
+      return `${normalized}\\`.toLowerCase();
+    }
+    return normalized.toLowerCase();
+  }
+
+  function pathContains(parent: string, child: string): boolean {
+    const normalizedParent = normalizeWatchPath(parent);
+    const normalizedChild = normalizeWatchPath(child);
+    const parentPrefix = normalizedParent.endsWith('\\')
+      ? normalizedParent
+      : `${normalizedParent}\\`;
+
+    return normalizedParent !== normalizedChild && normalizedChild.startsWith(parentPrefix);
+  }
+
+  function findOverlappingTargets(pathToAdd: string, targets: WatchTarget[]): WatchTarget[] {
+    return targets.filter(
+      (target) => pathContains(pathToAdd, target.path) || pathContains(target.path, pathToAdd),
+    );
+  }
+
+  async function saveAddedTarget(target: WatchTarget, existingTargets: WatchTarget[]) {
     addingTarget = true;
     error = null;
-    const targets = [
-      ...config.watch_targets,
-      {
-        id: crypto.randomUUID(),
-        path: pathToAdd.trim(),
-        enabled: true,
-        recursive: false,
-        default_ttl_seconds: null,
-        ignore_patterns: [],
-        include_hidden_patterns: [],
-        rule_ids: [],
-      },
-    ];
     try {
-      await updateWatchTargets(targets);
+      await updateWatchTargets([...existingTargets, target]);
       await refreshConfig();
       targetPath = '';
     } catch (reason) {
@@ -102,6 +146,27 @@
     } finally {
       addingTarget = false;
     }
+  }
+
+  async function confirmOverlappingTarget() {
+    if (!config || !pendingWatchTarget) return;
+
+    const pending = pendingWatchTarget;
+    pendingWatchTarget = null;
+    const overlappingIds = new Set(pending.overlappingTargets.map((target) => target.id));
+    await saveAddedTarget(
+      pending.target,
+      config.watch_targets.filter((target) => !overlappingIds.has(target.id)),
+    );
+  }
+
+  function overlappingTargetMessage() {
+    if (!pendingWatchTarget) return '';
+
+    return i18n.t('settings.overlapConfirmText', {
+      path: pendingWatchTarget.target.path,
+      paths: pendingWatchTarget.overlappingTargets.map((target) => `- ${target.path}`).join('\n'),
+    });
   }
 
   async function savePreferences() {
@@ -507,4 +572,14 @@
   confirmLabel={i18n.t('settings.remove')}
   onCancel={() => (targetToRemove = null)}
   onConfirm={confirmRemoveTarget}
+/>
+
+<ConfirmDialog
+  open={!!pendingWatchTarget}
+  title={i18n.t('settings.overlapConfirmTitle')}
+  message={overlappingTargetMessage()}
+  confirmLabel={i18n.t('settings.overlapUseNew')}
+  cancelLabel={i18n.t('settings.overlapKeepExisting')}
+  onCancel={() => (pendingWatchTarget = null)}
+  onConfirm={confirmOverlappingTarget}
 />

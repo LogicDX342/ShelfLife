@@ -167,6 +167,16 @@ fn validate_config(config: &AppConfig) -> Result<(), AppError> {
                 target.path.clone(),
             ));
         }
+        if seen_roots.iter().any(|root| {
+            canonical.starts_with(root.as_path()) || root.starts_with(canonical.as_path())
+        }) {
+            return Err(AppError::with_details(
+                "PATH_OUT_OF_SCOPE",
+                "Overlapping watch target was rejected. Remove the existing parent or child target first.",
+                true,
+                target.path.clone(),
+            ));
+        }
         seen_roots.push(canonical);
     }
 
@@ -303,6 +313,44 @@ mod tests {
         };
 
         validate_config(&config).expect("config should validate");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_overlapping_enabled_watch_targets() {
+        let root = std::env::temp_dir().join(format!("shelflife-config-{}", Uuid::new_v4()));
+        let watch = root.join("watch");
+        let nested = watch.join("nested");
+        fs::create_dir_all(&nested).expect("nested watch dir should exist");
+        let config = AppConfig {
+            watch_targets: vec![
+                WatchTarget {
+                    id: String::from("watch"),
+                    path: watch.to_string_lossy().to_string(),
+                    enabled: true,
+                    recursive: false,
+                    default_ttl_seconds: None,
+                    ignore_patterns: Vec::new(),
+                    include_hidden_patterns: Vec::new(),
+                    rule_ids: Vec::new(),
+                },
+                WatchTarget {
+                    id: String::from("nested"),
+                    path: nested.to_string_lossy().to_string(),
+                    enabled: true,
+                    recursive: false,
+                    default_ttl_seconds: None,
+                    ignore_patterns: Vec::new(),
+                    include_hidden_patterns: Vec::new(),
+                    rule_ids: Vec::new(),
+                },
+            ],
+            safe_folder_path: root.join("safe").to_string_lossy().to_string(),
+            ..AppConfig::default()
+        };
+
+        let error = validate_config(&config).expect_err("overlap should be rejected");
+        assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
         let _ = fs::remove_dir_all(root);
     }
 }
