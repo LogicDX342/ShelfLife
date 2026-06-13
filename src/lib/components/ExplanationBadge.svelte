@@ -3,44 +3,202 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
 
   let { explanation } = $props<{ explanation: RuleMatchExplanation }>();
+
+  // Determine action type and details
+  let actionType = $derived(
+    !explanation.proposed_action
+      ? 'None'
+      : explanation.proposed_action === 'Trash'
+        ? 'Trash'
+        : explanation.proposed_action === 'Ignore'
+          ? 'Ignore'
+          : typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action
+            ? 'Move'
+            : typeof explanation.proposed_action === 'object' &&
+                'Rename' in explanation.proposed_action
+              ? 'Rename'
+              : 'Other',
+  );
+
+  let actionLabel = $derived(
+    explanation.proposed_action === 'Trash'
+      ? i18n.t('file.trash')
+      : explanation.proposed_action === 'Ignore'
+        ? i18n.t('file.ignore')
+        : typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action
+          ? i18n.t('file.actionMove')
+          : typeof explanation.proposed_action === 'object' &&
+              'Rename' in explanation.proposed_action
+            ? i18n.t('file.actionRename')
+            : i18n.t('file.actionLabel'),
+  );
+
+  let styleClasses = $derived(
+    explanation.blocked_by_protected_pattern
+      ? {
+          container:
+            'border-neutral-300 bg-neutral-100/30 dark:border-neutral-800 dark:bg-neutral-900/30 opacity-80',
+          leftSide:
+            'border-neutral-300 dark:border-neutral-800 bg-neutral-200/40 dark:bg-neutral-800/45 text-red-600 dark:text-red-400',
+        }
+      : actionType === 'Trash'
+        ? {
+            container:
+              'border-rose-200 bg-rose-50/20 dark:border-rose-950/40 dark:bg-rose-950/10 text-neutral-800 dark:text-neutral-200 hover:bg-rose-50/30 dark:hover:bg-rose-950/20',
+            leftSide:
+              'border-rose-200 dark:border-rose-950/40 bg-rose-100/20 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400',
+          }
+        : actionType === 'Move'
+          ? {
+              container:
+                'border-violet-200 bg-violet-50/20 dark:border-violet-950/40 dark:bg-violet-950/10 text-neutral-800 dark:text-neutral-200 hover:bg-violet-50/30 dark:hover:bg-violet-950/20',
+              leftSide:
+                'border-violet-200 dark:border-violet-950/40 bg-violet-100/20 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400',
+            }
+          : actionType === 'Rename'
+            ? {
+                container:
+                  'border-amber-200 bg-amber-50/20 dark:border-amber-950/40 dark:bg-amber-950/10 text-neutral-800 dark:text-neutral-200 hover:bg-amber-50/30 dark:hover:bg-amber-950/20',
+                leftSide:
+                  'border-amber-200 dark:border-amber-950/40 bg-amber-100/20 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
+              }
+            : actionType === 'Ignore'
+              ? {
+                  container:
+                    'border-neutral-200 bg-neutral-50/30 dark:border-neutral-800 dark:bg-neutral-900/10 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/40 dark:hover:bg-neutral-900/20',
+                  leftSide:
+                    'border-neutral-200 dark:border-neutral-800 bg-neutral-100/30 dark:bg-neutral-800/30 text-neutral-600 dark:text-neutral-400',
+                }
+              : {
+                  container:
+                    'border-neutral-200 bg-neutral-50/30 dark:border-fluent-border-dark dark:bg-white/5 text-fluent-text-light dark:text-fluent-text-dark',
+                  leftSide:
+                    'border-neutral-200 dark:border-fluent-border-dark bg-black/5 dark:bg-white/5 text-fluent-muted-light dark:text-fluent-muted-dark',
+                },
+  );
+
+  let modeLabel = $derived(
+    explanation.mode === 'Automatic'
+      ? (i18n.t('rules.modeAutomatic') ?? 'Auto')
+      : explanation.mode === 'AskFirst'
+        ? (i18n.t('rules.modeAskFirst') ?? 'Ask First')
+        : explanation.mode === 'PreviewOnly'
+          ? (i18n.t('rules.modePreviewOnly') ?? 'Preview')
+          : '',
+  );
+
+  let modeBadgeClasses = $derived(
+    explanation.mode === 'Automatic'
+      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-900/50'
+      : explanation.mode === 'AskFirst'
+        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/50 dark:border-blue-900/50'
+        : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400 border border-neutral-200/50 dark:border-neutral-700/50',
+  );
 </script>
 
 <div
-  class="inline-flex items-center gap-1.5 p-1 px-2.5 rounded bg-black/5 dark:bg-white/5 border border-fluent-border-light dark:border-fluent-border-dark text-[10px] font-semibold text-fluent-text-light dark:text-fluent-text-dark select-none max-w-sm"
+  class="inline-flex items-stretch self-start rounded-md border text-[10px] shadow-sm transition-all select-none {styleClasses.container}"
 >
-  <!-- Status Indicator Dot -->
-  <span
-    class="h-1.5 w-1.5 rounded-full {explanation.blocked_by_protected_pattern
-      ? 'bg-red-500'
-      : 'bg-fluent-accent'}"
-  ></span>
-
-  <!-- Rule Name -->
-  <span
-    class="truncate max-w-[120px] font-bold text-neutral-700 dark:text-neutral-300"
-    title={explanation.rule_name ?? i18n.t('file.noRuleMatched')}
-  >
-    {explanation.rule_name ?? i18n.t('file.noRule')}
-  </span>
-
-  <span
-    class="text-fluent-muted-light dark:text-fluent-muted-dark font-normal truncate"
-    title={explanation.message}
-  >
-    ({explanation.message})
-  </span>
-
+  <!-- Left Side: Action / Status Block -->
   {#if explanation.blocked_by_protected_pattern}
-    <span
-      class="ml-1 px-1 py-0.2 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded text-[9px] uppercase font-bold tracking-wider"
+    <div
+      class="flex items-center gap-1.5 px-2 py-0.5 border-r font-semibold {styleClasses.leftSide}"
+      title={i18n.t('file.protected')}
     >
-      {i18n.t('file.protected')}
-    </span>
-  {:else if explanation.mode}
-    <span
-      class="ml-1 px-1 py-0.2 bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 rounded text-[9px] font-mono"
+      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2.2"
+          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+        />
+      </svg>
+      <span>{i18n.t('file.protected')}</span>
+    </div>
+  {:else}
+    <div
+      class="flex items-center gap-1.5 px-2 py-0.5 border-r font-semibold {styleClasses.leftSide}"
     >
-      {explanation.mode}
+      {#if actionType === 'Trash'}
+        <!-- Clean outline trash bin icon (no internal vertical lines) -->
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7M5 7h14m-3 0V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3"
+          />
+        </svg>
+      {:else if actionType === 'Move'}
+        <!-- Move / Folder icon -->
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+          />
+        </svg>
+      {:else if actionType === 'Rename'}
+        <!-- Rename / Edit icon -->
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+          />
+        </svg>
+      {:else if actionType === 'Ignore'}
+        <!-- Ignore / Ban icon -->
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+          />
+        </svg>
+      {/if}
+      <span>{actionLabel}</span>
+    </div>
+  {/if}
+
+  <!-- Middle: Rule Name + Message details -->
+  <div class="flex items-center gap-1.5 px-2.5 py-0.5">
+    <span
+      class="font-bold text-neutral-700 dark:text-neutral-300 truncate max-w-[130px] {explanation.blocked_by_protected_pattern
+        ? 'line-through text-neutral-400 dark:text-neutral-500'
+        : ''}"
+      title={explanation.rule_name ?? i18n.t('file.noRuleMatched')}
+    >
+      {explanation.rule_name ?? i18n.t('file.noRule')}
     </span>
+    <span class="h-2.5 w-px bg-neutral-300 dark:bg-neutral-800"></span>
+    <span
+      class="text-neutral-500 dark:text-neutral-400 font-medium truncate max-w-[180px] {explanation.blocked_by_protected_pattern
+        ? 'text-red-500/80 dark:text-red-400/80 font-semibold'
+        : ''}"
+      title={explanation.blocked_by_protected_pattern
+        ? `${i18n.t('file.protected')}: ${explanation.blocked_by_protected_pattern}`
+        : explanation.message}
+    >
+      {#if explanation.blocked_by_protected_pattern}
+        {i18n.t('file.protected')}: {explanation.blocked_by_protected_pattern}
+      {:else}
+        {explanation.message}
+      {/if}
+    </span>
+  </div>
+
+  <!-- Right Side: Mode Badging -->
+  {#if !explanation.blocked_by_protected_pattern && explanation.mode}
+    <div class="flex items-center pr-1.5 py-0.5">
+      <span
+        class="px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider {modeBadgeClasses}"
+      >
+        {modeLabel}
+      </span>
+    </div>
   {/if}
 </div>
