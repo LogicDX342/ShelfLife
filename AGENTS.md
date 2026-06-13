@@ -138,6 +138,7 @@ ShelfLife/
 - Check `src-tauri/Cargo.toml` to manage backend feature flags and `src/` for Svelte 5 application views.
 - When working in Svelte components, exclusively use Svelte 5 runes (`$state`, `$derived`, `$effect`). Do not use legacy Svelte 4 `$` stores or `$` reactive assignments.
 - Do not add `#[allow(dead_code)]` annotations to code to bypass compiler warnings or lints. Fix the code instead.
+- Do not run any lint or check commands such as `pnpm verify`, as husky will run them automatically.
 
 ### Windows-specific notes
 

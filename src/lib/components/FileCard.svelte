@@ -39,14 +39,16 @@
 
   const snoozeOptions = [1, 3, 7, 14, 30, -1];
 
-  async function loadExplanation() {
-    if (explanations.length > 0) return;
-    try {
-      explanations = await explainFile(file.path);
-    } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('file.errorExplanation'));
-    }
-  }
+  $effect(() => {
+    const path = file.path;
+    explainFile(path)
+      .then((data) => {
+        explanations = data;
+      })
+      .catch((reason) => {
+        error = getErrorMessage(reason, i18n.t('file.errorExplanation'));
+      });
+  });
 
   async function act(action: UserTriageAction) {
     busy = true;
@@ -135,11 +137,9 @@
 </script>
 
 <article
-  class="fluent-card p-4 flex flex-col gap-4 relative overflow-hidden transition-all duration-200 {getBorderColor(
+  class="fluent-card p-4 flex flex-col gap-2 relative overflow-hidden transition-all duration-200 {getBorderColor(
     file.state,
   )}"
-  onmouseenter={loadExplanation}
-  onfocusin={loadExplanation}
 >
   <!-- Main Grid Info -->
   <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
@@ -230,7 +230,7 @@
   <!-- Explanations badges if file matches rules -->
   {#if matchedExplanations.length > 0}
     <div
-      class="flex flex-wrap gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-3"
+      class="flex flex-wrap gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-2"
     >
       {#each matchedExplanations as explanation (explanation.rule_id)}
         <ExplanationBadge {explanation} />
@@ -246,7 +246,7 @@
 
   <!-- Action buttons row -->
   <div
-    class="flex flex-wrap gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-3"
+    class="flex flex-wrap gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-2"
   >
     {#if file.state === 'Pinned'}
       <button class="fluent-button" disabled={busy} onclick={() => queueAction('Ignore')}>
