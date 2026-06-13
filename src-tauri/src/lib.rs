@@ -22,6 +22,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .on_window_event(tray::hide_window_on_close)
         .setup(|app| {
             engine::executor::init_trash_support();
             let db_path = app.path().app_data_dir()?.join("shelflife.redb");
@@ -88,6 +89,7 @@ pub fn run() {
             commands::delete_rule,
             commands::get_config,
             commands::save_config,
+            commands::resolve_close_request,
             commands::update_watch_targets,
             commands::run_reconciliation_scan,
             commands::is_reconciliation_active,

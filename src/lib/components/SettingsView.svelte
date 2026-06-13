@@ -10,7 +10,7 @@
   import { enable, disable } from '@tauri-apps/plugin-autostart';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { getErrorMessage } from '$lib/utils/format';
-  import type { AppConfig, WatchTarget } from '$lib/types';
+  import type { AppConfig, CloseBehavior, WatchTarget } from '$lib/types';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { filesState } from '$lib/stores/files.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
@@ -30,6 +30,7 @@
   let decayingThresholdHours = $state(24);
   let notificationsEnabled = $state(true);
   let startAtLogin = $state(false);
+  let closeBehavior = $state<CloseBehavior>('Ask');
   let savingPrefs = $state(false);
   let addingTarget = $state(false);
   let rejectedTargetId = $state<string | null>(null);
@@ -57,8 +58,15 @@
     }
   }
 
-  onMount(async () => {
-    await refreshConfig();
+  onMount(() => {
+    void refreshConfig();
+
+    const syncCloseBehavior = (event: Event) => {
+      closeBehavior = (event as CustomEvent<CloseBehavior>).detail;
+    };
+
+    window.addEventListener('close_behavior_changed', syncCloseBehavior);
+    return () => window.removeEventListener('close_behavior_changed', syncCloseBehavior);
   });
 
   async function refreshConfig() {
@@ -69,6 +77,7 @@
     decayingThresholdHours = Math.round(config.decaying_threshold_seconds / 3600);
     notificationsEnabled = config.notifications_enabled;
     startAtLogin = config.start_at_login;
+    closeBehavior = config.close_behavior;
   }
 
   async function addTarget() {
@@ -215,6 +224,7 @@
         decaying_threshold_seconds: Math.max(1, decayingThresholdHours) * 3600,
         notifications_enabled: notificationsEnabled,
         start_at_login: startAtLogin,
+        close_behavior: closeBehavior,
       });
 
       if (startAtLogin) {
@@ -411,6 +421,23 @@
                   <option value="light">{i18n.t('theme.light')}</option>
                   <option value="dark">{i18n.t('theme.dark')}</option>
                   <option value="system">{i18n.t('theme.system')}</option>
+                </select>
+              </label>
+
+              <label class="flex flex-col gap-1.5">
+                <span
+                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
+                  >{i18n.t('settings.closeBehavior')}</span
+                >
+                <select
+                  class="fluent-input text-xs"
+                  value={closeBehavior}
+                  onchange={(event) =>
+                    (closeBehavior = (event.target as HTMLSelectElement).value as CloseBehavior)}
+                >
+                  <option value="Ask">{i18n.t('settings.closeAsk')}</option>
+                  <option value="HideToTray">{i18n.t('settings.closeHideToTray')}</option>
+                  <option value="Quit">{i18n.t('settings.closeQuit')}</option>
                 </select>
               </label>
             </div>

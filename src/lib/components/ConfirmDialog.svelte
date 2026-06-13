@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { i18n } from '$lib/i18n/i18n.svelte';
 
   let {
@@ -7,6 +8,8 @@
     message = '',
     confirmLabel = 'Confirm',
     cancelLabel = i18n.t('dialog.no'),
+    disabled = false,
+    children,
     onConfirm,
     onCancel,
   } = $props<{
@@ -15,6 +18,8 @@
     message?: string;
     confirmLabel?: string;
     cancelLabel?: string;
+    disabled?: boolean;
+    children?: Snippet;
     onConfirm: () => void;
     onCancel: () => void;
   }>();
@@ -43,14 +48,19 @@
       </div>
 
       <!-- Dialog Body -->
-      {#if message}
-        <div class="px-6 py-5 flex-1">
-          <p
-            id="dialog-desc"
-            class="text-sm leading-normal text-fluent-muted-light dark:text-fluent-muted-dark whitespace-pre-wrap"
-          >
-            {message}
-          </p>
+      {#if message || children}
+        <div class="px-6 py-5 flex-1 space-y-4">
+          {#if message}
+            <p
+              id="dialog-desc"
+              class="text-sm leading-normal text-fluent-muted-light dark:text-fluent-muted-dark whitespace-pre-wrap"
+            >
+              {message}
+            </p>
+          {/if}
+          {#if children}
+            {@render children()}
+          {/if}
         </div>
       {/if}
 
@@ -58,12 +68,13 @@
       <div
         class="px-6 py-4 bg-black/5 dark:bg-white/5 border-t border-fluent-border-light dark:border-fluent-border-dark flex items-center justify-end gap-2"
       >
-        <button onclick={onCancel} class="fluent-button text-xs font-semibold">
+        <button onclick={onCancel} class="fluent-button text-xs font-semibold" {disabled}>
           {cancelLabel}
         </button>
         <button
           onclick={onConfirm}
           class="fluent-button fluent-button-primary text-xs font-semibold"
+          {disabled}
         >
           {confirmLabel}
         </button>

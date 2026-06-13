@@ -140,6 +140,8 @@ export type WatchTarget = {
   rule_ids: string[];
 };
 
+export type CloseBehavior = 'Ask' | 'HideToTray' | 'Quit';
+
 export type AppConfig = {
   version: number;
   watch_targets: WatchTarget[];
@@ -150,6 +152,7 @@ export type AppConfig = {
   safe_folder_path: string;
   notifications_enabled: boolean;
   start_at_login: boolean;
+  close_behavior: CloseBehavior;
 };
 
 export type FilePreviewContent =

@@ -3,10 +3,10 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::engine;
-use crate::models::{AppConfig, AppError, ReconciliationReport, WatchTarget};
+use crate::models::{AppConfig, AppError, CloseBehavior, ReconciliationReport, WatchTarget};
 use crate::storage::{self, AppState};
 
 const PERIODIC_RECONCILIATION_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
@@ -72,6 +72,33 @@ pub async fn save_config(
     engine::watcher::restart_watcher(&state, watcher_event_sink(app_handle.clone()))?;
     run_async_reconciliation(app_handle, state.inner().clone());
     Ok(config)
+}
+
+#[tauri::command]
+pub async fn resolve_close_request(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    behavior: CloseBehavior,
+    remember: bool,
+) -> Result<(), AppError> {
+    if remember {
+        let mut config = storage::get_config(&state.db)?;
+        config.close_behavior = behavior.clone();
+        storage::save_config(&state.db, &config)?;
+    }
+
+    match behavior {
+        CloseBehavior::Ask | CloseBehavior::HideToTray => {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let _ = window.hide();
+            }
+        }
+        CloseBehavior::Quit => {
+            app_handle.exit(0);
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

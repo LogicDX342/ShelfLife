@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum CloseBehavior {
+    Ask,
+    HideToTray,
+    Quit,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct WatchTarget {
     pub id: String,
     pub path: String,
@@ -27,6 +34,7 @@ pub struct AppConfig {
     pub safe_folder_path: String,
     pub notifications_enabled: bool,
     pub start_at_login: bool,
+    pub close_behavior: CloseBehavior,
 }
 
 impl Default for AppConfig {
@@ -43,6 +51,7 @@ impl Default for AppConfig {
             safe_folder_path: default_safe_folder(),
             notifications_enabled: true,
             start_at_login: false,
+            close_behavior: CloseBehavior::Ask,
         }
     }
 }

@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use redb::{Database, TableDefinition};
 
-use crate::models::{AppConfig, AppError};
+use crate::models::{AppConfig, AppError, CloseBehavior, WatchTarget};
 
 pub const META_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("meta");
 pub const RULES_BY_ID_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("rules_by_id");
@@ -120,7 +120,7 @@ pub fn get_config(db: &Database) -> Result<AppConfig, AppError> {
         return Ok(AppConfig::default());
     };
 
-    Ok(bincode::deserialize(value.value())?)
+    deserialize_config(value.value())
 }
 
 pub fn save_config(db: &Database, config: &AppConfig) -> Result<(), AppError> {
@@ -132,4 +132,38 @@ pub fn save_config(db: &Database, config: &AppConfig) -> Result<(), AppError> {
     }
     write_txn.commit()?;
     Ok(())
+}
+
+#[derive(serde::Deserialize)]
+struct LegacyAppConfig {
+    version: u32,
+    watch_targets: Vec<WatchTarget>,
+    protected_patterns: Vec<String>,
+    default_ttl_seconds: u64,
+    stale_threshold_seconds: u64,
+    decaying_threshold_seconds: u64,
+    safe_folder_path: String,
+    notifications_enabled: bool,
+    start_at_login: bool,
+}
+
+fn deserialize_config(bytes: &[u8]) -> Result<AppConfig, AppError> {
+    match bincode::deserialize::<AppConfig>(bytes) {
+        Ok(config) => Ok(config),
+        Err(current_error) => match bincode::deserialize::<LegacyAppConfig>(bytes) {
+            Ok(config) => Ok(AppConfig {
+                version: config.version,
+                watch_targets: config.watch_targets,
+                protected_patterns: config.protected_patterns,
+                default_ttl_seconds: config.default_ttl_seconds,
+                stale_threshold_seconds: config.stale_threshold_seconds,
+                decaying_threshold_seconds: config.decaying_threshold_seconds,
+                safe_folder_path: config.safe_folder_path,
+                notifications_enabled: config.notifications_enabled,
+                start_at_login: config.start_at_login,
+                close_behavior: CloseBehavior::Ask,
+            }),
+            Err(_) => Err(current_error.into()),
+        },
+    }
 }
