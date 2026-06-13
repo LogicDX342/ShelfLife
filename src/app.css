@@ -267,3 +267,29 @@ html.dark .fluent-switch-thumb {
 html.dark .fluent-switch-input:checked + .fluent-switch-track .fluent-switch-thumb {
   background-color: #ffffff;
 }
+.fluent-switch-rejected .fluent-switch-track {
+  animation: fluent-switch-reject-track 0.32s ease;
+}
+.fluent-switch-rejected .fluent-switch-thumb {
+  animation: fluent-switch-reject-thumb 0.32s ease;
+}
+
+@keyframes fluent-switch-reject-track {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  45% {
+    box-shadow: 0 0 0 3px rgba(196, 43, 28, 0.22);
+  }
+}
+
+@keyframes fluent-switch-reject-thumb {
+  0%,
+  100% {
+    scale: 1;
+  }
+  45% {
+    scale: 0.86;
+  }
+}

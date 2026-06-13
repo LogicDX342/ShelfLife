@@ -179,6 +179,8 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.recursiveLabel': 'Recursive',
     'settings.topLevel': 'Top Level',
     'settings.errorDuplicate': 'Folder is already a watch target.',
+    'settings.errorSafeFolderOverlap':
+      'Safe folder and watch targets cannot overlap. Choose separate folders.',
     'settings.errorUpdateTargets': 'Could not update watch targets.',
     'settings.errorSavePrefs': 'Could not save preferences.',
     'settings.errorUpdateTarget': 'Could not update watch target.',
@@ -376,6 +378,7 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.recursiveLabel': '递归监控',
     'settings.topLevel': '仅限顶层',
     'settings.errorDuplicate': '该文件夹已在监控目标中。',
+    'settings.errorSafeFolderOverlap': '安全文件夹和监控目标不能重叠。请选择不同的文件夹。',
     'settings.errorUpdateTargets': '无法更新监控目标。',
     'settings.errorSavePrefs': '无法保存首选项。',
     'settings.errorUpdateTarget': '无法更新监控目标文件夹。',

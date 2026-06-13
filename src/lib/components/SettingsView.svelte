@@ -31,6 +31,7 @@
   let successMessage = $state<string | null>(null);
   let savingPrefs = $state(false);
   let addingTarget = $state(false);
+  let rejectedTargetId = $state<string | null>(null);
 
   async function browseSafeFolder() {
     try {
@@ -86,6 +87,11 @@
       return;
     }
 
+    if (pathOverlapsSafeFolder(trimmedPath)) {
+      error = i18n.t('settings.errorSafeFolderOverlap');
+      return;
+    }
+
     const target = createWatchTarget(trimmedPath);
     const overlappingTargets = findOverlappingTargets(trimmedPath, config.watch_targets);
     if (overlappingTargets.length > 0) {
@@ -126,6 +132,28 @@
       : `${normalizedParent}\\`;
 
     return normalizedParent !== normalizedChild && normalizedChild.startsWith(parentPrefix);
+  }
+
+  function pathsOverlap(left: string, right: string): boolean {
+    const normalizedLeft = normalizeWatchPath(left);
+    const normalizedRight = normalizeWatchPath(right);
+    return (
+      normalizedLeft === normalizedRight || pathContains(left, right) || pathContains(right, left)
+    );
+  }
+
+  function pathOverlapsSafeFolder(pathToAdd: string): boolean {
+    const safePath = safeFolderPath.trim() || config?.safe_folder_path || '';
+    return !!safePath && pathsOverlap(pathToAdd, safePath);
+  }
+
+  function safeFolderOverlapsEnabledTarget(safePath: string): boolean {
+    return (
+      !!safePath &&
+      !!config?.watch_targets.some(
+        (target) => target.enabled && pathsOverlap(safePath, target.path),
+      )
+    );
   }
 
   function findOverlappingTargets(pathToAdd: string, targets: WatchTarget[]): WatchTarget[] {
@@ -175,9 +203,15 @@
     successMessage = null;
     savingPrefs = true;
     try {
+      const trimmedSafeFolderPath = safeFolderPath.trim();
+      if (safeFolderOverlapsEnabledTarget(trimmedSafeFolderPath)) {
+        error = i18n.t('settings.errorSafeFolderOverlap');
+        return;
+      }
+
       await saveConfig({
         ...config,
-        safe_folder_path: safeFolderPath.trim(),
+        safe_folder_path: trimmedSafeFolderPath,
         default_ttl_seconds: Math.max(1, defaultTtlDays) * 86400,
         stale_threshold_seconds: Math.max(1, staleThresholdDays) * 86400,
         decaying_threshold_seconds: Math.max(1, decayingThresholdHours) * 3600,
@@ -193,15 +227,40 @@
     }
   }
 
-  async function replaceTarget(updated: WatchTarget) {
-    if (!config) return;
+  async function replaceTarget(updated: WatchTarget): Promise<boolean> {
+    if (!config) return false;
+    if (updated.enabled && pathOverlapsSafeFolder(updated.path)) {
+      error = i18n.t('settings.errorSafeFolderOverlap');
+      return false;
+    }
+
     try {
       await updateWatchTargets(
         config.watch_targets.map((target) => (target.id === updated.id ? updated : target)),
       );
       await refreshConfig();
+      return true;
     } catch (reason) {
       error = getErrorMessage(reason, i18n.t('settings.errorUpdateTarget'));
+      return false;
+    }
+  }
+
+  async function toggleTargetEnabled(target: WatchTarget, event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    if (input.checked && pathOverlapsSafeFolder(target.path)) {
+      error = i18n.t('settings.errorSafeFolderOverlap');
+      rejectedTargetId = target.id;
+      window.setTimeout(() => {
+        input.checked = false;
+        rejectedTargetId = null;
+      }, 120);
+      return;
+    }
+
+    const saved = await replaceTarget({ ...target, enabled: input.checked });
+    if (!saved) {
+      input.checked = target.enabled;
     }
   }
 
@@ -516,12 +575,17 @@
 
                     <!-- Switch & Button actions -->
                     <div class="flex items-center gap-3.5 flex-shrink-0">
-                      <label class="fluent-switch" title="Toggle active status">
+                      <label
+                        class="fluent-switch {rejectedTargetId === target.id
+                          ? 'fluent-switch-rejected'
+                          : ''}"
+                        title="Toggle active status"
+                      >
                         <input
                           type="checkbox"
                           class="fluent-switch-input"
                           checked={target.enabled}
-                          onchange={() => replaceTarget({ ...target, enabled: !target.enabled })}
+                          onchange={(event) => toggleTargetEnabled(target, event)}
                         />
                         <span class="fluent-switch-track">
                           <span class="fluent-switch-thumb"></span>

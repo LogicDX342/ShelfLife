@@ -151,11 +151,19 @@ pub fn watcher_event_sink(app_handle: AppHandle) -> engine::watcher::WatcherEven
 }
 
 fn validate_config(config: &AppConfig) -> Result<(), AppError> {
-    validate_safe_folder(&config.safe_folder_path)?;
+    let safe_folder = validate_safe_folder(&config.safe_folder_path)?;
 
     let mut seen_roots = Vec::new();
     for target in config.watch_targets.iter().filter(|target| target.enabled) {
         let canonical = validate_watch_target_path(&target.path)?;
+        if paths_overlap(&canonical, &safe_folder) {
+            return Err(AppError::with_details(
+                "PATH_OUT_OF_SCOPE",
+                "Safe folder and watch targets cannot overlap. Choose separate folders.",
+                true,
+                target.path.clone(),
+            ));
+        }
         if seen_roots
             .iter()
             .any(|root: &std::path::PathBuf| root == &canonical)
@@ -215,7 +223,7 @@ fn validate_watch_target_path(path: &str) -> Result<std::path::PathBuf, AppError
     Ok(canonical)
 }
 
-fn validate_safe_folder(path: &str) -> Result<(), AppError> {
+fn validate_safe_folder(path: &str) -> Result<std::path::PathBuf, AppError> {
     let path = std::path::PathBuf::from(path);
     if path.as_os_str().is_empty() {
         return Err(AppError::new(
@@ -242,7 +250,55 @@ fn validate_safe_folder(path: &str) -> Result<(), AppError> {
         ));
     }
 
-    Ok(())
+    if path.exists() {
+        return Ok(path.canonicalize()?);
+    }
+
+    if parent.exists() {
+        let file_name = path.file_name().ok_or_else(|| {
+            AppError::new(
+                "PATH_OUT_OF_SCOPE",
+                "Safe folder must have a folder name. No configuration was changed.",
+                true,
+            )
+        })?;
+        return Ok(parent.canonicalize()?.join(file_name));
+    }
+
+    Ok(path)
+}
+
+fn paths_overlap(left: &std::path::Path, right: &std::path::Path) -> bool {
+    path_contains_or_equals(left, right) || path_contains_or_equals(right, left)
+}
+
+fn path_contains_or_equals(parent: &std::path::Path, child: &std::path::Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let parent = normalize_windows_path(parent);
+        let child = normalize_windows_path(child);
+        let parent_prefix = format!("{parent}\\");
+        child == parent || child.starts_with(&parent_prefix)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        child == parent || child.starts_with(parent)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn normalize_windows_path(path: &std::path::Path) -> String {
+    let mut normalized = path.to_string_lossy().replace('/', "\\").to_lowercase();
+    while normalized.ends_with('\\') && !is_windows_root_path(&normalized) {
+        normalized.pop();
+    }
+    normalized
+}
+
+#[cfg(target_os = "windows")]
+fn is_windows_root_path(path: &str) -> bool {
+    path.len() == 3 && path.as_bytes()[1] == b':' && path.as_bytes()[2] == b'\\'
 }
 
 fn is_sensitive_root(path: &std::path::Path) -> bool {
@@ -350,6 +406,57 @@ mod tests {
         };
 
         let error = validate_config(&config).expect_err("overlap should be rejected");
+        assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_safe_folder_inside_watch_target() {
+        let root = std::env::temp_dir().join(format!("shelflife-config-{}", Uuid::new_v4()));
+        let watch = root.join("watch");
+        fs::create_dir_all(&watch).expect("watch dir should exist");
+        let config = AppConfig {
+            watch_targets: vec![WatchTarget {
+                id: String::from("watch"),
+                path: watch.to_string_lossy().to_string(),
+                enabled: true,
+                recursive: false,
+                default_ttl_seconds: None,
+                ignore_patterns: Vec::new(),
+                include_hidden_patterns: Vec::new(),
+                rule_ids: Vec::new(),
+            }],
+            safe_folder_path: watch.join("safe").to_string_lossy().to_string(),
+            ..AppConfig::default()
+        };
+
+        let error = validate_config(&config).expect_err("safe folder overlap should be rejected");
+        assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_watch_target_inside_safe_folder() {
+        let root = std::env::temp_dir().join(format!("shelflife-config-{}", Uuid::new_v4()));
+        let safe = root.join("safe");
+        let watch = safe.join("watch");
+        fs::create_dir_all(&watch).expect("watch dir should exist");
+        let config = AppConfig {
+            watch_targets: vec![WatchTarget {
+                id: String::from("watch"),
+                path: watch.to_string_lossy().to_string(),
+                enabled: true,
+                recursive: false,
+                default_ttl_seconds: None,
+                ignore_patterns: Vec::new(),
+                include_hidden_patterns: Vec::new(),
+                rule_ids: Vec::new(),
+            }],
+            safe_folder_path: safe.to_string_lossy().to_string(),
+            ..AppConfig::default()
+        };
+
+        let error = validate_config(&config).expect_err("watch target overlap should be rejected");
         assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
         let _ = fs::remove_dir_all(root);
     }
