@@ -7,6 +7,7 @@
     runReconciliationScan,
   } from '$lib/api/config';
   import { selectDirectory } from '$lib/api/files';
+  import { enable, disable } from '@tauri-apps/plugin-autostart';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { getErrorMessage } from '$lib/utils/format';
   import type { AppConfig, WatchTarget } from '$lib/types';
@@ -28,6 +29,7 @@
   let staleThresholdDays = $state(5);
   let decayingThresholdHours = $state(24);
   let notificationsEnabled = $state(true);
+  let startAtLogin = $state(false);
   let savingPrefs = $state(false);
   let addingTarget = $state(false);
   let rejectedTargetId = $state<string | null>(null);
@@ -66,6 +68,7 @@
     staleThresholdDays = Math.round(config.stale_threshold_seconds / 86400);
     decayingThresholdHours = Math.round(config.decaying_threshold_seconds / 3600);
     notificationsEnabled = config.notifications_enabled;
+    startAtLogin = config.start_at_login;
   }
 
   async function addTarget() {
@@ -211,7 +214,15 @@
         stale_threshold_seconds: Math.max(1, staleThresholdDays) * 86400,
         decaying_threshold_seconds: Math.max(1, decayingThresholdHours) * 3600,
         notifications_enabled: notificationsEnabled,
+        start_at_login: startAtLogin,
       });
+
+      if (startAtLogin) {
+        await enable();
+      } else {
+        await disable();
+      }
+
       await refreshConfig();
       notifications.success(i18n.t('settings.saved'));
     } catch (reason) {
@@ -404,23 +415,43 @@
               </label>
             </div>
 
-            <!-- Notification Toggles -->
-            <div class="flex items-center gap-3 pt-2 select-none">
-              <span
-                class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                >{i18n.t('settings.notifications')}</span
-              >
-              <label class="fluent-switch">
-                <input
-                  type="checkbox"
-                  class="fluent-switch-input"
-                  checked={notificationsEnabled}
-                  onchange={() => (notificationsEnabled = !notificationsEnabled)}
-                />
-                <span class="fluent-switch-track">
-                  <span class="fluent-switch-thumb"></span>
-                </span>
-              </label>
+            <!-- Notification & Boot Toggles -->
+            <div class="flex flex-col sm:flex-row sm:items-center gap-6 pt-2 select-none">
+              <div class="flex items-center gap-3">
+                <span
+                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
+                  >{i18n.t('settings.notifications')}</span
+                >
+                <label class="fluent-switch">
+                  <input
+                    type="checkbox"
+                    class="fluent-switch-input"
+                    checked={notificationsEnabled}
+                    onchange={() => (notificationsEnabled = !notificationsEnabled)}
+                  />
+                  <span class="fluent-switch-track">
+                    <span class="fluent-switch-thumb"></span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <span
+                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
+                  >{i18n.t('settings.startAtLogin')}</span
+                >
+                <label class="fluent-switch">
+                  <input
+                    type="checkbox"
+                    class="fluent-switch-input"
+                    checked={startAtLogin}
+                    onchange={() => (startAtLogin = !startAtLogin)}
+                  />
+                  <span class="fluent-switch-track">
+                    <span class="fluent-switch-thumb"></span>
+                  </span>
+                </label>
+              </div>
             </div>
 
             <!-- Action buttons -->
