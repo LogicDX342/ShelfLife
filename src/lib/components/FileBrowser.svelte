@@ -9,6 +9,7 @@
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
   import FileCard from './FileCard.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
 
   let config = $state<AppConfig | null>(null);
   let currentDirectory = $state('');
@@ -18,8 +19,6 @@
   );
   let bulkSnoozeDays = $state(7);
   let confirmBulk = $state(false);
-  let bulkError = $state<string | null>(null);
-  let bulkSummary = $state<string | null>(null);
 
   let visibleFoldersCount = $state(50);
   let visibleFilesCount = $state(50);
@@ -238,19 +237,18 @@
 
   async function runBulkAction() {
     confirmBulk = false;
-    bulkError = null;
-    bulkSummary = null;
     try {
       const result = await executeBulkTriageAction(selectedPaths, selectedBulkAction());
-      bulkSummary = i18n.t('browser.bulkSummary', {
+      const summary = i18n.t('browser.bulkSummary', {
         action: bulkAction,
         succeeded: result.entries.length,
         failed: result.failures.length,
       });
+      notifications.success(summary);
       selectedPaths = [];
       await filesState.refresh();
     } catch (reason) {
-      bulkError = getErrorMessage(reason, i18n.t('browser.errorBulkAction'));
+      notifications.error(getErrorMessage(reason, i18n.t('browser.errorBulkAction')));
     }
   }
 
@@ -299,22 +297,6 @@
       {/each}
     </nav>
   </header>
-
-  <!-- Error / Success Messages -->
-  {#if bulkError}
-    <div
-      class="p-3 text-sm rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/50 flex-shrink-0"
-    >
-      {bulkError}
-    </div>
-  {/if}
-  {#if bulkSummary}
-    <div
-      class="p-3 text-sm rounded bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-900/50 flex-shrink-0"
-    >
-      {bulkSummary}
-    </div>
-  {/if}
 
   <!-- Contents List -->
   <div class="flex-1 overflow-y-auto space-y-6 pb-24 pr-1">

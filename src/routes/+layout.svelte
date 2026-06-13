@@ -4,6 +4,7 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import TitleBar from '$lib/components/TitleBar.svelte';
+  import ToastContainer from '$lib/components/ToastContainer.svelte';
 
   i18n.init();
 
@@ -29,4 +30,7 @@
       </div>
     </main>
   </div>
+
+  <!-- Toast Notification System -->
+  <ToastContainer />
 </div>

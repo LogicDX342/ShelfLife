@@ -9,12 +9,12 @@
   import { rulesState } from '$lib/stores/rules.svelte';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { AutomationRule, RuleMatchExplanation } from '$lib/types';
+  import { notifications } from '$lib/stores/notifications.svelte';
 
   let previewResults = $state<RuleMatchExplanation[]>([]);
   let editingRule = $state<AutomationRule | null>(null);
   let ruleToDelete = $state<AutomationRule | null>(null);
   let showNewEditor = $state(false);
-  let error = $state<string | null>(null);
   let selectedPreviewRuleName = $state<string | null>(null);
   let testingRuleId = $state<string | null>(null);
 
@@ -35,7 +35,6 @@
     if (!ruleToDelete) return;
     const id = ruleToDelete.id;
     ruleToDelete = null;
-    error = null;
     try {
       await deleteRule(id);
       if (editingRule?.id === id) {
@@ -43,29 +42,27 @@
       }
       await rulesState.refresh();
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('rules.errorDelete'));
+      notifications.error(getErrorMessage(reason, i18n.t('rules.errorDelete')));
     }
   }
 
   async function toggleRuleEnabled(rule: AutomationRule) {
-    error = null;
     try {
       const updated = { ...rule, enabled: !rule.enabled };
       await saveRule(updated);
       await rulesState.refresh();
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('rules.errorUpdateStatus'));
+      notifications.error(getErrorMessage(reason, i18n.t('rules.errorUpdateStatus')));
     }
   }
 
   async function previewRule(rule: AutomationRule) {
-    error = null;
     testingRuleId = rule.id;
     selectedPreviewRuleName = rule.name;
     try {
       previewResults = await testRule(rule);
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('rules.errorTest'));
+      notifications.error(getErrorMessage(reason, i18n.t('rules.errorTest')));
     } finally {
       testingRuleId = null;
     }
@@ -120,14 +117,6 @@
             : i18n.t('rules.newRule')}
         </h3>
         <RuleEditor rule={editingRule} onSaved={refreshAfterSave} onCancel={handleCancel} />
-      </div>
-    {/if}
-
-    {#if error}
-      <div
-        class="p-3 text-sm rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/50"
-      >
-        {error}
       </div>
     {/if}
 

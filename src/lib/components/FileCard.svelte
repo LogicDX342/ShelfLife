@@ -6,6 +6,7 @@
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
   import ExplanationBadge from './ExplanationBadge.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
 
   let {
     file,
@@ -27,7 +28,6 @@
   );
 
   let busy = $state(false);
-  let error = $state<string | null>(null);
   let expanded = $state(false);
   let renameTemplate = $state('');
   let moveDestination = $state('');
@@ -46,18 +46,17 @@
         explanations = data;
       })
       .catch((reason) => {
-        error = getErrorMessage(reason, i18n.t('file.errorExplanation'));
+        notifications.error(getErrorMessage(reason, i18n.t('file.errorExplanation')));
       });
   });
 
   async function act(action: UserTriageAction) {
     busy = true;
-    error = null;
     try {
       await executeTriageAction(file.path, action);
       await onRefresh();
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('file.errorAction'));
+      notifications.error(getErrorMessage(reason, i18n.t('file.errorAction')));
     } finally {
       busy = false;
     }
@@ -96,11 +95,10 @@
   }
 
   async function openLocation() {
-    error = null;
     try {
       await openFileLocation(file.path);
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('file.errorOpenLocation'));
+      notifications.error(getErrorMessage(reason, i18n.t('file.errorOpenLocation')));
     }
   }
 
@@ -235,12 +233,6 @@
       {#each matchedExplanations as explanation (explanation.rule_id)}
         <ExplanationBadge {explanation} />
       {/each}
-    </div>
-  {/if}
-
-  {#if error}
-    <div class="text-xs text-red-500 font-medium">
-      {error}
     </div>
   {/if}
 

@@ -3,19 +3,18 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { AuditEntry } from '$lib/types';
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
+  import { notifications } from '$lib/stores/notifications.svelte';
 
   let { entry, onRefresh } = $props<{ entry: AuditEntry; onRefresh: () => Promise<void> }>();
   let busy = $state(false);
-  let error = $state<string | null>(null);
 
   async function undo() {
     busy = true;
-    error = null;
     try {
       await undoAuditEntry(entry.id);
       await onRefresh();
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('audit.errorUndo'));
+      notifications.error(getErrorMessage(reason, i18n.t('audit.errorUndo')));
     } finally {
       busy = false;
     }
@@ -195,7 +194,3 @@
     {/if}
   </div>
 </div>
-
-{#if error}
-  <p class="text-xs text-red-500 font-medium px-4 pt-1">{error}</p>
-{/if}

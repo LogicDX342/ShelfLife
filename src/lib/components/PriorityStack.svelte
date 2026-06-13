@@ -90,7 +90,7 @@
 
     <!-- Search Input -->
     <div class="relative w-full md:max-w-md">
-      <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+      <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
         <svg
           class="h-4 w-4 text-fluent-muted-light dark:text-fluent-muted-dark"
           fill="none"
@@ -109,7 +109,7 @@
         type="text"
         placeholder={i18n.t('dashboard.search')}
         bind:value={searchInputValue}
-        class="fluent-input pl-10 w-full"
+        class="fluent-input pr-10 w-full"
       />
     </div>
   </header>

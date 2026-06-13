@@ -10,6 +10,7 @@
     SizeCondition,
   } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
+  import { notifications } from '$lib/stores/notifications.svelte';
 
   let {
     onSaved,
@@ -39,7 +40,6 @@
   let sizeMaxMb = $state(0);
   let saving = $state(false);
   let testing = $state(false);
-  let error = $state<string | null>(null);
   let testResults = $state<RuleMatchExplanation[]>([]);
   async function browseWatchPath() {
     try {
@@ -48,7 +48,7 @@
         watchPath = selected;
       }
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('rules.errorSelectFolder'));
+      notifications.error(getErrorMessage(reason, i18n.t('rules.errorSelectFolder')));
     }
   }
 
@@ -59,7 +59,7 @@
         destinationPath = selected;
       }
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('rules.errorSelectFolder'));
+      notifications.error(getErrorMessage(reason, i18n.t('rules.errorSelectFolder')));
     }
   }
 
@@ -133,7 +133,6 @@
       }
     }
     testResults = [];
-    error = null;
   }
 
   $effect(() => {
@@ -169,13 +168,12 @@
 
   async function submit() {
     saving = true;
-    error = null;
     try {
       await saveRule(buildRule());
       if (!rule) reset();
       await onSaved();
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('rules.errorSaveRule'));
+      notifications.error(getErrorMessage(reason, i18n.t('rules.errorSaveRule')));
     } finally {
       saving = false;
     }
@@ -183,11 +181,10 @@
 
   async function preview() {
     testing = true;
-    error = null;
     try {
       testResults = await testRule(buildRule());
     } catch (reason) {
-      error = getErrorMessage(reason, i18n.t('rules.errorTest'));
+      notifications.error(getErrorMessage(reason, i18n.t('rules.errorTest')));
     } finally {
       testing = false;
     }
@@ -434,12 +431,6 @@
       {/if}
     </div>
   </div>
-
-  {#if error}
-    <div class="p-3 text-xs rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300">
-      {error}
-    </div>
-  {/if}
 
   <!-- Footer actions -->
   <div
