@@ -1,4 +1,4 @@
-use redb::{Database, ReadableTable};
+use redb::{Database, ReadableDatabase, ReadableTable};
 
 use crate::models::{AppError, AutomationRule};
 use crate::storage::RULES_BY_ID_TABLE;

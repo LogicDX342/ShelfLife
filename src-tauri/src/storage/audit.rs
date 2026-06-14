@@ -1,4 +1,4 @@
-use redb::{Database, ReadableTable};
+use redb::{Database, ReadableDatabase, ReadableTable};
 use std::cmp::Reverse;
 
 use crate::models::{AppError, AuditEntry};

@@ -1,4 +1,4 @@
-use redb::{Database, ReadableTable};
+use redb::{Database, ReadableDatabase, ReadableTable};
 
 use crate::models::{AppError, Expiry, FileDecayState, TrackedFile};
 use crate::storage::{TRACKED_BY_EXPIRY_TABLE, TRACKED_BY_PATH_TABLE, TRACKED_BY_RULE_TABLE};
