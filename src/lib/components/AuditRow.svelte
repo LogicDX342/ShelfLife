@@ -4,6 +4,13 @@
   import type { AuditEntry } from '$lib/types';
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
   import { notifications } from '$lib/stores/notifications.svelte';
+  import IconDelete from '~icons/fluent/delete-20-regular';
+  import IconFolderArrowRight from '~icons/fluent/folder-arrow-right-20-regular';
+  import IconEdit from '~icons/fluent/edit-20-regular';
+  import IconPin from '~icons/fluent/pin-20-regular';
+  import IconClock from '~icons/fluent/clock-20-regular';
+  import IconEyeOff from '~icons/fluent/eye-off-20-regular';
+  import IconCheckmark from '~icons/fluent/checkmark-16-regular';
 
   let { entry, onRefresh } = $props<{ entry: AuditEntry; onRefresh: () => Promise<void> }>();
   let busy = $state(false);
@@ -60,59 +67,17 @@
     <!-- Action icon badge -->
     <div class="p-2.5 rounded-lg flex-shrink-0 {getActionColors(entry.action_kind)}">
       {#if entry.action_kind === 'Trash'}
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-          />
-        </svg>
+        <IconDelete class="w-5 h-5" />
       {:else if entry.action_kind === 'Move'}
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-          />
-        </svg>
+        <IconFolderArrowRight class="w-5 h-5" />
       {:else if entry.action_kind === 'Rename'}
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-          />
-        </svg>
+        <IconEdit class="w-5 h-5" />
       {:else if entry.action_kind === 'Pin'}
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-          />
-        </svg>
+        <IconPin class="w-5 h-5" />
       {:else if entry.action_kind === 'Snooze'}
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
+        <IconClock class="w-5 h-5" />
       {:else}
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"
-          />
-        </svg>
+        <IconEyeOff class="w-5 h-5" />
       {/if}
     </div>
 
@@ -174,14 +139,7 @@
       <span
         class="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-semibold px-2.5 py-1 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/40 rounded"
       >
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2.5"
-            d="M5 13l4 4L19 7"
-          />
-        </svg>
+        <IconCheckmark class="w-3.5 h-3.5" />
         {i18n.t('audit.undone')}
       </span>
     {:else}

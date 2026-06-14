@@ -1,6 +1,11 @@
 <script lang="ts">
   import { notifications } from '$lib/stores/notifications.svelte';
   import { fade, fly } from 'svelte/transition';
+  import IconCheckmarkCircle from '~icons/fluent/checkmark-circle-24-regular';
+  import IconErrorCircle from '~icons/fluent/error-circle-24-regular';
+  import IconWarning from '~icons/fluent/warning-24-regular';
+  import IconInfo from '~icons/fluent/info-24-regular';
+  import IconDismiss from '~icons/fluent/dismiss-16-regular';
 </script>
 
 <div
@@ -29,65 +34,13 @@
       <!-- Icon indicator -->
       <div class="flex-shrink-0 mt-0.5">
         {#if toast.type === 'success'}
-          <svg
-            class="w-5 h-5 text-green-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          <IconCheckmarkCircle class="w-5 h-5 text-green-500" />
         {:else if toast.type === 'error'}
-          <svg
-            class="w-5 h-5 text-red-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
+          <IconErrorCircle class="w-5 h-5 text-red-500" />
         {:else if toast.type === 'warning'}
-          <svg
-            class="w-5 h-5 text-amber-500"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
+          <IconWarning class="w-5 h-5 text-amber-500" />
         {:else}
-          <svg
-            class="w-5 h-5 text-fluent-accent"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          <IconInfo class="w-5 h-5 text-fluent-accent" />
         {/if}
       </div>
 
@@ -109,23 +62,9 @@
         class="text-fluent-muted-light dark:text-fluent-muted-dark hover:text-fluent-text-light dark:hover:text-fluent-text-dark flex-shrink-0 transition-colors p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
         aria-label="Dismiss notification"
       >
-        <svg
-          class="w-3.5 h-3.5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
+        <IconDismiss class="w-3.5 h-3.5" />
       </button>
 
-      <!-- Progress line indicator at bottom edge -->
       {#if toast.duration > 0}
         <div
           class="absolute bottom-0 left-0 h-[3px] opacity-75 toast-progress

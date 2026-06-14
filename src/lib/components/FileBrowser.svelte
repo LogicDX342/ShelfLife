@@ -10,6 +10,8 @@
   import FileCard from './FileCard.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
+  import IconFolder from '~icons/fluent/folder-24-regular';
+  import IconFolderOpen from '~icons/fluent/folder-open-24-regular';
 
   let config = $state<AppConfig | null>(null);
   let currentDirectory = $state('');
@@ -316,19 +318,9 @@
             >
               <div class="flex items-center gap-3 min-w-0">
                 <!-- Folder Icon -->
-                <svg
+                <IconFolder
                   class="w-8 h-8 text-fluent-accent/80 group-hover:scale-105 transition-transform flex-shrink-0"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                  />
-                </svg>
+                />
                 <div class="min-w-0">
                   <h3
                     class="text-sm font-semibold truncate text-fluent-text-light dark:text-fluent-text-dark"
@@ -447,19 +439,9 @@
     <!-- Empty Folder Screen -->
     {#if directoryContents.folders.length === 0 && directoryContents.files.length === 0}
       <div class="fluent-card py-16 text-center">
-        <svg
+        <IconFolderOpen
           class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.8"
-            d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5M5 19a2 2 0 002-2v-5M7 10h3m-3 4h3m4-4h.01M17 14h.01"
-          />
-        </svg>
+        />
         <h3 class="text-base font-semibold">{i18n.t('browser.emptyFolder')}</h3>
         <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
           {i18n.t('browser.emptyFolderDesc')}

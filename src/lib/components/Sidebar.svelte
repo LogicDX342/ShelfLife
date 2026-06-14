@@ -4,6 +4,16 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { pauseWatching, resumeWatching } from '$lib/api/config';
   import { filesState } from '$lib/stores/files.svelte';
+  import IconBoard from '~icons/fluent/board-24-regular';
+  import IconClipboardList from '~icons/fluent/clipboard-task-list-ltr-24-regular';
+  import IconFolderOpen from '~icons/fluent/folder-open-24-regular';
+  import IconFlash from '~icons/fluent/flash-24-regular';
+  import IconHistory from '~icons/fluent/history-24-regular';
+  import IconSettings from '~icons/fluent/settings-24-regular';
+  import IconArchive from '~icons/fluent/archive-24-regular';
+  import IconPlayCircle from '~icons/fluent/play-circle-24-regular';
+  import IconPauseCircle from '~icons/fluent/pause-circle-24-regular';
+  import IconSpinner from '~icons/fluent/spinner-ios-20-regular';
 
   let isPaused = $state(false);
 
@@ -25,28 +35,28 @@
     {
       path: '/',
       labelKey: 'nav.dashboard',
-      icon: 'M4 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5zm10 0a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V5zM4 14a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4zm10 0a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-4z',
+      icon: IconBoard,
     },
     {
       path: '/queue',
       labelKey: 'nav.queue',
-      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
+      icon: IconClipboardList,
     },
     {
       path: '/browser',
       labelKey: 'nav.browser',
-      icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
+      icon: IconFolderOpen,
     },
     {
       path: '/rules',
       labelKey: 'nav.rules',
-      icon: 'M3 5.5 L5.5 8 L9.5 4 M14 6 H21 M3 11.5 L5.5 14 L9.5 10 M14 12 H21 M3 17.5 L5.5 20 L9.5 16 M14 18 H21',
+      icon: IconFlash,
     },
-    { path: '/audit', labelKey: 'nav.audit', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+    { path: '/audit', labelKey: 'nav.audit', icon: IconHistory },
     {
       path: '/settings',
       labelKey: 'nav.settings',
-      icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+      icon: IconSettings,
     },
   ];
 
@@ -66,22 +76,7 @@
     class="px-3 md:px-6 pt-5 pb-2 flex items-center justify-center md:justify-start gap-3"
     data-tauri-drag-region
   >
-    <svg
-      class="w-6 h-6 text-fluent-accent flex-shrink-0"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-      data-tauri-drag-region
-    >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2.5"
-        data-tauri-drag-region
-        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-      ></path>
-    </svg>
+    <IconArchive class="w-6 h-6 text-fluent-accent flex-shrink-0" data-tauri-drag-region />
     <span
       class="hidden md:inline text-lg font-bold tracking-wide whitespace-nowrap"
       data-tauri-drag-region>ShelfLife</span
@@ -91,6 +86,7 @@
   <!-- Navigation -->
   <nav class="flex-1 px-2 md:px-3 pb-4 space-y-1" aria-label="Primary">
     {#each navItems as item (item.path)}
+      {@const Icon = item.icon}
       <a
         href="{base}{item.path}"
         class="relative flex items-center justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 rounded-md text-sm font-medium transition-all duration-150 group {isActive(
@@ -104,16 +100,9 @@
         {#if isActive(item.path)}
           <div class="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-fluent-accent"></div>
         {/if}
-        <svg
+        <Icon
           class="w-5 h-5 flex-shrink-0 transition-transform duration-150 group-hover:scale-105"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={item.icon}
-          ></path>
-        </svg>
+        />
         <span class="hidden md:inline whitespace-nowrap">{i18n.t(item.labelKey)}</span>
       </a>
     {/each}
@@ -163,15 +152,7 @@
         <div
           class="w-10 h-10 flex items-center justify-center rounded-md bg-blue-500/10 dark:bg-blue-400/5 border border-blue-500/15"
         >
-          <svg class="w-4 h-4 text-fluent-accent animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
+          <IconSpinner class="w-4 h-4 text-fluent-accent animate-spin" />
           <span
             class="absolute -top-1 -right-1 bg-fluent-accent text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full scale-75 shadow-sm"
           >
@@ -214,42 +195,14 @@
           : i18n.t('status.active')}"
       >
         {#if isPaused}
-          <svg
+          <IconPlayCircle
             class="w-5 h-5 text-amber-500 dark:text-amber-400 transition-transform duration-150 group-hover:scale-105"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.8"
-              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-            ></path>
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.8"
-              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
+          />
           <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500"></span>
         {:else}
-          <svg
+          <IconPauseCircle
             class="w-5 h-5 text-emerald-500 dark:text-emerald-400 transition-transform duration-150 group-hover:scale-105"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.8"
-              d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
-          </svg>
+          />
           <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
           ></span>
         {/if}

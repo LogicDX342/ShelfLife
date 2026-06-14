@@ -1,6 +1,11 @@
 <script lang="ts">
   import type { RuleMatchExplanation } from '$lib/types';
   import { i18n } from '$lib/i18n/i18n.svelte';
+  import IconLockClosed from '~icons/fluent/lock-closed-16-regular';
+  import IconDelete from '~icons/fluent/delete-16-regular';
+  import IconFolderArrowRight from '~icons/fluent/folder-arrow-right-16-regular';
+  import IconEdit from '~icons/fluent/edit-16-regular';
+  import IconEyeOff from '~icons/fluent/eye-off-16-regular';
 
   let { explanation } = $props<{ explanation: RuleMatchExplanation }>();
 
@@ -105,14 +110,7 @@
       class="flex items-center gap-1.5 px-2 py-0.5 border-r font-semibold {styleClasses.leftSide}"
       title={i18n.t('file.protected')}
     >
-      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2.2"
-          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-        />
-      </svg>
+      <IconLockClosed class="w-3 h-3" />
       <span>{i18n.t('file.protected')}</span>
     </div>
   {:else}
@@ -121,44 +119,16 @@
     >
       {#if actionType === 'Trash'}
         <!-- Clean outline trash bin icon (no internal vertical lines) -->
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7M5 7h14m-3 0V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3"
-          />
-        </svg>
+        <IconDelete class="w-3.5 h-3.5" />
       {:else if actionType === 'Move'}
         <!-- Move / Folder icon -->
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-          />
-        </svg>
+        <IconFolderArrowRight class="w-3 h-3" />
       {:else if actionType === 'Rename'}
         <!-- Rename / Edit icon -->
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-          />
-        </svg>
+        <IconEdit class="w-3 h-3" />
       {:else if actionType === 'Ignore'}
         <!-- Ignore / Ban icon -->
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-          />
-        </svg>
+        <IconEyeOff class="w-3 h-3" />
       {/if}
       <span>{actionLabel}</span>
     </div>
