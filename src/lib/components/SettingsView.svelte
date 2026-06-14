@@ -7,7 +7,7 @@
     runReconciliationScan,
   } from '$lib/api/config';
   import { selectDirectory } from '$lib/api/files';
-  import { enable, disable } from '@tauri-apps/plugin-autostart';
+  import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { getErrorMessage } from '$lib/utils/format';
   import type { AppConfig, CloseBehavior, WatchTarget } from '$lib/types';
@@ -16,6 +16,7 @@
   import { notifications } from '$lib/stores/notifications.svelte';
   import IconSpinner from '~icons/fluent/spinner-ios-20-regular';
   import IconArrowSync from '~icons/fluent/arrow-sync-16-regular';
+  import IconCheckmark from '~icons/fluent/checkmark-16-regular';
 
   type PendingWatchTarget = {
     target: WatchTarget;
@@ -33,15 +34,17 @@
   let notificationsEnabled = $state(true);
   let startAtLogin = $state(false);
   let closeBehavior = $state<CloseBehavior>('Ask');
-  let savingPrefs = $state(false);
   let addingTarget = $state(false);
   let rejectedTargetId = $state<string | null>(null);
+  let showSavedIndicator = $state(false);
+  let savedTimeoutId: number | null = null;
 
   async function browseSafeFolder() {
     try {
       const selected = await selectDirectory('Select Safe Folder', safeFolderPath);
       if (selected) {
         safeFolderPath = selected;
+        await savePreferences();
       }
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('settings.errorSelectFolder')));
@@ -208,14 +211,20 @@
     });
   }
 
-  async function savePreferences() {
-    if (!config) return;
-    savingPrefs = true;
+  async function savePreferences(): Promise<boolean> {
+    if (!config) return false;
+
+    showSavedIndicator = false;
+    if (savedTimeoutId) {
+      window.clearTimeout(savedTimeoutId);
+      savedTimeoutId = null;
+    }
+
     try {
       const trimmedSafeFolderPath = safeFolderPath.trim();
       if (safeFolderOverlapsEnabledTarget(trimmedSafeFolderPath)) {
         notifications.error(i18n.t('settings.errorSafeFolderOverlap'));
-        return;
+        return false;
       }
 
       await saveConfig({
@@ -229,18 +238,24 @@
         close_behavior: closeBehavior,
       });
 
-      if (startAtLogin) {
+      const currentlyEnabled = await isEnabled();
+      if (startAtLogin && !currentlyEnabled) {
         await enable();
-      } else {
+      } else if (!startAtLogin && currentlyEnabled) {
         await disable();
       }
 
       await refreshConfig();
-      notifications.success(i18n.t('settings.saved'));
+
+      showSavedIndicator = true;
+      savedTimeoutId = window.setTimeout(() => {
+        showSavedIndicator = false;
+      }, 2500);
+
+      return true;
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('settings.errorSavePrefs')));
-    } finally {
-      savingPrefs = false;
+      return false;
     }
   }
 
@@ -326,11 +341,25 @@
         <div class="space-y-6">
           <!-- General Preferences Section -->
           <section class="fluent-card p-6 space-y-4">
-            <h3
-              class="text-sm font-semibold text-fluent-accent border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
+            <div
+              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
             >
-              {i18n.t('settings.general')}
-            </h3>
+              <h3 class="text-sm font-semibold text-fluent-accent">
+                {i18n.t('settings.general')}
+              </h3>
+              <div
+                class="text-[11px] flex items-center gap-1.5 text-fluent-muted-light dark:text-fluent-muted-dark min-h-[1.5rem]"
+              >
+                {#if showSavedIndicator}
+                  <span
+                    class="text-green-600 dark:text-green-400 flex items-center gap-1 font-semibold transition-all duration-300"
+                  >
+                    <IconCheckmark class="w-3.5 h-3.5" />
+                    {i18n.t('settings.savedShort')}
+                  </span>
+                {/if}
+              </div>
+            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <label class="flex flex-col gap-1.5">
@@ -339,7 +368,11 @@
                   >{i18n.t('settings.safeFolder')}</span
                 >
                 <div class="flex gap-2">
-                  <input bind:value={safeFolderPath} class="fluent-input text-xs flex-1 min-w-0" />
+                  <input
+                    bind:value={safeFolderPath}
+                    onchange={savePreferences}
+                    class="fluent-input text-xs flex-1 min-w-0"
+                  />
                   <button
                     type="button"
                     class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
@@ -359,6 +392,7 @@
                   min="1"
                   type="number"
                   bind:value={defaultTtlDays}
+                  onchange={savePreferences}
                   class="fluent-input text-xs"
                 />
               </label>
@@ -372,6 +406,7 @@
                   min="1"
                   type="number"
                   bind:value={staleThresholdDays}
+                  onchange={savePreferences}
                   class="fluent-input text-xs"
                 />
               </label>
@@ -385,6 +420,7 @@
                   min="1"
                   type="number"
                   bind:value={decayingThresholdHours}
+                  onchange={savePreferences}
                   class="fluent-input text-xs"
                 />
               </label>
@@ -434,8 +470,10 @@
                 <select
                   class="fluent-input text-xs"
                   value={closeBehavior}
-                  onchange={(event) =>
-                    (closeBehavior = (event.target as HTMLSelectElement).value as CloseBehavior)}
+                  onchange={async (event) => {
+                    closeBehavior = (event.target as HTMLSelectElement).value as CloseBehavior;
+                    await savePreferences();
+                  }}
                 >
                   <option value="Ask">{i18n.t('settings.closeAsk')}</option>
                   <option value="HideToTray">{i18n.t('settings.closeHideToTray')}</option>
@@ -456,7 +494,10 @@
                     type="checkbox"
                     class="fluent-switch-input"
                     checked={notificationsEnabled}
-                    onchange={() => (notificationsEnabled = !notificationsEnabled)}
+                    onchange={async () => {
+                      notificationsEnabled = !notificationsEnabled;
+                      await savePreferences();
+                    }}
                   />
                   <span class="fluent-switch-track">
                     <span class="fluent-switch-thumb"></span>
@@ -474,24 +515,16 @@
                     type="checkbox"
                     class="fluent-switch-input"
                     checked={startAtLogin}
-                    onchange={() => (startAtLogin = !startAtLogin)}
+                    onchange={async () => {
+                      startAtLogin = !startAtLogin;
+                      await savePreferences();
+                    }}
                   />
                   <span class="fluent-switch-track">
                     <span class="fluent-switch-thumb"></span>
                   </span>
                 </label>
               </div>
-            </div>
-
-            <!-- Action buttons -->
-            <div class="pt-2">
-              <button
-                class="fluent-button fluent-button-primary text-xs font-semibold"
-                onclick={savePreferences}
-                disabled={savingPrefs}
-              >
-                {savingPrefs ? i18n.t('settings.saving') : i18n.t('settings.save')}
-              </button>
             </div>
           </section>
 
