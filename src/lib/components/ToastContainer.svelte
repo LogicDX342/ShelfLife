@@ -1,11 +1,12 @@
 <script lang="ts">
   import { notifications } from '$lib/stores/notifications.svelte';
   import { fade, fly } from 'svelte/transition';
-  import IconCheckmarkCircle from '~icons/fluent/checkmark-circle-24-regular';
-  import IconErrorCircle from '~icons/fluent/error-circle-24-regular';
-  import IconWarning from '~icons/fluent/warning-24-regular';
-  import IconInfo from '~icons/fluent/info-24-regular';
-  import IconDismiss from '~icons/fluent/dismiss-16-regular';
+  import { Button } from '$lib/components/ui/button';
+  import IconCheckmarkCircle from '@lucide/svelte/icons/circle-check';
+  import IconErrorCircle from '@lucide/svelte/icons/circle-x';
+  import IconWarning from '@lucide/svelte/icons/triangle-alert';
+  import IconInfo from '@lucide/svelte/icons/info';
+  import IconDismiss from '@lucide/svelte/icons/x';
 </script>
 
 <div
@@ -23,7 +24,7 @@
           notifications.cancelTimer(toast.id);
         }
       }}
-      class="acrylic-card rounded-lg shadow-lg pointer-events-auto p-4 flex gap-3 items-start border-l-4 overflow-hidden relative select-none transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer
+      class="rounded-lg border bg-card/95 text-card-foreground shadow-lg backdrop-blur-xl pointer-events-auto p-4 flex gap-3 items-start border-l-4 overflow-hidden relative select-none transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer
         {toast.type === 'success' ? 'border-l-green-500' : ''}
         {toast.type === 'error' ? 'border-l-red-500' : ''}
         {toast.type === 'warning' ? 'border-l-amber-500' : ''}
@@ -54,16 +55,18 @@
       </div>
 
       <!-- Close button -->
-      <button
+      <Button
+        variant="ghost"
+        size="icon-xs"
         onclick={(e) => {
           e.stopPropagation();
           notifications.dismiss(toast.id);
         }}
-        class="text-fluent-muted-light dark:text-fluent-muted-dark hover:text-fluent-text-light dark:hover:text-fluent-text-dark flex-shrink-0 transition-colors p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+        class="flex-shrink-0 text-muted-foreground"
         aria-label="Dismiss notification"
       >
         <IconDismiss class="w-3.5 h-3.5" />
-      </button>
+      </Button>
 
       {#if toast.duration > 0}
         <div

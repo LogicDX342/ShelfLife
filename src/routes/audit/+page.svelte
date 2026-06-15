@@ -4,8 +4,10 @@
   import { auditState } from '$lib/stores/audit.svelte';
   import { listen } from '@tauri-apps/api/event';
   import { i18n } from '$lib/i18n/i18n.svelte';
-  import IconSpinner from '~icons/fluent/spinner-ios-20-regular';
-  import IconHistory from '~icons/fluent/history-24-regular';
+  import * as Empty from '$lib/components/ui/empty';
+  import { Button } from '$lib/components/ui/button';
+  import IconSpinner from '@lucide/svelte/icons/loader-circle';
+  import IconHistory from '@lucide/svelte/icons/history';
 
   onMount(() => {
     auditState.refresh();
@@ -36,9 +38,9 @@
         {i18n.t('audit.subtitle')}
       </p>
     </div>
-    <button class="fluent-button" onclick={() => auditState.refresh()}>
+    <Button variant="outline" onclick={() => auditState.refresh()}>
       {i18n.t('rules.refresh')}
-    </button>
+    </Button>
   </header>
 
   <!-- Scrollable content -->
@@ -56,15 +58,19 @@
         >
       </div>
     {:else if auditState.entries.length === 0}
-      <div class="fluent-card py-16 text-center bg-fluent-card-light dark:bg-fluent-card-dark">
-        <IconHistory
-          class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3"
-        />
-        <h3 class="text-base font-semibold">{i18n.t('audit.noLogs')}</h3>
-        <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-          {i18n.t('audit.noLogsDesc')}
-        </p>
-      </div>
+      <Empty.Root class="border bg-muted/30">
+        <Empty.Header>
+          <Empty.Media>
+            <IconHistory
+              class="h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50"
+            />
+          </Empty.Media>
+          <Empty.Title>{i18n.t('audit.noLogs')}</Empty.Title>
+          <Empty.Description>
+            {i18n.t('audit.noLogsDesc')}
+          </Empty.Description>
+        </Empty.Header>
+      </Empty.Root>
     {:else}
       <!-- Timeline Container -->
       <div

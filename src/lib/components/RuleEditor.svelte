@@ -11,6 +11,11 @@
   } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
   import { notifications } from '$lib/stores/notifications.svelte';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { Input } from '$lib/components/ui/input';
+  import * as Select from '$lib/components/ui/select';
+  import { Switch } from '$lib/components/ui/switch';
 
   let {
     onSaved,
@@ -189,6 +194,26 @@
       testing = false;
     }
   }
+
+  function modeLabel(value: RuleMode) {
+    if (value === 'AskFirst') return i18n.t('rules.modeAskFirst');
+    if (value === 'Automatic') return i18n.t('rules.modeAutomatic');
+    return i18n.t('rules.modePreviewOnly');
+  }
+
+  function sizeKindLabel(value: typeof sizeKind) {
+    if (value === 'LessThan') return i18n.t('rules.lessThan');
+    if (value === 'GreaterThan') return i18n.t('rules.greaterThan');
+    if (value === 'Between') return i18n.t('rules.between');
+    return i18n.t('rules.anySize');
+  }
+
+  function actionKindLabel(value: typeof actionKind) {
+    if (value === 'Trash') return i18n.t('file.trash');
+    if (value === 'Move') return i18n.t('rules.actionMoveLabel');
+    if (value === 'Rename') return i18n.t('rules.actionRenameLabel');
+    return i18n.t('rules.actionIgnoreLabel');
+  }
 </script>
 
 <form
@@ -210,12 +235,7 @@
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.ruleName')}</span
         >
-        <input
-          bind:value={name}
-          required
-          placeholder={i18n.t('rules.ruleNamePlaceholder')}
-          class="fluent-input"
-        />
+        <Input bind:value={name} required placeholder={i18n.t('rules.ruleNamePlaceholder')} />
       </label>
 
       <label class="flex flex-col gap-1">
@@ -223,19 +243,10 @@
           >{i18n.t('rules.watchTargetPath')}</span
         >
         <div class="flex gap-2">
-          <input
-            bind:value={watchPath}
-            required
-            placeholder="C:\Users\Name\Downloads"
-            class="fluent-input flex-1 min-w-0"
-          />
-          <button
-            type="button"
-            class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
-            onclick={browseWatchPath}
-          >
+          <Input bind:value={watchPath} required placeholder="C:\Users\Name\Downloads" />
+          <Button type="button" variant="outline" onclick={browseWatchPath}>
             {i18n.t('settings.browse')}
-          </button>
+          </Button>
         </div>
       </label>
 
@@ -244,14 +255,14 @@
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
             >{i18n.t('rules.priority')}</span
           >
-          <input type="number" bind:value={priority} class="fluent-input" />
+          <Input type="number" bind:value={priority} />
         </label>
         {#if actionKind !== 'Ignore'}
           <label class="flex flex-col gap-1">
             <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
               >{i18n.t('rules.ttlDaysLabel')}</span
             >
-            <input min="1" type="number" bind:value={ttlDays} class="fluent-input" />
+            <Input min="1" type="number" bind:value={ttlDays} />
           </label>
         {/if}
       </div>
@@ -260,28 +271,23 @@
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.mode')}</span
         >
-        <select bind:value={mode} class="fluent-input">
-          <option value="PreviewOnly">{i18n.t('rules.modePreviewOnly')}</option>
-          <option value="AskFirst">{i18n.t('rules.modeAskFirst')}</option>
-          <option value="Automatic">{i18n.t('rules.modeAutomatic')}</option>
-        </select>
+        <Select.Root type="single" bind:value={mode}>
+          <Select.Trigger>
+            <span data-slot="select-value">{modeLabel(mode)}</span>
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="PreviewOnly" label={i18n.t('rules.modePreviewOnly')} />
+            <Select.Item value="AskFirst" label={i18n.t('rules.modeAskFirst')} />
+            <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
+          </Select.Content>
+        </Select.Root>
       </label>
 
       <div class="flex items-center gap-3 pt-6 select-none">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.enabled')}</span
         >
-        <label class="fluent-switch">
-          <input
-            type="checkbox"
-            class="fluent-switch-input"
-            checked={enabled}
-            onchange={() => (enabled = !enabled)}
-          />
-          <span class="fluent-switch-track">
-            <span class="fluent-switch-thumb"></span>
-          </span>
-        </label>
+        <Switch bind:checked={enabled} aria-label={i18n.t('rules.enabled')} />
       </div>
     </div>
   </div>
@@ -298,32 +304,23 @@
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.extensions')}</span
         >
-        <input
-          bind:value={extensions}
-          placeholder={i18n.t('rules.extensionsPlaceholder')}
-          class="fluent-input"
-        />
+        <Input bind:value={extensions} placeholder={i18n.t('rules.extensionsPlaceholder')} />
       </label>
 
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.filenameGlobs')}</span
         >
-        <input
-          bind:value={filenameGlobs}
-          placeholder={i18n.t('rules.filenameGlobsPlaceholder')}
-          class="fluent-input"
-        />
+        <Input bind:value={filenameGlobs} placeholder={i18n.t('rules.filenameGlobsPlaceholder')} />
       </label>
 
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.filenameRegexes')}</span
         >
-        <input
+        <Input
           bind:value={filenameRegexes}
           placeholder={i18n.t('rules.filenameRegexesPlaceholder')}
-          class="fluent-input"
         />
       </label>
 
@@ -331,11 +328,7 @@
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.sourceDomains')}</span
         >
-        <input
-          bind:value={sourceDomains}
-          placeholder={i18n.t('rules.sourceDomainsPlaceholder')}
-          class="fluent-input"
-        />
+        <Input bind:value={sourceDomains} placeholder={i18n.t('rules.sourceDomainsPlaceholder')} />
       </label>
     </div>
 
@@ -345,12 +338,17 @@
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.fileSizeCriteria')}</span
         >
-        <select bind:value={sizeKind} class="fluent-input">
-          <option value="Any">{i18n.t('rules.anySize')}</option>
-          <option value="LessThan">{i18n.t('rules.lessThan')}</option>
-          <option value="GreaterThan">{i18n.t('rules.greaterThan')}</option>
-          <option value="Between">{i18n.t('rules.between')}</option>
-        </select>
+        <Select.Root type="single" bind:value={sizeKind}>
+          <Select.Trigger>
+            <span data-slot="select-value">{sizeKindLabel(sizeKind)}</span>
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="Any" label={i18n.t('rules.anySize')} />
+            <Select.Item value="LessThan" label={i18n.t('rules.lessThan')} />
+            <Select.Item value="GreaterThan" label={i18n.t('rules.greaterThan')} />
+            <Select.Item value="Between" label={i18n.t('rules.between')} />
+          </Select.Content>
+        </Select.Root>
       </label>
 
       {#if sizeKind === 'GreaterThan' || sizeKind === 'Between'}
@@ -358,7 +356,7 @@
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
             >{i18n.t('rules.minSizeMb')}</span
           >
-          <input min="0" type="number" bind:value={sizeMinMb} class="fluent-input" />
+          <Input min="0" type="number" bind:value={sizeMinMb} />
         </label>
       {/if}
 
@@ -367,7 +365,7 @@
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
             >{i18n.t('rules.maxSizeMb')}</span
           >
-          <input min="0" type="number" bind:value={sizeMaxMb} class="fluent-input" />
+          <Input min="0" type="number" bind:value={sizeMaxMb} />
         </label>
       {/if}
     </div>
@@ -385,12 +383,17 @@
         <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
           >{i18n.t('rules.action')}</span
         >
-        <select bind:value={actionKind} class="fluent-input">
-          <option value="Ignore">{i18n.t('rules.actionIgnoreLabel')}</option>
-          <option value="Trash">{i18n.t('file.trash')}</option>
-          <option value="Move">{i18n.t('rules.actionMoveLabel')}</option>
-          <option value="Rename">{i18n.t('rules.actionRenameLabel')}</option>
-        </select>
+        <Select.Root type="single" bind:value={actionKind}>
+          <Select.Trigger>
+            <span data-slot="select-value">{actionKindLabel(actionKind)}</span>
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="Ignore" label={i18n.t('rules.actionIgnoreLabel')} />
+            <Select.Item value="Trash" label={i18n.t('file.trash')} />
+            <Select.Item value="Move" label={i18n.t('rules.actionMoveLabel')} />
+            <Select.Item value="Rename" label={i18n.t('rules.actionRenameLabel')} />
+          </Select.Content>
+        </Select.Root>
       </label>
 
       {#if actionKind === 'Move'}
@@ -399,19 +402,10 @@
             >{i18n.t('rules.destinationPath')}</span
           >
           <div class="flex gap-2">
-            <input
-              bind:value={destinationPath}
-              placeholder="C:\SafeFolder"
-              class="fluent-input flex-1 min-w-0"
-              required
-            />
-            <button
-              type="button"
-              class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
-              onclick={browseDestinationPath}
-            >
+            <Input bind:value={destinationPath} placeholder="C:\SafeFolder" required />
+            <Button type="button" variant="outline" onclick={browseDestinationPath}>
               {i18n.t('settings.browse')}
-            </button>
+            </Button>
           </div>
         </label>
       {/if}
@@ -421,12 +415,7 @@
           <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
             >{i18n.t('rules.renameTemplate')}</span
           >
-          <input
-            bind:value={renameTemplate}
-            placeholder="e.g. YYYY-MM-DD_{name}.ext"
-            class="fluent-input"
-            required
-          />
+          <Input bind:value={renameTemplate} placeholder="e.g. YYYY-MM-DD_{name}.ext" required />
         </label>
       {/if}
     </div>
@@ -436,49 +425,49 @@
   <div
     class="flex items-center justify-end gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-4"
   >
-    <button class="fluent-button" type="button" onclick={preview} disabled={testing}>
+    <Button variant="outline" type="button" onclick={preview} disabled={testing}>
       {#if testing}
         Testing...
       {:else}
         {i18n.t('rules.testRule')}
       {/if}
-    </button>
+    </Button>
     {#if onCancel}
-      <button class="fluent-button" type="button" onclick={onCancel}>
+      <Button variant="outline" type="button" onclick={onCancel}>
         {i18n.t('dialog.no')}
-      </button>
+      </Button>
     {/if}
-    <button class="fluent-button fluent-button-primary" type="submit" disabled={saving}>
+    <Button type="submit" disabled={saving}>
       {i18n.t('rules.saveRule')}
-    </button>
+    </Button>
   </div>
 
   <!-- Live Test Panel -->
   {#if testResults.length > 0}
-    <div
-      class="fluent-card p-4 space-y-3 bg-neutral-50 dark:bg-neutral-900/40 border border-fluent-accent/10"
-    >
-      <h5 class="text-xs font-semibold text-fluent-text-light dark:text-fluent-text-dark">
-        {i18n.t('rules.testResultsCount', { count: testResults.length })}
-      </h5>
-      <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
-        {#each testResults as result (result.file_path)}
-          <div
-            class="p-2.5 bg-black/5 dark:bg-white/5 rounded text-xs flex justify-between items-center gap-2"
-          >
-            <span class="truncate font-medium flex-1" title={result.file_path}
-              >{result.file_path.split('\\').pop() || result.file_path}</span
+    <Card.Root>
+      <Card.Content class="space-y-4">
+        <h5 class="text-xs font-semibold text-fluent-text-light dark:text-fluent-text-dark">
+          {i18n.t('rules.testResultsCount', { count: testResults.length })}
+        </h5>
+        <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
+          {#each testResults as result (result.file_path)}
+            <div
+              class="p-2.5 bg-black/5 dark:bg-white/5 rounded text-xs flex justify-between items-center gap-2"
             >
-            {#if result.size_bytes !== null}
-              <span
-                class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark flex-shrink-0"
+              <span class="truncate font-medium flex-1" title={result.file_path}
+                >{result.file_path.split('\\').pop() || result.file_path}</span
               >
-                {formatBytes(result.size_bytes)}
-              </span>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    </div>
+              {#if result.size_bytes !== null}
+                <span
+                  class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark flex-shrink-0"
+                >
+                  {formatBytes(result.size_bytes)}
+                </span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </Card.Content>
+    </Card.Root>
   {/if}
 </form>

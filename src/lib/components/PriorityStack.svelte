@@ -5,9 +5,12 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import FileCard from './FileCard.svelte';
   import StatusBar from './StatusBar.svelte';
-  import IconSearch from '~icons/fluent/search-20-regular';
-  import IconSpinner from '~icons/fluent/spinner-ios-20-regular';
-  import IconDocument from '~icons/fluent/document-24-regular';
+  import * as Empty from '$lib/components/ui/empty';
+  import { Button } from '$lib/components/ui/button';
+  import * as InputGroup from '$lib/components/ui/input-group';
+  import IconSearch from '@lucide/svelte/icons/search';
+  import IconSpinner from '@lucide/svelte/icons/loader-circle';
+  import IconDocument from '@lucide/svelte/icons/file';
 
   let searchInputValue = $state('');
   let searchQuery = $state('');
@@ -92,16 +95,17 @@
     </div>
 
     <!-- Search Input -->
-    <div class="relative w-full md:max-w-md">
-      <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-        <IconSearch class="h-4 w-4 text-fluent-muted-light dark:text-fluent-muted-dark" />
-      </div>
-      <input
-        type="text"
-        placeholder={i18n.t('dashboard.search')}
-        bind:value={searchInputValue}
-        class="fluent-input pr-10 w-full"
-      />
+    <div>
+      <InputGroup.Root>
+        <InputGroup.Input
+          type="text"
+          placeholder={i18n.t('dashboard.search')}
+          bind:value={searchInputValue}
+        />
+        <InputGroup.Addon>
+          <IconSearch />
+        </InputGroup.Addon>
+      </InputGroup.Root>
     </div>
   </header>
 
@@ -125,15 +129,19 @@
         >
       </div>
     {:else if filteredFiles.length === 0}
-      <div class="fluent-card py-16 text-center">
-        <IconDocument
-          class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3"
-        />
-        <h3 class="text-base font-semibold">{i18n.t('dashboard.noFiles')}</h3>
-        <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-          {i18n.t('dashboard.noFilesDesc')}
-        </p>
-      </div>
+      <Empty.Root class="border bg-muted/30">
+        <Empty.Header>
+          <Empty.Media>
+            <IconDocument
+              class="h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50"
+            />
+          </Empty.Media>
+          <Empty.Title>{i18n.t('dashboard.noFiles')}</Empty.Title>
+          <Empty.Description>
+            {i18n.t('dashboard.noFilesDesc')}
+          </Empty.Description>
+        </Empty.Header>
+      </Empty.Root>
     {:else}
       <div class="space-y-4">
         {#each filteredFiles.slice(0, visibleLimit) as file (file.path)}
@@ -142,13 +150,14 @@
 
         {#if filteredFiles.length > visibleLimit}
           <div class="pt-4 flex justify-center">
-            <button
+            <Button
               type="button"
-              class="fluent-button w-full justify-center text-xs font-semibold py-2.5"
+              variant="outline"
+              class="w-full"
               onclick={() => (visibleLimit += 100)}
             >
               {i18n.t('dashboard.loadMore', { count: filteredFiles.length - visibleLimit })}
-            </button>
+            </Button>
           </div>
         {/if}
       </div>
