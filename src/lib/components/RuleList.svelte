@@ -3,7 +3,7 @@
   import type { AutomationRule } from '$lib/types';
   import RuleCard from './RuleCard.svelte';
   import * as Empty from '$lib/components/ui/empty';
-  import IconSpinner from '@lucide/svelte/icons/loader-circle';
+  import { Spinner } from '$lib/components/ui/spinner';
   import IconDocumentBulletList from '@lucide/svelte/icons/list-checks';
 
   let {
@@ -27,8 +27,8 @@
 
 {#if loading && rules.length === 0}
   <div class="py-12 flex flex-col items-center justify-center gap-3">
-    <IconSpinner class="animate-spin h-8 w-8 text-fluent-accent" />
-    <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark">
+    <Spinner class="h-8 w-8 text-primary" />
+    <span class="text-sm text-muted-foreground">
       {i18n.t('rules.loading')}
     </span>
   </div>

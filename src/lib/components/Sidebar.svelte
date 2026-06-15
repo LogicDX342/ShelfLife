@@ -18,7 +18,7 @@
   import IconArchive from '@lucide/svelte/icons/archive';
   import IconPlayCircle from '@lucide/svelte/icons/circle-play';
   import IconPauseCircle from '@lucide/svelte/icons/circle-pause';
-  import IconSpinner from '@lucide/svelte/icons/loader-circle';
+  import { Spinner } from '$lib/components/ui/spinner';
 
   let isPaused = $state(false);
 
@@ -125,27 +125,19 @@
       <div class="mb-3 hidden md:block">
         <Card.Root>
           <Card.Content class="flex items-center gap-3">
-            <div class="relative flex items-center justify-center flex-shrink-0 w-5 h-5">
-              <!-- Outer spinning ring -->
-              <div
-                class="absolute inset-0 rounded-full border-2 border-fluent-accent/20 border-t-fluent-accent animate-spin"
-              ></div>
-              <!-- Inner pulsing active indicator dot -->
-              <div class="w-1.5 h-1.5 rounded-full bg-fluent-accent animate-pulse"></div>
+            <div class="flex items-center justify-center flex-shrink-0 w-5 h-5">
+              <Spinner class="w-5 h-5 text-primary" />
             </div>
             <div class="flex flex-col min-w-0 w-full gap-0.5">
-              <span
-                class="text-[11px] font-semibold text-fluent-text-light dark:text-fluent-text-dark"
-                >Syncing files...</span
-              >
-              <span class="text-[9px] text-fluent-muted-light dark:text-fluent-muted-dark truncate">
+              <span class="text-[11px] font-semibold text-foreground">Syncing files...</span>
+              <span class="text-[9px] text-muted-foreground truncate">
                 {filesState.filesScanned.toLocaleString()} files ({Math.floor(
                   filesState.syncDuration,
                 )}s)
               </span>
               {#if filesState.currentPath}
                 <span
-                  class="text-[8px] text-fluent-muted-light/70 dark:text-fluent-muted-dark/70 truncate"
+                  class="text-[8px] text-muted-foreground/70 truncate"
                   title={filesState.currentPath}
                 >
                   {filesState.currentPath}
@@ -162,7 +154,7 @@
         title="Syncing {filesState.filesScanned} files ({Math.floor(filesState.syncDuration)}s)..."
       >
         <div class="relative flex size-10 items-center justify-center rounded-md border bg-card">
-          <IconSpinner class="w-4 h-4 text-fluent-accent animate-spin" />
+          <Spinner class="w-4 h-4 text-primary" />
           <div class="absolute -right-2 -top-1 scale-75 text-[8px]">
             <Badge>{filesState.filesScanned > 999 ? '999+' : filesState.filesScanned}</Badge>
           </div>

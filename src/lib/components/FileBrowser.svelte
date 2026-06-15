@@ -334,7 +334,7 @@
             <Button
               onclick={() => (currentDirectory = folder.path)}
               variant="outline"
-              class="group h-auto justify-between rounded-lg p-4 text-left"
+              class="group h-auto justify-between p-4 text-left"
             >
               <div class="flex items-center gap-3 min-w-0">
                 <!-- Folder Icon -->
@@ -475,7 +475,7 @@
   <!-- Sticky Bulk Action Bar at Bottom -->
   {#if selectedPaths.length > 0}
     <div
-      class="fixed bottom-6 left-[88px] right-6 md:left-[264px] rounded-lg border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl flex items-center justify-between z-10 animate-slide-up"
+      class="fixed bottom-6 left-[88px] right-6 md:left-[264px] border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl flex items-center justify-between z-10 animate-slide-up"
     >
       <div class="flex items-center gap-4">
         <div class="flex flex-col">

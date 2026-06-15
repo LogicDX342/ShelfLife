@@ -11,7 +11,6 @@
   import type { AutomationRule, RuleMatchExplanation } from '$lib/types';
   import { notifications } from '$lib/stores/notifications.svelte';
   import { Button } from '$lib/components/ui/button';
-  import * as Card from '$lib/components/ui/card';
 
   let previewResults = $state<RuleMatchExplanation[]>([]);
   let editingRule = $state<AutomationRule | null>(null);
@@ -109,16 +108,14 @@
 
   <div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
     {#if showNewEditor || editingRule}
-      <Card.Root>
-        <Card.Content>
-          <h3 class="text-base font-semibold mb-4 text-fluent-accent">
-            {editingRule
-              ? i18n.t('rules.editRule', { name: editingRule.name })
-              : i18n.t('rules.newRule')}
-          </h3>
-          <RuleEditor rule={editingRule} onSaved={refreshAfterSave} onCancel={handleCancel} />
-        </Card.Content>
-      </Card.Root>
+      <div class="space-y-4">
+        <h2 class="text-lg font-semibold text-primary">
+          {editingRule
+            ? i18n.t('rules.editRule', { name: editingRule.name })
+            : i18n.t('rules.newRule')}
+        </h2>
+        <RuleEditor rule={editingRule} onSaved={refreshAfterSave} onCancel={handleCancel} />
+      </div>
     {/if}
 
     <RuleList

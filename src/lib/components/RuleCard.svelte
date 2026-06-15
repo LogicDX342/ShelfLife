@@ -23,7 +23,7 @@
   }>();
 </script>
 
-<Card.Root class="flex flex-col justify-between gap-4 rounded-lg p-4 md:flex-row md:items-center">
+<Card.Root class="flex flex-col justify-between gap-4 p-4 md:flex-row md:items-center">
   <div class="space-y-1 min-w-0 flex-1">
     <div class="flex items-center gap-2.5">
       <span

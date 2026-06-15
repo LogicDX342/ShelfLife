@@ -20,7 +20,7 @@
   import * as Select from '$lib/components/ui/select';
   import { Switch } from '$lib/components/ui/switch';
   import { Label } from '$lib/components/ui/label';
-  import IconSpinner from '@lucide/svelte/icons/loader-circle';
+  import { Spinner } from '$lib/components/ui/spinner';
   import IconArrowSync from '@lucide/svelte/icons/refresh-cw';
   import IconCheckmark from '@lucide/svelte/icons/check';
 
@@ -533,10 +533,10 @@
                   disabled={filesState.syncing}
                 >
                   {#if filesState.syncing}
-                    <IconSpinner class="w-3.5 h-3.5 text-fluent-accent animate-spin" />
+                    <Spinner class="w-3.5 h-3.5 text-primary" />
                     <span>{i18n.t('settings.reconcileScanning')}</span>
                   {:else}
-                    <IconArrowSync class="w-3.5 h-3.5 text-fluent-accent" />
+                    <IconArrowSync class="w-3.5 h-3.5 text-primary" />
                     <span>{i18n.t('settings.reconcileScan')}</span>
                   {/if}
                 </Button>

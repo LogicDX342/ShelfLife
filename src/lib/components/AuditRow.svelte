@@ -63,94 +63,85 @@
   }
 </script>
 
-<Card.Root
-  class="flex flex-col items-start justify-between gap-4 rounded-lg p-4 sm:flex-row sm:items-center"
->
-  <div class="flex items-start gap-3 min-w-0 flex-1">
-    <!-- Action icon badge -->
-    <div class="p-2.5 rounded-lg flex-shrink-0 {getActionColors(entry.action_kind)}">
-      {#if entry.action_kind === 'Trash'}
-        <IconDelete class="w-5 h-5" />
-      {:else if entry.action_kind === 'Move'}
-        <IconFolderArrowRight class="w-5 h-5" />
-      {:else if entry.action_kind === 'Rename'}
-        <IconEdit class="w-5 h-5" />
-      {:else if entry.action_kind === 'Pin'}
-        <IconPin class="w-5 h-5" />
-      {:else if entry.action_kind === 'Snooze'}
-        <IconClock class="w-5 h-5" />
-      {:else}
-        <IconEyeOff class="w-5 h-5" />
-      {/if}
-    </div>
-
-    <!-- Info details -->
-    <div class="min-w-0 flex-1 space-y-0.5">
-      <div class="flex items-center gap-2">
-        <span
-          class="text-sm font-semibold tracking-tight text-fluent-text-light dark:text-fluent-text-dark"
-          >{entry.file_name}</span
-        >
-        <Badge variant="secondary">
-          {entry.action_kind}
-        </Badge>
-      </div>
-      <p
-        class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate"
-        title={entry.source_path}
-      >
-        {i18n.t('audit.source', { path: entry.source_path })}
-      </p>
-      {#if entry.destination_path}
-        <p
-          class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate"
-          title={entry.destination_path}
-        >
-          {i18n.t('audit.destLabel', { path: entry.destination_path })}
-        </p>
-      {/if}
-      <div
-        class="flex items-center gap-2 pt-1 text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark"
-      >
-        <span>{i18n.t('audit.size', { size: formatBytes(entry.size_bytes) })}</span>
-        <span>•</span>
-        <span>{formatDate(entry.timestamp)}</span>
-        {#if entry.rule_name}
-          <span>•</span>
-          <span class="font-medium text-fluent-accent"
-            >{i18n.t('audit.rule', { name: entry.rule_name })}</span
-          >
-        {/if}
-      </div>
-    </div>
-  </div>
-
-  <!-- Right: Undo Action -->
-  <div
-    class="flex flex-col items-end gap-1 flex-shrink-0 self-stretch sm:self-center justify-between sm:justify-center"
-  >
-    {#if undoAvailable}
-      <Button variant="outline" onclick={undo} disabled={busy}>
-        {#if busy}
-          {i18n.t('audit.undoing')}
+<Card.Root>
+  <Card.Header class="items-center">
+    <div class="flex items-start gap-3 min-w-0 flex-1">
+      <!-- Action icon badge -->
+      <div class={getActionColors(entry.action_kind)}>
+        {#if entry.action_kind === 'Trash'}
+          <IconDelete />
+        {:else if entry.action_kind === 'Move'}
+          <IconFolderArrowRight />
+        {:else if entry.action_kind === 'Rename'}
+          <IconEdit />
+        {:else if entry.action_kind === 'Pin'}
+          <IconPin />
+        {:else if entry.action_kind === 'Snooze'}
+          <IconClock />
         {:else}
-          {i18n.t('audit.undo')}
+          <IconEyeOff />
         {/if}
-      </Button>
-    {:else if entry.undo_status === 'Completed'}
-      <span
-        class="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-semibold px-2.5 py-1 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/40 rounded"
-      >
-        <IconCheckmark class="w-3.5 h-3.5" />
-        {i18n.t('audit.undone')}
-      </span>
-    {:else}
-      <span
-        class="text-[10px] max-w-[150px] text-right text-fluent-muted-light dark:text-fluent-muted-dark italic truncate"
-        title={statusText}
-      >
-        {statusText}
-      </span>
-    {/if}
-  </div>
+      </div>
+
+      <!-- Info details -->
+      <div class="min-w-0 flex-1 space-y-0.5">
+        <div class="flex items-center gap-2">
+          <Card.Title class="text-sm font-semibold tracking-tight">
+            {entry.file_name}
+          </Card.Title>
+          <Badge variant="secondary">
+            {entry.action_kind}
+          </Badge>
+        </div>
+        <Card.Description class="text-xs truncate" title={entry.source_path}>
+          {i18n.t('audit.source', { path: entry.source_path })}
+        </Card.Description>
+        {#if entry.destination_path}
+          <Card.Description class="text-xs truncate" title={entry.destination_path}>
+            {i18n.t('audit.destLabel', { path: entry.destination_path })}
+          </Card.Description>
+        {/if}
+        <div class="flex items-center gap-2 pt-1 text-[10px] text-muted-foreground">
+          <span>{i18n.t('audit.size', { size: formatBytes(entry.size_bytes) })}</span>
+          <span>•</span>
+          <span>{formatDate(entry.timestamp)}</span>
+          {#if entry.rule_name}
+            <span>•</span>
+            <span class="font-medium text-primary">
+              {i18n.t('audit.rule', { name: entry.rule_name })}
+            </span>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Undo Action -->
+    <Card.Action
+      class="flex flex-col items-end gap-1 flex-shrink-0 self-stretch sm:self-center justify-between sm:justify-center"
+    >
+      {#if undoAvailable}
+        <Button variant="outline" onclick={undo} disabled={busy}>
+          {#if busy}
+            {i18n.t('audit.undoing')}
+          {:else}
+            {i18n.t('audit.undo')}
+          {/if}
+        </Button>
+      {:else if entry.undo_status === 'Completed'}
+        <span
+          class="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-semibold px-2.5 py-1 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/40 rounded"
+        >
+          <IconCheckmark class="w-3.5 h-3.5" />
+          {i18n.t('audit.undone')}
+        </span>
+      {:else}
+        <span
+          class="text-[10px] max-w-[150px] text-right text-muted-foreground italic truncate"
+          title={statusText}
+        >
+          {statusText}
+        </span>
+      {/if}
+    </Card.Action>
+  </Card.Header>
 </Card.Root>

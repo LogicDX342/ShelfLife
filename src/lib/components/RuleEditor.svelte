@@ -14,6 +14,7 @@
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
   import * as Select from '$lib/components/ui/select';
   import { Switch } from '$lib/components/ui/switch';
 
@@ -224,207 +225,210 @@
   }}
 >
   <!-- Section 1: General Settings -->
-  <div class="space-y-3">
-    <h4
-      class="text-xs font-semibold text-fluent-accent uppercase tracking-wider border-b border-fluent-border-light dark:border-fluent-border-dark pb-1"
-    >
-      {i18n.t('rules.generalSettings')}
-    </h4>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.ruleName')}</span
-        >
-        <Input bind:value={name} required placeholder={i18n.t('rules.ruleNamePlaceholder')} />
-      </label>
-
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.watchTargetPath')}</span
-        >
-        <div class="flex gap-2">
-          <Input bind:value={watchPath} required placeholder="C:\Users\Name\Downloads" />
-          <Button type="button" variant="outline" onclick={browseWatchPath}>
-            {i18n.t('settings.browse')}
-          </Button>
+  <Card.Root>
+    <Card.Content class="space-y-4">
+      <div class="flex items-center justify-between border-b pb-2">
+        <h3 class="text-sm font-semibold text-primary">
+          {i18n.t('rules.generalSettings')}
+        </h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex flex-col gap-1.5">
+          <Label for="rule-name">{i18n.t('rules.ruleName')}</Label>
+          <Input
+            id="rule-name"
+            bind:value={name}
+            required
+            placeholder={i18n.t('rules.ruleNamePlaceholder')}
+          />
         </div>
-      </label>
 
-      <div class="grid grid-cols-2 gap-2">
-        <label class="flex flex-col gap-1 {actionKind === 'Ignore' ? 'col-span-2' : ''}">
-          <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >{i18n.t('rules.priority')}</span
-          >
-          <Input type="number" bind:value={priority} />
-        </label>
-        {#if actionKind !== 'Ignore'}
-          <label class="flex flex-col gap-1">
-            <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-              >{i18n.t('rules.ttlDaysLabel')}</span
-            >
-            <Input min="1" type="number" bind:value={ttlDays} />
-          </label>
-        {/if}
-      </div>
-
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.mode')}</span
-        >
-        <Select.Root type="single" bind:value={mode}>
-          <Select.Trigger>
-            <span data-slot="select-value">{modeLabel(mode)}</span>
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="PreviewOnly" label={i18n.t('rules.modePreviewOnly')} />
-            <Select.Item value="AskFirst" label={i18n.t('rules.modeAskFirst')} />
-            <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
-          </Select.Content>
-        </Select.Root>
-      </label>
-
-      <div class="flex items-center gap-3 pt-6 select-none">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.enabled')}</span
-        >
-        <Switch bind:checked={enabled} aria-label={i18n.t('rules.enabled')} />
-      </div>
-    </div>
-  </div>
-
-  <!-- Section 2: Match Conditions -->
-  <div class="space-y-3">
-    <h4
-      class="text-xs font-semibold text-fluent-accent uppercase tracking-wider border-b border-fluent-border-light dark:border-fluent-border-dark pb-1"
-    >
-      {i18n.t('rules.matchConditions')}
-    </h4>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.extensions')}</span
-        >
-        <Input bind:value={extensions} placeholder={i18n.t('rules.extensionsPlaceholder')} />
-      </label>
-
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.filenameGlobs')}</span
-        >
-        <Input bind:value={filenameGlobs} placeholder={i18n.t('rules.filenameGlobsPlaceholder')} />
-      </label>
-
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.filenameRegexes')}</span
-        >
-        <Input
-          bind:value={filenameRegexes}
-          placeholder={i18n.t('rules.filenameRegexesPlaceholder')}
-        />
-      </label>
-
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.sourceDomains')}</span
-        >
-        <Input bind:value={sourceDomains} placeholder={i18n.t('rules.sourceDomainsPlaceholder')} />
-      </label>
-    </div>
-
-    <!-- Size Match Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.fileSizeCriteria')}</span
-        >
-        <Select.Root type="single" bind:value={sizeKind}>
-          <Select.Trigger>
-            <span data-slot="select-value">{sizeKindLabel(sizeKind)}</span>
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="Any" label={i18n.t('rules.anySize')} />
-            <Select.Item value="LessThan" label={i18n.t('rules.lessThan')} />
-            <Select.Item value="GreaterThan" label={i18n.t('rules.greaterThan')} />
-            <Select.Item value="Between" label={i18n.t('rules.between')} />
-          </Select.Content>
-        </Select.Root>
-      </label>
-
-      {#if sizeKind === 'GreaterThan' || sizeKind === 'Between'}
-        <label class="flex flex-col gap-1">
-          <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >{i18n.t('rules.minSizeMb')}</span
-          >
-          <Input min="0" type="number" bind:value={sizeMinMb} />
-        </label>
-      {/if}
-
-      {#if sizeKind === 'LessThan' || sizeKind === 'Between'}
-        <label class="flex flex-col gap-1">
-          <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >{i18n.t('rules.maxSizeMb')}</span
-          >
-          <Input min="0" type="number" bind:value={sizeMaxMb} />
-        </label>
-      {/if}
-    </div>
-  </div>
-
-  <!-- Section 3: Action Execution -->
-  <div class="space-y-3">
-    <h4
-      class="text-xs font-semibold text-fluent-accent uppercase tracking-wider border-b border-fluent-border-light dark:border-fluent-border-dark pb-1"
-    >
-      {i18n.t('rules.action')}
-    </h4>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('rules.action')}</span
-        >
-        <Select.Root type="single" bind:value={actionKind}>
-          <Select.Trigger>
-            <span data-slot="select-value">{actionKindLabel(actionKind)}</span>
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="Ignore" label={i18n.t('rules.actionIgnoreLabel')} />
-            <Select.Item value="Trash" label={i18n.t('file.trash')} />
-            <Select.Item value="Move" label={i18n.t('rules.actionMoveLabel')} />
-            <Select.Item value="Rename" label={i18n.t('rules.actionRenameLabel')} />
-          </Select.Content>
-        </Select.Root>
-      </label>
-
-      {#if actionKind === 'Move'}
-        <label class="flex flex-col gap-1">
-          <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >{i18n.t('rules.destinationPath')}</span
-          >
-          <div class="flex gap-2">
-            <Input bind:value={destinationPath} placeholder="C:\SafeFolder" required />
-            <Button type="button" variant="outline" onclick={browseDestinationPath}>
+        <div class="flex flex-col gap-1.5">
+          <Label for="watch-path">{i18n.t('rules.watchTargetPath')}</Label>
+          <div class="flex gap-2 w-full">
+            <Input
+              id="watch-path"
+              bind:value={watchPath}
+              required
+              placeholder="C:\Users\Name\Downloads"
+            />
+            <Button type="button" variant="outline" onclick={browseWatchPath}>
               {i18n.t('settings.browse')}
             </Button>
           </div>
-        </label>
-      {/if}
+        </div>
 
-      {#if actionKind === 'Rename'}
-        <label class="flex flex-col gap-1">
-          <span class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >{i18n.t('rules.renameTemplate')}</span
-          >
-          <Input bind:value={renameTemplate} placeholder="e.g. YYYY-MM-DD_{name}.ext" required />
-        </label>
-      {/if}
-    </div>
-  </div>
+        <div class="flex flex-col gap-1.5">
+          <Label for="rule-priority">{i18n.t('rules.priority')}</Label>
+          <Input id="rule-priority" type="number" bind:value={priority} />
+        </div>
+        {#if actionKind !== 'Ignore'}
+          <div class="flex flex-col gap-1.5">
+            <Label for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Label>
+            <Input id="ttl-days" min="1" type="number" bind:value={ttlDays} />
+          </div>
+        {/if}
+
+        <div class="flex flex-col gap-1.5">
+          <Label for="rule-mode">{i18n.t('rules.mode')}</Label>
+          <Select.Root type="single" bind:value={mode}>
+            <Select.Trigger id="rule-mode">
+              <span data-slot="select-value">{modeLabel(mode)}</span>
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="PreviewOnly" label={i18n.t('rules.modePreviewOnly')} />
+              <Select.Item value="AskFirst" label={i18n.t('rules.modeAskFirst')} />
+              <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
+            </Select.Content>
+          </Select.Root>
+        </div>
+
+        <div class="flex items-center gap-3 pt-6 select-none">
+          <Label for="rule-enabled" class="cursor-pointer">{i18n.t('rules.enabled')}</Label>
+          <Switch id="rule-enabled" bind:checked={enabled} />
+        </div>
+      </div>
+    </Card.Content>
+  </Card.Root>
+
+  <!-- Section 2: Match Conditions -->
+  <Card.Root>
+    <Card.Content class="space-y-4">
+      <div class="flex items-center justify-between border-b pb-2">
+        <h3 class="text-sm font-semibold text-primary">
+          {i18n.t('rules.matchConditions')}
+        </h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex flex-col gap-1.5">
+          <Label for="extensions">{i18n.t('rules.extensions')}</Label>
+          <Input
+            id="extensions"
+            bind:value={extensions}
+            placeholder={i18n.t('rules.extensionsPlaceholder')}
+          />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <Label for="filename-globs">{i18n.t('rules.filenameGlobs')}</Label>
+          <Input
+            id="filename-globs"
+            bind:value={filenameGlobs}
+            placeholder={i18n.t('rules.filenameGlobsPlaceholder')}
+          />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <Label for="filename-regexes">{i18n.t('rules.filenameRegexes')}</Label>
+          <Input
+            id="filename-regexes"
+            bind:value={filenameRegexes}
+            placeholder={i18n.t('rules.filenameRegexesPlaceholder')}
+          />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <Label for="source-domains">{i18n.t('rules.sourceDomains')}</Label>
+          <Input
+            id="source-domains"
+            bind:value={sourceDomains}
+            placeholder={i18n.t('rules.sourceDomainsPlaceholder')}
+          />
+        </div>
+      </div>
+
+      <!-- Size Match Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <div class="flex flex-col gap-1.5">
+          <Label for="size-criteria">{i18n.t('rules.fileSizeCriteria')}</Label>
+          <Select.Root type="single" bind:value={sizeKind}>
+            <Select.Trigger id="size-criteria">
+              <span data-slot="select-value">{sizeKindLabel(sizeKind)}</span>
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="Any" label={i18n.t('rules.anySize')} />
+              <Select.Item value="LessThan" label={i18n.t('rules.lessThan')} />
+              <Select.Item value="GreaterThan" label={i18n.t('rules.greaterThan')} />
+              <Select.Item value="Between" label={i18n.t('rules.between')} />
+            </Select.Content>
+          </Select.Root>
+        </div>
+
+        {#if sizeKind === 'GreaterThan' || sizeKind === 'Between'}
+          <div class="flex flex-col gap-1.5">
+            <Label for="min-size-mb">{i18n.t('rules.minSizeMb')}</Label>
+            <Input id="min-size-mb" min="0" type="number" bind:value={sizeMinMb} />
+          </div>
+        {/if}
+
+        {#if sizeKind === 'LessThan' || sizeKind === 'Between'}
+          <div class="flex flex-col gap-1.5">
+            <Label for="max-size-mb">{i18n.t('rules.maxSizeMb')}</Label>
+            <Input id="max-size-mb" min="0" type="number" bind:value={sizeMaxMb} />
+          </div>
+        {/if}
+      </div>
+    </Card.Content>
+  </Card.Root>
+
+  <!-- Section 3: Action Execution -->
+  <Card.Root>
+    <Card.Content class="space-y-4">
+      <div class="flex items-center justify-between border-b pb-2">
+        <h3 class="text-sm font-semibold text-primary">
+          {i18n.t('rules.action')}
+        </h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex flex-col gap-1.5">
+          <Label for="action-kind">{i18n.t('rules.action')}</Label>
+          <Select.Root type="single" bind:value={actionKind}>
+            <Select.Trigger id="action-kind">
+              <span data-slot="select-value">{actionKindLabel(actionKind)}</span>
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="Ignore" label={i18n.t('rules.actionIgnoreLabel')} />
+              <Select.Item value="Trash" label={i18n.t('file.trash')} />
+              <Select.Item value="Move" label={i18n.t('rules.actionMoveLabel')} />
+              <Select.Item value="Rename" label={i18n.t('rules.actionRenameLabel')} />
+            </Select.Content>
+          </Select.Root>
+        </div>
+
+        {#if actionKind === 'Move'}
+          <div class="flex flex-col gap-1.5">
+            <Label for="destination-path">{i18n.t('rules.destinationPath')}</Label>
+            <div class="flex gap-2 w-full">
+              <Input
+                id="destination-path"
+                bind:value={destinationPath}
+                placeholder="C:\SafeFolder"
+                required
+              />
+              <Button type="button" variant="outline" onclick={browseDestinationPath}>
+                {i18n.t('settings.browse')}
+              </Button>
+            </div>
+          </div>
+        {/if}
+
+        {#if actionKind === 'Rename'}
+          <div class="flex flex-col gap-1.5">
+            <Label for="rename-template">{i18n.t('rules.renameTemplate')}</Label>
+            <Input
+              id="rename-template"
+              bind:value={renameTemplate}
+              placeholder="e.g. YYYY-MM-DD_{name}.ext"
+              required
+            />
+          </div>
+        {/if}
+      </div>
+    </Card.Content>
+  </Card.Root>
 
   <!-- Footer actions -->
-  <div
-    class="flex items-center justify-end gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-4"
-  >
+  <div class="flex items-center justify-end gap-2 border-t pt-4">
     <Button variant="outline" type="button" onclick={preview} disabled={testing}>
       {#if testing}
         Testing...
@@ -446,7 +450,7 @@
   {#if testResults.length > 0}
     <Card.Root>
       <Card.Content class="space-y-4">
-        <h5 class="text-xs font-semibold text-fluent-text-light dark:text-fluent-text-dark">
+        <h5 class="text-xs font-semibold">
           {i18n.t('rules.testResultsCount', { count: testResults.length })}
         </h5>
         <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
@@ -458,9 +462,7 @@
                 >{result.file_path.split('\\').pop() || result.file_path}</span
               >
               {#if result.size_bytes !== null}
-                <span
-                  class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark flex-shrink-0"
-                >
+                <span class="text-xs text-muted-foreground flex-shrink-0">
                   {formatBytes(result.size_bytes)}
                 </span>
               {/if}

@@ -137,10 +137,7 @@
   }
 </script>
 
-<Card.Root
-  class="relative gap-3 rounded-lg p-4 transition-all duration-200 {getBorderColor(file.state)}"
-  size="sm"
->
+<Card.Root class="relative gap-3 p-4 transition-all duration-200 {getBorderColor(file.state)}">
   <!-- Main Grid Info -->
   <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
     <!-- Left: Checkbox + Name/Path -->
@@ -156,7 +153,7 @@
 
       <!-- File type icon representation -->
       <div class="mt-0.5 text-fluent-muted-light dark:text-fluent-muted-dark flex-shrink-0">
-        <IconDocument class="w-6 h-6 opacity-75" />
+        <IconDocument class="opacity-75" />
       </div>
 
       <div class="min-w-0 flex-1">

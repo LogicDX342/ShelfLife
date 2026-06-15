@@ -9,7 +9,7 @@
   import { Button } from '$lib/components/ui/button';
   import * as InputGroup from '$lib/components/ui/input-group';
   import IconSearch from '@lucide/svelte/icons/search';
-  import IconSpinner from '@lucide/svelte/icons/loader-circle';
+  import { Spinner } from '$lib/components/ui/spinner';
   import IconDocument from '@lucide/svelte/icons/file';
 
   let searchInputValue = $state('');
@@ -123,10 +123,8 @@
       </div>
     {:else if filesState.loading && filesState.files.length === 0}
       <div class="py-12 flex flex-col items-center justify-center gap-3">
-        <IconSpinner class="animate-spin h-8 w-8 text-fluent-accent" />
-        <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('dashboard.loadingQueue')}</span
-        >
+        <Spinner class="h-8 w-8 text-primary" />
+        <span class="text-sm text-muted-foreground">{i18n.t('dashboard.loadingQueue')}</span>
       </div>
     {:else if filteredFiles.length === 0}
       <Empty.Root class="border bg-muted/30">
