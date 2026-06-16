@@ -1,15 +1,16 @@
 <script lang="ts">
-  import {
-    minimizeWindow,
-    toggleMaximizeWindow,
-    closeWindow,
-    isWindowMaximized,
-    onWindowResized,
-  } from '$lib/api/window';
+  import IconRestore from '@lucide/svelte/icons/copy';
   import IconMinimize from '@lucide/svelte/icons/minus';
   import IconMaximize from '@lucide/svelte/icons/square';
-  import IconRestore from '@lucide/svelte/icons/copy';
   import IconDismiss from '@lucide/svelte/icons/x';
+
+  import {
+    closeWindow,
+    isWindowMaximized,
+    minimizeWindow,
+    onWindowResized,
+    toggleMaximizeWindow,
+  } from '$lib/api/window';
 
   let isMaximized = $state(false);
 

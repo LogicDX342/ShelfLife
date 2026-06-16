@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { RuleMatchExplanation } from '$lib/types';
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import IconLockClosed from '@lucide/svelte/icons/lock';
-  import IconDelete from '@lucide/svelte/icons/trash-2';
-  import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
-  import IconEdit from '@lucide/svelte/icons/pencil';
   import IconEyeOff from '@lucide/svelte/icons/eye-off';
+  import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
+  import IconLockClosed from '@lucide/svelte/icons/lock';
+  import IconEdit from '@lucide/svelte/icons/pencil';
+  import IconDelete from '@lucide/svelte/icons/trash-2';
+
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import type { RuleMatchExplanation } from '$lib/types';
 
   let { explanation } = $props<{ explanation: RuleMatchExplanation }>();
 

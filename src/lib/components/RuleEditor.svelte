@@ -1,7 +1,14 @@
 <script lang="ts">
   import { selectDirectory } from '$lib/api/files';
   import { saveRule, testRule } from '$lib/api/rules';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
+  import * as Select from '$lib/components/ui/select';
+  import { Switch } from '$lib/components/ui/switch';
   import { i18n } from '$lib/i18n/i18n.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
   import type {
     AutomationRule,
     RuleAction,
@@ -10,13 +17,6 @@
     SizeCondition,
   } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
-  import { notifications } from '$lib/stores/notifications.svelte';
-  import { Button } from '$lib/components/ui/button';
-  import * as Card from '$lib/components/ui/card';
-  import { Input } from '$lib/components/ui/input';
-  import { Label } from '$lib/components/ui/label';
-  import * as Select from '$lib/components/ui/select';
-  import { Switch } from '$lib/components/ui/switch';
 
   let {
     onSaved,

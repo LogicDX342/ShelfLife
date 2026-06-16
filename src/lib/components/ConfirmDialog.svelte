@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { i18n } from '$lib/i18n/i18n.svelte';
+
   import { Button } from '$lib/components/ui/button';
   import * as Dialog from '$lib/components/ui/dialog';
+  import { i18n } from '$lib/i18n/i18n.svelte';
 
   let {
     open = false,

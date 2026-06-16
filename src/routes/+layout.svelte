@@ -1,15 +1,17 @@
 <script lang="ts">
   import '../app.css';
-  import { onMount } from 'svelte';
-  import type { Snippet } from 'svelte';
+
   import { listen } from '@tauri-apps/api/event';
+  import type { Snippet } from 'svelte';
+  import { onMount } from 'svelte';
+
   import { resolveCloseRequest } from '$lib/api/config';
-  import { i18n } from '$lib/i18n/i18n.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import TitleBar from '$lib/components/TitleBar.svelte';
-  import { Toaster } from '$lib/components/ui/sonner';
-  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { Checkbox } from '$lib/components/ui/checkbox';
+  import { Toaster } from '$lib/components/ui/sonner';
+  import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { CloseBehavior } from '$lib/types';
   import { getErrorMessage } from '$lib/utils/format';

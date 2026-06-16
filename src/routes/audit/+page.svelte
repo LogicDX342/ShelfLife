@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import AuditRow from '$lib/components/AuditRow.svelte';
-  import { auditState } from '$lib/stores/audit.svelte';
-  import { listen } from '@tauri-apps/api/event';
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import * as Empty from '$lib/components/ui/empty';
-  import { Button } from '$lib/components/ui/button';
-  import { Spinner } from '$lib/components/ui/spinner';
   import IconHistory from '@lucide/svelte/icons/history';
+  import { listen } from '@tauri-apps/api/event';
+  import { onMount } from 'svelte';
+
+  import AuditRow from '$lib/components/AuditRow.svelte';
+  import { Button } from '$lib/components/ui/button';
+  import * as Empty from '$lib/components/ui/empty';
+  import { Spinner } from '$lib/components/ui/spinner';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { auditState } from '$lib/stores/audit.svelte';
 
   onMount(() => {
     auditState.refresh();

@@ -1,19 +1,20 @@
 <script lang="ts">
-  import { undoAuditEntry } from '$lib/api/triage';
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import type { AuditEntry } from '$lib/types';
-  import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
-  import { notifications } from '$lib/stores/notifications.svelte';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
-  import * as Card from '$lib/components/ui/card';
-  import IconDelete from '@lucide/svelte/icons/trash-2';
+  import IconCheckmark from '@lucide/svelte/icons/check';
+  import IconClock from '@lucide/svelte/icons/clock';
+  import IconEyeOff from '@lucide/svelte/icons/eye-off';
   import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
   import IconEdit from '@lucide/svelte/icons/pencil';
   import IconPin from '@lucide/svelte/icons/pin';
-  import IconClock from '@lucide/svelte/icons/clock';
-  import IconEyeOff from '@lucide/svelte/icons/eye-off';
-  import IconCheckmark from '@lucide/svelte/icons/check';
+  import IconDelete from '@lucide/svelte/icons/trash-2';
+
+  import { undoAuditEntry } from '$lib/api/triage';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
+  import type { AuditEntry } from '$lib/types';
+  import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
 
   let { entry, onRefresh } = $props<{ entry: AuditEntry; onRefresh: () => Promise<void> }>();
   let busy = $state(false);

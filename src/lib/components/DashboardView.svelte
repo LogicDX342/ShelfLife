@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { filesState } from '$lib/stores/files.svelte';
+
   import { i18n } from '$lib/i18n/i18n.svelte';
-  import StatusBar from './StatusBar.svelte';
+  import { filesState } from '$lib/stores/files.svelte';
+
   import DashboardStatCard from './DashboardStatCard.svelte';
+  import StatusBar from './StatusBar.svelte';
 
   onMount(() => {
     filesState.refresh();

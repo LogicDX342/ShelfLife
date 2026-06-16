@@ -1,24 +1,26 @@
 <script lang="ts">
+  import IconChevronDown from '@lucide/svelte/icons/chevron-down';
+  import IconDocument from '@lucide/svelte/icons/file';
+  import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
+  import IconPin from '@lucide/svelte/icons/pin';
+  import IconDelete from '@lucide/svelte/icons/trash-2';
+
   import { explainFile, openFileLocation } from '$lib/api/files';
   import { executeTriageAction } from '$lib/api/triage';
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import type { RuleMatchExplanation, TrackedFile, UserTriageAction } from '$lib/types';
-  import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
-  import ExplanationBadge from './ExplanationBadge.svelte';
-  import ConfirmDialog from './ConfirmDialog.svelte';
-  import { notifications } from '$lib/stores/notifications.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
-  import * as Select from '$lib/components/ui/select';
   import { Label } from '$lib/components/ui/label';
-  import IconDocument from '@lucide/svelte/icons/file';
-  import IconChevronDown from '@lucide/svelte/icons/chevron-down';
-  import IconPin from '@lucide/svelte/icons/pin';
-  import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
-  import IconDelete from '@lucide/svelte/icons/trash-2';
+  import * as Select from '$lib/components/ui/select';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
+  import type { RuleMatchExplanation, TrackedFile, UserTriageAction } from '$lib/types';
+  import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
+
+  import ConfirmDialog from './ConfirmDialog.svelte';
+  import ExplanationBadge from './ExplanationBadge.svelte';
 
   let {
     file,

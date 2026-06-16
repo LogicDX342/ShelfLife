@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { formatBytes } from '$lib/utils/format';
-  import type { TrackedFile } from '$lib/types';
-  import { i18n } from '$lib/i18n/i18n.svelte';
   import * as Card from '$lib/components/ui/card';
   import { Separator } from '$lib/components/ui/separator';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import type { TrackedFile } from '$lib/types';
+  import { formatBytes } from '$lib/utils/format';
 
   let { files = [] } = $props<{ files: TrackedFile[] }>();
   let totalSize = $derived(

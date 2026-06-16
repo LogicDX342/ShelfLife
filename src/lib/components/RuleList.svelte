@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import type { AutomationRule } from '$lib/types';
-  import RuleCard from './RuleCard.svelte';
+  import IconDocumentBulletList from '@lucide/svelte/icons/list-checks';
+
   import * as Empty from '$lib/components/ui/empty';
   import { Spinner } from '$lib/components/ui/spinner';
-  import IconDocumentBulletList from '@lucide/svelte/icons/list-checks';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import type { AutomationRule } from '$lib/types';
+
+  import RuleCard from './RuleCard.svelte';
 
   let {
     rules,

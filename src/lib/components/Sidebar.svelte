@@ -1,24 +1,25 @@
 <script lang="ts">
+  import IconArchive from '@lucide/svelte/icons/archive';
+  import IconPauseCircle from '@lucide/svelte/icons/circle-pause';
+  import IconPlayCircle from '@lucide/svelte/icons/circle-play';
+  import IconFolderOpen from '@lucide/svelte/icons/folder-open';
+  import IconHistory from '@lucide/svelte/icons/history';
+  import IconBoard from '@lucide/svelte/icons/layout-dashboard';
+  import IconClipboardList from '@lucide/svelte/icons/list-todo';
+  import IconSettings from '@lucide/svelte/icons/settings';
+  import IconFlash from '@lucide/svelte/icons/zap';
+
   import { base } from '$app/paths';
   import { page } from '$app/stores';
-  import { i18n } from '$lib/i18n/i18n.svelte';
   import { pauseWatching, resumeWatching } from '$lib/api/config';
-  import { filesState } from '$lib/stores/files.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Separator } from '$lib/components/ui/separator';
-  import { Switch } from '$lib/components/ui/switch';
-  import IconBoard from '@lucide/svelte/icons/layout-dashboard';
-  import IconClipboardList from '@lucide/svelte/icons/list-todo';
-  import IconFolderOpen from '@lucide/svelte/icons/folder-open';
-  import IconFlash from '@lucide/svelte/icons/zap';
-  import IconHistory from '@lucide/svelte/icons/history';
-  import IconSettings from '@lucide/svelte/icons/settings';
-  import IconArchive from '@lucide/svelte/icons/archive';
-  import IconPlayCircle from '@lucide/svelte/icons/circle-play';
-  import IconPauseCircle from '@lucide/svelte/icons/circle-pause';
   import { Spinner } from '$lib/components/ui/spinner';
+  import { Switch } from '$lib/components/ui/switch';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { filesState } from '$lib/stores/files.svelte';
 
   let isPaused = $state(false);
 

@@ -1,16 +1,18 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import IconDocument from '@lucide/svelte/icons/file';
+  import IconSearch from '@lucide/svelte/icons/search';
   import { listen } from '@tauri-apps/api/event';
-  import { filesState } from '$lib/stores/files.svelte';
+  import { onMount } from 'svelte';
+
+  import { Button } from '$lib/components/ui/button';
+  import * as Empty from '$lib/components/ui/empty';
+  import * as InputGroup from '$lib/components/ui/input-group';
+  import { Spinner } from '$lib/components/ui/spinner';
   import { i18n } from '$lib/i18n/i18n.svelte';
+  import { filesState } from '$lib/stores/files.svelte';
+
   import FileCard from './FileCard.svelte';
   import StatusBar from './StatusBar.svelte';
-  import * as Empty from '$lib/components/ui/empty';
-  import { Button } from '$lib/components/ui/button';
-  import * as InputGroup from '$lib/components/ui/input-group';
-  import IconSearch from '@lucide/svelte/icons/search';
-  import { Spinner } from '$lib/components/ui/spinner';
-  import IconDocument from '@lucide/svelte/icons/file';
 
   let searchInputValue = $state('');
   let searchQuery = $state('');

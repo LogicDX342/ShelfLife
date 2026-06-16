@@ -1,23 +1,25 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { listen } from '@tauri-apps/api/event';
-  import { filesState } from '$lib/stores/files.svelte';
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import { getConfig } from '$lib/api/config';
-  import { executeBulkTriageAction } from '$lib/api/triage';
-  import type { AppConfig, TrackedFile, UserTriageAction } from '$lib/types';
-  import { formatBytes, getErrorMessage } from '$lib/utils/format';
-  import FileCard from './FileCard.svelte';
-  import ConfirmDialog from './ConfirmDialog.svelte';
-  import { notifications } from '$lib/stores/notifications.svelte';
-  import { Button } from '$lib/components/ui/button';
-  import * as Empty from '$lib/components/ui/empty';
-  import * as Breadcrumb from '$lib/components/ui/breadcrumb';
-  import { Checkbox } from '$lib/components/ui/checkbox';
-  import { Input } from '$lib/components/ui/input';
-  import * as Select from '$lib/components/ui/select';
   import IconFolder from '@lucide/svelte/icons/folder';
   import IconFolderOpen from '@lucide/svelte/icons/folder-open';
+  import { listen } from '@tauri-apps/api/event';
+  import { onMount } from 'svelte';
+
+  import { getConfig } from '$lib/api/config';
+  import { executeBulkTriageAction } from '$lib/api/triage';
+  import * as Breadcrumb from '$lib/components/ui/breadcrumb';
+  import { Button } from '$lib/components/ui/button';
+  import { Checkbox } from '$lib/components/ui/checkbox';
+  import * as Empty from '$lib/components/ui/empty';
+  import { Input } from '$lib/components/ui/input';
+  import * as Select from '$lib/components/ui/select';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { filesState } from '$lib/stores/files.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
+  import type { AppConfig, TrackedFile, UserTriageAction } from '$lib/types';
+  import { formatBytes, getErrorMessage } from '$lib/utils/format';
+
+  import ConfirmDialog from './ConfirmDialog.svelte';
+  import FileCard from './FileCard.svelte';
 
   let config = $state<AppConfig | null>(null);
   let currentDirectory = $state('');

@@ -1,16 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+
+  import { deleteRule, saveRule, testRule } from '$lib/api/rules';
+  import { Button } from '$lib/components/ui/button';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
+  import { rulesState } from '$lib/stores/rules.svelte';
+  import type { AutomationRule, RuleMatchExplanation } from '$lib/types';
   import { getErrorMessage } from '$lib/utils/format';
+
+  import ConfirmDialog from './ConfirmDialog.svelte';
   import RuleEditor from './RuleEditor.svelte';
   import RuleList from './RuleList.svelte';
   import RuleTestResults from './RuleTestResults.svelte';
-  import ConfirmDialog from './ConfirmDialog.svelte';
-  import { deleteRule, testRule, saveRule } from '$lib/api/rules';
-  import { rulesState } from '$lib/stores/rules.svelte';
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import type { AutomationRule, RuleMatchExplanation } from '$lib/types';
-  import { notifications } from '$lib/stores/notifications.svelte';
-  import { Button } from '$lib/components/ui/button';
 
   let previewResults = $state<RuleMatchExplanation[]>([]);
   let editingRule = $state<AutomationRule | null>(null);

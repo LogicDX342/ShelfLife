@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { RuleMatchExplanation } from '$lib/types';
   import { formatBytes } from '$lib/utils/format';
-  import { Button } from '$lib/components/ui/button';
-  import * as Card from '$lib/components/ui/card';
 
   let { results, ruleName, onClear } = $props<{
     results: RuleMatchExplanation[];

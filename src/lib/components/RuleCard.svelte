@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import type { AutomationRule } from '$lib/types';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Switch } from '$lib/components/ui/switch';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import type { AutomationRule } from '$lib/types';
 
   let {
     rule,

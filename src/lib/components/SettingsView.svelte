@@ -1,28 +1,30 @@
 <script lang="ts">
+  import IconCheckmark from '@lucide/svelte/icons/check';
+  import IconArrowSync from '@lucide/svelte/icons/refresh-cw';
+  import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
   import { onMount } from 'svelte';
+
   import {
     getConfig,
+    runReconciliationScan,
     saveConfig,
     updateWatchTargets,
-    runReconciliationScan,
   } from '$lib/api/config';
   import { selectDirectory } from '$lib/api/files';
-  import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
-  import { i18n } from '$lib/i18n/i18n.svelte';
-  import { getErrorMessage } from '$lib/utils/format';
-  import type { AppConfig, CloseBehavior, WatchTarget } from '$lib/types';
-  import ConfirmDialog from './ConfirmDialog.svelte';
-  import { filesState } from '$lib/stores/files.svelte';
-  import { notifications } from '$lib/stores/notifications.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
-  import * as Select from '$lib/components/ui/select';
-  import { Switch } from '$lib/components/ui/switch';
   import { Label } from '$lib/components/ui/label';
+  import * as Select from '$lib/components/ui/select';
   import { Spinner } from '$lib/components/ui/spinner';
-  import IconArrowSync from '@lucide/svelte/icons/refresh-cw';
-  import IconCheckmark from '@lucide/svelte/icons/check';
+  import { Switch } from '$lib/components/ui/switch';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { filesState } from '$lib/stores/files.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
+  import type { AppConfig, CloseBehavior, WatchTarget } from '$lib/types';
+  import { getErrorMessage } from '$lib/utils/format';
+
+  import ConfirmDialog from './ConfirmDialog.svelte';
 
   type PendingWatchTarget = {
     target: WatchTarget;
