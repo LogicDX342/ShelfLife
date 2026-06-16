@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { RuleMatchExplanation } from '$lib/types';
   import { i18n } from '$lib/i18n/i18n.svelte';
-  import IconLockClosed from '~icons/fluent/lock-closed-16-regular';
-  import IconDelete from '~icons/fluent/delete-16-regular';
-  import IconFolderArrowRight from '~icons/fluent/folder-arrow-right-16-regular';
-  import IconEdit from '~icons/fluent/edit-16-regular';
-  import IconEyeOff from '~icons/fluent/eye-off-16-regular';
+  import IconLockClosed from '@lucide/svelte/icons/lock';
+  import IconDelete from '@lucide/svelte/icons/trash-2';
+  import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
+  import IconEdit from '@lucide/svelte/icons/pencil';
+  import IconEyeOff from '@lucide/svelte/icons/eye-off';
 
   let { explanation } = $props<{ explanation: RuleMatchExplanation }>();
 

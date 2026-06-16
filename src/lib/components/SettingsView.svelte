@@ -14,9 +14,15 @@
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { filesState } from '$lib/stores/files.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
-  import IconSpinner from '~icons/fluent/spinner-ios-20-regular';
-  import IconArrowSync from '~icons/fluent/arrow-sync-16-regular';
-  import IconCheckmark from '~icons/fluent/checkmark-16-regular';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { Input } from '$lib/components/ui/input';
+  import * as Select from '$lib/components/ui/select';
+  import { Switch } from '$lib/components/ui/switch';
+  import { Label } from '$lib/components/ui/label';
+  import { Spinner } from '$lib/components/ui/spinner';
+  import IconArrowSync from '@lucide/svelte/icons/refresh-cw';
+  import IconCheckmark from '@lucide/svelte/icons/check';
 
   type PendingWatchTarget = {
     target: WatchTarget;
@@ -278,22 +284,17 @@
     }
   }
 
-  async function toggleTargetEnabled(target: WatchTarget, event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    if (input.checked && pathOverlapsSafeFolder(target.path)) {
+  async function toggleTargetEnabled(target: WatchTarget, enabled: boolean) {
+    if (enabled && pathOverlapsSafeFolder(target.path)) {
       notifications.error(i18n.t('settings.errorSafeFolderOverlap'));
       rejectedTargetId = target.id;
       window.setTimeout(() => {
-        input.checked = false;
         rejectedTargetId = null;
       }, 120);
       return;
     }
 
-    const saved = await replaceTarget({ ...target, enabled: input.checked });
-    if (!saved) {
-      input.checked = target.enabled;
-    }
+    await replaceTarget({ ...target, enabled });
   }
 
   function initiateRemoveTarget(target: WatchTarget) {
@@ -319,6 +320,12 @@
       notifications.error(getErrorMessage(reason, i18n.t('settings.errorReconcileScan')));
     }
   }
+
+  function closeBehaviorLabel(value: CloseBehavior) {
+    if (value === 'HideToTray') return i18n.t('settings.closeHideToTray');
+    if (value === 'Quit') return i18n.t('settings.closeQuit');
+    return i18n.t('settings.closeAsk');
+  }
 </script>
 
 <div class="h-full flex flex-col min-h-0 relative">
@@ -340,325 +347,299 @@
         <!-- Form Settings & Watch Targets -->
         <div class="space-y-6">
           <!-- General Preferences Section -->
-          <section class="fluent-card p-6 space-y-4">
-            <div
-              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
-            >
-              <h3 class="text-sm font-semibold text-fluent-accent">
-                {i18n.t('settings.general')}
-              </h3>
+          <Card.Root>
+            <Card.Content class="space-y-4">
               <div
-                class="text-[11px] flex items-center gap-1.5 text-fluent-muted-light dark:text-fluent-muted-dark min-h-[1.5rem]"
+                class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
               >
-                {#if showSavedIndicator}
-                  <span
-                    class="text-green-600 dark:text-green-400 flex items-center gap-1 font-semibold transition-all duration-300"
-                  >
-                    <IconCheckmark class="w-3.5 h-3.5" />
-                    {i18n.t('settings.savedShort')}
-                  </span>
-                {/if}
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label class="flex flex-col gap-1.5">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('settings.safeFolder')}</span
+                <h3 class="text-sm font-semibold text-primary">
+                  {i18n.t('settings.general')}
+                </h3>
+                <div
+                  class="text-[11px] flex items-center gap-1.5 text-fluent-muted-light dark:text-fluent-muted-dark min-h-[1.5rem]"
                 >
-                <div class="flex gap-2">
-                  <input
-                    bind:value={safeFolderPath}
-                    onchange={savePreferences}
-                    class="fluent-input text-xs flex-1 min-w-0"
-                  />
-                  <button
-                    type="button"
-                    class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
-                    onclick={browseSafeFolder}
-                  >
-                    {i18n.t('settings.browse')}
-                  </button>
+                  {#if showSavedIndicator}
+                    <span
+                      class="text-green-600 dark:text-green-400 flex items-center gap-1 font-semibold transition-all duration-300"
+                    >
+                      <IconCheckmark class="w-3.5 h-3.5" />
+                      {i18n.t('settings.savedShort')}
+                    </span>
+                  {/if}
                 </div>
-              </label>
+              </div>
 
-              <label class="flex flex-col gap-1.5">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('settings.defaultTtlDays')}</span
-                >
-                <input
-                  min="1"
-                  type="number"
-                  bind:value={defaultTtlDays}
-                  onchange={savePreferences}
-                  class="fluent-input text-xs"
-                />
-              </label>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="flex flex-col gap-1.5">
+                  <Label for="safe-folder-path">{i18n.t('settings.safeFolder')}</Label>
+                  <div class="flex gap-2">
+                    <Input
+                      id="safe-folder-path"
+                      bind:value={safeFolderPath}
+                      onchange={savePreferences}
+                    />
+                    <Button type="button" variant="outline" onclick={browseSafeFolder}>
+                      {i18n.t('settings.browse')}
+                    </Button>
+                  </div>
+                </div>
 
-              <label class="flex flex-col gap-1.5">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('settings.staleAge')}</span
-                >
-                <input
-                  min="1"
-                  type="number"
-                  bind:value={staleThresholdDays}
-                  onchange={savePreferences}
-                  class="fluent-input text-xs"
-                />
-              </label>
+                <div class="flex flex-col gap-1.5">
+                  <Label for="default-ttl-days">{i18n.t('settings.defaultTtlDays')}</Label>
+                  <Input
+                    id="default-ttl-days"
+                    min="1"
+                    type="number"
+                    bind:value={defaultTtlDays}
+                    onchange={savePreferences}
+                  />
+                </div>
 
-              <label class="flex flex-col gap-1.5">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('settings.decayBuffer')}</span
-                >
-                <input
-                  min="1"
-                  type="number"
-                  bind:value={decayingThresholdHours}
-                  onchange={savePreferences}
-                  class="fluent-input text-xs"
-                />
-              </label>
+                <div class="flex flex-col gap-1.5">
+                  <Label for="stale-threshold-days">{i18n.t('settings.staleAge')}</Label>
+                  <Input
+                    id="stale-threshold-days"
+                    min="1"
+                    type="number"
+                    bind:value={staleThresholdDays}
+                    onchange={savePreferences}
+                  />
+                </div>
 
-              <label class="flex flex-col gap-1.5">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('lang.title')}</span
-                >
-                <select
-                  id="lang-select"
-                  class="fluent-input text-xs"
-                  value={i18n.currentLang}
-                  onchange={(e) =>
-                    i18n.setLang((e.target as HTMLSelectElement).value as 'en' | 'zh')}
-                >
-                  <option value="en">{i18n.t('lang.en')}</option>
-                  <option value="zh">{i18n.t('lang.zh')}</option>
-                </select>
-              </label>
+                <div class="flex flex-col gap-1.5">
+                  <Label for="decaying-threshold-hours">{i18n.t('settings.decayBuffer')}</Label>
+                  <Input
+                    id="decaying-threshold-hours"
+                    min="1"
+                    type="number"
+                    bind:value={decayingThresholdHours}
+                    onchange={savePreferences}
+                  />
+                </div>
 
-              <label class="flex flex-col gap-1.5">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('theme.title')}</span
-                >
-                <select
-                  id="theme-select"
-                  class="fluent-input text-xs"
-                  value={i18n.currentTheme}
-                  onchange={(e) =>
-                    i18n.setTheme(
-                      (e.target as HTMLSelectElement).value as 'light' | 'dark' | 'system',
-                    )}
-                >
-                  <option value="light">{i18n.t('theme.light')}</option>
-                  <option value="dark">{i18n.t('theme.dark')}</option>
-                  <option value="system">{i18n.t('theme.system')}</option>
-                </select>
-              </label>
+                <div class="flex flex-col gap-1.5">
+                  <Label for="lang-select">{i18n.t('lang.title')}</Label>
+                  <Select.Root
+                    type="single"
+                    value={i18n.currentLang}
+                    onValueChange={(value) => i18n.setLang(value as 'en' | 'zh')}
+                  >
+                    <Select.Trigger id="lang-select" class="w-full">
+                      <span data-slot="select-value">
+                        {i18n.currentLang === 'zh' ? i18n.t('lang.zh') : i18n.t('lang.en')}
+                      </span>
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="en" label={i18n.t('lang.en')} />
+                      <Select.Item value="zh" label={i18n.t('lang.zh')} />
+                    </Select.Content>
+                  </Select.Root>
+                </div>
 
-              <label class="flex flex-col gap-1.5">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('settings.closeBehavior')}</span
-                >
-                <select
-                  class="fluent-input text-xs"
-                  value={closeBehavior}
-                  onchange={async (event) => {
-                    closeBehavior = (event.target as HTMLSelectElement).value as CloseBehavior;
-                    await savePreferences();
-                  }}
-                >
-                  <option value="Ask">{i18n.t('settings.closeAsk')}</option>
-                  <option value="HideToTray">{i18n.t('settings.closeHideToTray')}</option>
-                  <option value="Quit">{i18n.t('settings.closeQuit')}</option>
-                </select>
-              </label>
-            </div>
+                <div class="flex flex-col gap-1.5">
+                  <Label for="theme-select">{i18n.t('theme.title')}</Label>
+                  <Select.Root
+                    type="single"
+                    value={i18n.currentTheme}
+                    onValueChange={(value) => i18n.setTheme(value as 'light' | 'dark' | 'system')}
+                  >
+                    <Select.Trigger id="theme-select" class="w-full">
+                      <span data-slot="select-value">
+                        {i18n.currentTheme === 'light'
+                          ? i18n.t('theme.light')
+                          : i18n.currentTheme === 'dark'
+                            ? i18n.t('theme.dark')
+                            : i18n.t('theme.system')}
+                      </span>
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="light" label={i18n.t('theme.light')} />
+                      <Select.Item value="dark" label={i18n.t('theme.dark')} />
+                      <Select.Item value="system" label={i18n.t('theme.system')} />
+                    </Select.Content>
+                  </Select.Root>
+                </div>
 
-            <!-- Notification & Boot Toggles -->
-            <div class="flex flex-col sm:flex-row sm:items-center gap-6 pt-2 select-none">
-              <div class="flex items-center gap-3">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('settings.notifications')}</span
-                >
-                <label class="fluent-switch">
-                  <input
-                    type="checkbox"
-                    class="fluent-switch-input"
+                <div class="flex flex-col gap-1.5">
+                  <Label for="close-behavior-select">{i18n.t('settings.closeBehavior')}</Label>
+                  <Select.Root
+                    type="single"
+                    value={closeBehavior}
+                    onValueChange={async (value) => {
+                      closeBehavior = value as CloseBehavior;
+                      await savePreferences();
+                    }}
+                  >
+                    <Select.Trigger id="close-behavior-select" class="w-full">
+                      <span data-slot="select-value">{closeBehaviorLabel(closeBehavior)}</span>
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="Ask" label={i18n.t('settings.closeAsk')} />
+                      <Select.Item value="HideToTray" label={i18n.t('settings.closeHideToTray')} />
+                      <Select.Item value="Quit" label={i18n.t('settings.closeQuit')} />
+                    </Select.Content>
+                  </Select.Root>
+                </div>
+              </div>
+
+              <!-- Notification & Boot Toggles -->
+              <div class="flex flex-col sm:flex-row sm:items-center gap-6 pt-2 select-none">
+                <div class="flex items-center gap-3">
+                  <span
+                    class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
+                    >{i18n.t('settings.notifications')}</span
+                  >
+                  <Switch
                     checked={notificationsEnabled}
-                    onchange={async () => {
+                    onclick={async () => {
                       notificationsEnabled = !notificationsEnabled;
                       await savePreferences();
                     }}
+                    aria-label={i18n.t('settings.notifications')}
                   />
-                  <span class="fluent-switch-track">
-                    <span class="fluent-switch-thumb"></span>
-                  </span>
-                </label>
-              </div>
+                </div>
 
-              <div class="flex items-center gap-3">
-                <span
-                  class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                  >{i18n.t('settings.startAtLogin')}</span
-                >
-                <label class="fluent-switch">
-                  <input
-                    type="checkbox"
-                    class="fluent-switch-input"
+                <div class="flex items-center gap-3">
+                  <span
+                    class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
+                    >{i18n.t('settings.startAtLogin')}</span
+                  >
+                  <Switch
                     checked={startAtLogin}
-                    onchange={async () => {
+                    onclick={async () => {
                       startAtLogin = !startAtLogin;
                       await savePreferences();
                     }}
+                    aria-label={i18n.t('settings.startAtLogin')}
                   />
-                  <span class="fluent-switch-track">
-                    <span class="fluent-switch-thumb"></span>
-                  </span>
-                </label>
+                </div>
               </div>
-            </div>
-          </section>
+            </Card.Content>
+          </Card.Root>
 
           <!-- Watch Targets Section -->
-          <section class="fluent-card p-6 space-y-4">
-            <div
-              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
-            >
-              <h3 class="text-sm font-semibold text-fluent-accent font-medium">
-                {i18n.t('settings.watchTargets')}
-              </h3>
-              <button
-                type="button"
-                class="fluent-button text-[11px] font-semibold py-1 px-2.5 flex items-center gap-1.5"
-                onclick={triggerManualScan}
-                disabled={filesState.syncing}
-              >
-                {#if filesState.syncing}
-                  <IconSpinner class="w-3.5 h-3.5 text-fluent-accent animate-spin" />
-                  <span>{i18n.t('settings.reconcileScanning')}</span>
-                {:else}
-                  <IconArrowSync class="w-3.5 h-3.5 text-fluent-accent" />
-                  <span>{i18n.t('settings.reconcileScan')}</span>
-                {/if}
-              </button>
-            </div>
-
-            <!-- Add new folder form -->
-            <div class="flex flex-col md:flex-row gap-2">
-              <div class="flex flex-1 gap-2">
-                <input
-                  bind:value={targetPath}
-                  placeholder={i18n.t('settings.path')}
-                  class="fluent-input flex-1 text-xs min-w-0"
-                />
-                <button
-                  type="button"
-                  class="fluent-button text-xs font-semibold px-3 flex-shrink-0"
-                  onclick={browseTargetFolder}
-                >
-                  {i18n.t('settings.browse')}
-                </button>
-              </div>
-              <button
-                class="fluent-button text-xs font-semibold md:flex-shrink-0"
-                onclick={addTarget}
-                disabled={addingTarget || !targetPath.trim()}
-              >
-                {i18n.t('settings.addNewTarget')}
-              </button>
-            </div>
-
-            <!-- Target list -->
-            {#if config.watch_targets.length === 0}
+          <Card.Root>
+            <Card.Content class="space-y-4">
               <div
-                class="p-6 text-center text-xs text-fluent-muted-light dark:text-fluent-muted-dark border border-dashed border-fluent-border-light dark:border-fluent-border-dark rounded-md bg-neutral-50 dark:bg-neutral-900/40"
+                class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
               >
-                {i18n.t('settings.noTargets')}
+                <h3 class="text-sm font-semibold text-primary font-medium">
+                  {i18n.t('settings.watchTargets')}
+                </h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onclick={triggerManualScan}
+                  disabled={filesState.syncing}
+                >
+                  {#if filesState.syncing}
+                    <Spinner class="w-3.5 h-3.5 text-primary" />
+                    <span>{i18n.t('settings.reconcileScanning')}</span>
+                  {:else}
+                    <IconArrowSync class="w-3.5 h-3.5 text-primary" />
+                    <span>{i18n.t('settings.reconcileScan')}</span>
+                  {/if}
+                </Button>
               </div>
-            {:else}
-              <div class="space-y-3">
-                {#each config.watch_targets as target (target.id)}
-                  <div
-                    class="p-3.5 bg-black/5 dark:bg-white/5 border border-fluent-border-light dark:border-fluent-border-dark rounded-md flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
-                  >
-                    <div class="min-w-0 flex-1 space-y-1">
-                      <p
-                        class="font-semibold text-neutral-800 dark:text-neutral-200 truncate"
-                        title={target.path}
-                      >
-                        {target.path}
-                      </p>
-                      <p
-                        class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark flex items-center gap-2"
-                      >
-                        <span class="inline-flex items-center gap-1">
-                          <span
-                            class="w-1.5 h-1.5 rounded-full {target.enabled
-                              ? 'bg-green-500'
-                              : 'bg-neutral-400'}"
-                          ></span>
-                          {target.enabled
-                            ? i18n.t('settings.enabled')
-                            : i18n.t('settings.disabled')}
-                        </span>
-                        <span>•</span>
-                        <span
-                          >{target.recursive
-                            ? i18n.t('settings.recursiveLabel')
-                            : i18n.t('settings.topLevel')}</span
-                        >
-                      </p>
-                    </div>
 
-                    <!-- Switch & Button actions -->
-                    <div class="flex items-center gap-3.5 flex-shrink-0">
-                      <label
-                        class="fluent-switch {rejectedTargetId === target.id
-                          ? 'fluent-switch-rejected'
-                          : ''}"
-                        title="Toggle active status"
-                      >
-                        <input
-                          type="checkbox"
-                          class="fluent-switch-input"
-                          checked={target.enabled}
-                          onchange={(event) => toggleTargetEnabled(target, event)}
-                        />
-                        <span class="fluent-switch-track">
-                          <span class="fluent-switch-thumb"></span>
-                        </span>
-                      </label>
-
-                      <button
-                        class="fluent-button p-1.5 text-[10px] font-semibold"
-                        onclick={() => replaceTarget({ ...target, recursive: !target.recursive })}
-                      >
-                        {target.recursive
-                          ? i18n.t('settings.topLevel')
-                          : i18n.t('settings.recursiveLabel')}
-                      </button>
-
-                      <button
-                        class="fluent-button p-1.5 text-[10px] font-semibold text-red-600 dark:text-red-400"
-                        onclick={() => initiateRemoveTarget(target)}
-                      >
-                        {i18n.t('settings.remove')}
-                      </button>
-                    </div>
+              <!-- Add new folder form -->
+              <div class="flex flex-col gap-1.5 w-full">
+                <Label for="target-path">{i18n.t('settings.path')}</Label>
+                <div class="flex flex-col md:flex-row gap-2">
+                  <div class="flex flex-1 gap-2">
+                    <Input
+                      id="target-path"
+                      bind:value={targetPath}
+                      placeholder={i18n.t('settings.path')}
+                    />
+                    <Button type="button" variant="outline" onclick={browseTargetFolder}>
+                      {i18n.t('settings.browse')}
+                    </Button>
                   </div>
-                {/each}
+                  <Button
+                    variant="outline"
+                    onclick={addTarget}
+                    disabled={addingTarget || !targetPath.trim()}
+                  >
+                    {i18n.t('settings.addNewTarget')}
+                  </Button>
+                </div>
               </div>
-            {/if}
-          </section>
+
+              <!-- Target list -->
+              {#if config.watch_targets.length === 0}
+                <div
+                  class="p-6 text-center text-xs text-fluent-muted-light dark:text-fluent-muted-dark border border-dashed border-fluent-border-light dark:border-fluent-border-dark rounded-md bg-neutral-50 dark:bg-neutral-900/40"
+                >
+                  {i18n.t('settings.noTargets')}
+                </div>
+              {:else}
+                <div class="space-y-3">
+                  {#each config.watch_targets as target (target.id)}
+                    <div
+                      class="p-3.5 bg-black/5 dark:bg-white/5 border border-fluent-border-light dark:border-fluent-border-dark rounded-md flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                    >
+                      <div class="min-w-0 flex-1 space-y-1">
+                        <p
+                          class="font-semibold text-neutral-800 dark:text-neutral-200 truncate"
+                          title={target.path}
+                        >
+                          {target.path}
+                        </p>
+                        <p
+                          class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark flex items-center gap-2"
+                        >
+                          <span class="inline-flex items-center gap-1">
+                            <span
+                              class="w-1.5 h-1.5 rounded-full {target.enabled
+                                ? 'bg-green-500'
+                                : 'bg-neutral-400'}"
+                            ></span>
+                            {target.enabled
+                              ? i18n.t('settings.enabled')
+                              : i18n.t('settings.disabled')}
+                          </span>
+                          <span>•</span>
+                          <span
+                            >{target.recursive
+                              ? i18n.t('settings.recursiveLabel')
+                              : i18n.t('settings.topLevel')}</span
+                          >
+                        </p>
+                      </div>
+
+                      <!-- Switch & Button actions -->
+                      <div class="flex items-center gap-3.5 flex-shrink-0">
+                        <div
+                          class={rejectedTargetId === target.id ? 'switch-rejected' : ''}
+                          title="Toggle active status"
+                        >
+                          <Switch
+                            checked={target.enabled}
+                            onclick={() => toggleTargetEnabled(target, !target.enabled)}
+                            aria-label="Toggle active status"
+                          />
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          onclick={() => replaceTarget({ ...target, recursive: !target.recursive })}
+                        >
+                          {target.recursive
+                            ? i18n.t('settings.topLevel')
+                            : i18n.t('settings.recursiveLabel')}
+                        </Button>
+
+                        <Button variant="destructive" onclick={() => initiateRemoveTarget(target)}>
+                          {i18n.t('settings.remove')}
+                        </Button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </Card.Content>
+          </Card.Root>
         </div>
       </div>
     {/if}
