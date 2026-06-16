@@ -70,6 +70,7 @@ pub async fn save_config(
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
     engine::watcher::restart_watcher(&state, watcher_event_sink(app_handle.clone()))?;
+    crate::tray::update_tray_icon(&app_handle);
     run_async_reconciliation(app_handle, state.inner().clone());
     Ok(config)
 }
@@ -112,6 +113,7 @@ pub async fn update_watch_targets(
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
     engine::watcher::restart_watcher(&state, watcher_event_sink(app_handle.clone()))?;
+    crate::tray::update_tray_icon(&app_handle);
     run_async_reconciliation(app_handle, state.inner().clone());
     Ok(())
 }
@@ -126,8 +128,13 @@ pub async fn run_reconciliation_scan(
 }
 
 #[tauri::command]
-pub async fn pause_watching(state: State<'_, AppState>) -> Result<(), AppError> {
-    engine::watcher::pause_watching(&state)
+pub async fn pause_watching(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    engine::watcher::pause_watching(&state)?;
+    crate::tray::update_tray_icon(&app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -135,7 +142,9 @@ pub async fn resume_watching(
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    engine::watcher::resume_watching(&state, watcher_event_sink(app_handle))
+    engine::watcher::resume_watching(&state, watcher_event_sink(app_handle.clone()))?;
+    crate::tray::update_tray_icon(&app_handle);
+    Ok(())
 }
 
 pub fn start_periodic_reconciliation(app_handle: AppHandle, state: AppState) {

@@ -110,6 +110,8 @@ fn pause_watching(app_handle: &AppHandle) {
     let state = app_handle.state::<AppState>();
     if let Err(error) = crate::engine::watcher::pause_watching(&state) {
         let _ = app_handle.emit("action_failed", error);
+    } else {
+        update_tray_icon(app_handle);
     }
 }
 
@@ -120,10 +122,56 @@ fn resume_watching(app_handle: &AppHandle) {
         crate::commands::watcher_event_sink(app_handle.clone()),
     ) {
         let _ = app_handle.emit("action_failed", error);
+    } else {
+        update_tray_icon(app_handle);
     }
 }
 
 fn run_reconciliation(app_handle: &AppHandle) {
     let state = app_handle.state::<AppState>();
     crate::commands::config::run_async_reconciliation(app_handle.clone(), state.inner().clone());
+}
+
+pub fn update_tray_icon(app_handle: &AppHandle) {
+    let state = app_handle.state::<AppState>();
+    let is_watching = if state.is_watching_paused() {
+        false
+    } else {
+        match crate::storage::get_config(&state.db) {
+            Ok(config) => config.watch_targets.iter().any(|t| t.enabled),
+            Err(_) => false,
+        }
+    };
+
+    if let Some(tray) = app_handle.tray_by_id("shelflife") {
+        if let Some(icon) = app_handle.default_window_icon() {
+            if is_watching {
+                let _ = tray.set_icon(Some(icon.clone()));
+                let _ = tray.set_tooltip(Some("ShelfLife".to_string()));
+            } else {
+                let gray_icon = to_grayscale(icon);
+                let _ = tray.set_icon(Some(gray_icon));
+                let _ = tray.set_tooltip(Some("ShelfLife (Paused)".to_string()));
+            }
+        }
+    }
+}
+
+fn to_grayscale(image: &tauri::image::Image) -> tauri::image::Image<'static> {
+    let width = image.width();
+    let height = image.height();
+    let rgba = image.rgba();
+    let mut gray_rgba = Vec::with_capacity(rgba.len());
+    for chunk in rgba.chunks_exact(4) {
+        let r = chunk[0] as f32;
+        let g = chunk[1] as f32;
+        let b = chunk[2] as f32;
+        let a = chunk[3];
+        let gray = (0.299 * r + 0.587 * g + 0.114 * b).round() as u8;
+        gray_rgba.push(gray);
+        gray_rgba.push(gray);
+        gray_rgba.push(gray);
+        gray_rgba.push(a);
+    }
+    tauri::image::Image::new_owned(gray_rgba, width, height)
 }

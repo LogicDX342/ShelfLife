@@ -36,6 +36,7 @@ pub fn run() {
                 commands::watcher_event_sink(app.handle().clone()),
             )
             .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
+            tray::update_tray_icon(app.handle());
             let db = state.db.clone();
             let app_handle = app.handle().clone();
             let state_clone = state.clone();
