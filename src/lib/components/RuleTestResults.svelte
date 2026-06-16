@@ -22,7 +22,7 @@
           class="text-sm font-semibold tracking-tight text-fluent-text-light dark:text-fluent-text-dark"
         >
           {i18n.t('rules.testResults')}:
-          <span class="text-fluent-accent">{ruleName}</span>
+          <span class="text-primary">{ruleName}</span>
         </h3>
         <Button variant="link" onclick={onClear}>
           {i18n.t('rules.clearResults')}

@@ -352,7 +352,7 @@
               <div
                 class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
               >
-                <h3 class="text-sm font-semibold text-fluent-accent">
+                <h3 class="text-sm font-semibold text-primary">
                   {i18n.t('settings.general')}
                 </h3>
                 <div
@@ -523,7 +523,7 @@
               <div
                 class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
               >
-                <h3 class="text-sm font-semibold text-fluent-accent font-medium">
+                <h3 class="text-sm font-semibold text-primary font-medium">
                   {i18n.t('settings.watchTargets')}
                 </h3>
                 <Button

@@ -81,7 +81,7 @@
     class="px-3 md:px-6 pt-5 pb-2 flex items-center justify-center md:justify-start gap-3"
     data-tauri-drag-region
   >
-    <IconArchive class="w-6 h-6 text-fluent-accent flex-shrink-0" data-tauri-drag-region />
+    <IconArchive class="w-6 h-6 text-primary flex-shrink-0" data-tauri-drag-region />
     <span
       class="hidden md:inline text-lg font-bold tracking-wide whitespace-nowrap"
       data-tauri-drag-region>ShelfLife</span

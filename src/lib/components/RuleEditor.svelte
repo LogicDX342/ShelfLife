@@ -272,7 +272,7 @@
         <div class="flex flex-col gap-1.5">
           <Label for="rule-mode">{i18n.t('rules.mode')}</Label>
           <Select.Root type="single" bind:value={mode}>
-            <Select.Trigger id="rule-mode">
+            <Select.Trigger id="rule-mode" class="w-full">
               <span data-slot="select-value">{modeLabel(mode)}</span>
             </Select.Trigger>
             <Select.Content>
@@ -342,7 +342,7 @@
         <div class="flex flex-col gap-1.5">
           <Label for="size-criteria">{i18n.t('rules.fileSizeCriteria')}</Label>
           <Select.Root type="single" bind:value={sizeKind}>
-            <Select.Trigger id="size-criteria">
+            <Select.Trigger id="size-criteria" class="w-full">
               <span data-slot="select-value">{sizeKindLabel(sizeKind)}</span>
             </Select.Trigger>
             <Select.Content>
@@ -383,7 +383,7 @@
         <div class="flex flex-col gap-1.5">
           <Label for="action-kind">{i18n.t('rules.action')}</Label>
           <Select.Root type="single" bind:value={actionKind}>
-            <Select.Trigger id="action-kind">
+            <Select.Trigger id="action-kind" class="w-full">
               <span data-slot="select-value">{actionKindLabel(actionKind)}</span>
             </Select.Trigger>
             <Select.Content>

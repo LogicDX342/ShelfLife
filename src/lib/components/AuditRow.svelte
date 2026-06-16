@@ -67,19 +67,19 @@
   <Card.Header class="items-center">
     <div class="flex items-start gap-3 min-w-0 flex-1">
       <!-- Action icon badge -->
-      <div class={getActionColors(entry.action_kind)}>
+      <div class="p-2.5 rounded-lg flex-shrink-0 {getActionColors(entry.action_kind)}">
         {#if entry.action_kind === 'Trash'}
-          <IconDelete />
+          <IconDelete class="w-5 h-5" />
         {:else if entry.action_kind === 'Move'}
-          <IconFolderArrowRight />
+          <IconFolderArrowRight class="w-5 h-5" />
         {:else if entry.action_kind === 'Rename'}
-          <IconEdit />
+          <IconEdit class="w-5 h-5" />
         {:else if entry.action_kind === 'Pin'}
-          <IconPin />
+          <IconPin class="w-5 h-5" />
         {:else if entry.action_kind === 'Snooze'}
-          <IconClock />
+          <IconClock class="w-5 h-5" />
         {:else}
-          <IconEyeOff />
+          <IconEyeOff class="w-5 h-5" />
         {/if}
       </div>
 
@@ -128,12 +128,14 @@
           {/if}
         </Button>
       {:else if entry.undo_status === 'Completed'}
-        <span
-          class="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-semibold px-2.5 py-1 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/40 rounded"
+        <Button
+          variant="outline"
+          disabled
+          class="border-green-200 dark:border-green-900/40 bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 disabled:opacity-100 disabled:bg-green-50 dark:disabled:bg-green-950/20 disabled:text-green-600 dark:disabled:text-green-400 disabled:border-green-200 dark:disabled:border-green-900/40"
         >
-          <IconCheckmark class="w-3.5 h-3.5" />
+          <IconCheckmark class="w-4 h-4" />
           {i18n.t('audit.undone')}
-        </span>
+        </Button>
       {:else}
         <span
           class="text-[10px] max-w-[150px] text-right text-muted-foreground italic truncate"

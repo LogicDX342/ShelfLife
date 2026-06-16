@@ -339,7 +339,7 @@
               <div class="flex items-center gap-3 min-w-0">
                 <!-- Folder Icon -->
                 <IconFolder
-                  class="w-8 h-8 text-fluent-accent/80 group-hover:scale-105 transition-transform flex-shrink-0"
+                  class="w-8 h-8 text-primary/80 group-hover:scale-105 transition-transform flex-shrink-0"
                 />
                 <div class="min-w-0">
                   <h3
@@ -479,7 +479,7 @@
     >
       <div class="flex items-center gap-4">
         <div class="flex flex-col">
-          <span class="text-sm font-semibold text-fluent-accent">
+          <span class="text-sm font-semibold text-primary">
             {i18n.t('dashboard.selected', { count: selectedPaths.length })}
           </span>
           <span class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark">
