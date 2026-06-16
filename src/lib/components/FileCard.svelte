@@ -7,11 +7,18 @@
   import ExplanationBadge from './ExplanationBadge.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
-  import IconDocument from '~icons/fluent/document-24-regular';
-  import IconChevronDown from '~icons/fluent/chevron-down-24-regular';
-  import IconPin from '~icons/fluent/pin-16-regular';
-  import IconFolderArrowRight from '~icons/fluent/folder-arrow-right-16-regular';
-  import IconDelete from '~icons/fluent/delete-16-regular';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { Checkbox } from '$lib/components/ui/checkbox';
+  import { Input } from '$lib/components/ui/input';
+  import * as Select from '$lib/components/ui/select';
+  import { Label } from '$lib/components/ui/label';
+  import IconDocument from '@lucide/svelte/icons/file';
+  import IconChevronDown from '@lucide/svelte/icons/chevron-down';
+  import IconPin from '@lucide/svelte/icons/pin';
+  import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
+  import IconDelete from '@lucide/svelte/icons/trash-2';
 
   let {
     file,
@@ -36,13 +43,13 @@
   let expanded = $state(false);
   let renameTemplate = $state('');
   let moveDestination = $state('');
-  let snoozeDays = $state(7);
+  let snoozeDays = $state('7');
   let customSnoozeDays = $state(7);
   let pendingAction = $state<UserTriageAction | null>(null);
   let pendingTitle = $state('');
   let pendingMessage = $state('');
 
-  const snoozeOptions = [1, 3, 7, 14, 30, -1];
+  const snoozeOptions = ['1', '3', '7', '14', '30', '-1'];
 
   $effect(() => {
     const path = file.path;
@@ -95,8 +102,14 @@
   }
 
   function snoozeAction() {
-    const days = snoozeDays === -1 ? customSnoozeDays : snoozeDays;
+    const days = snoozeDays === '-1' ? customSnoozeDays : Number(snoozeDays);
     queueAction({ Snooze: { seconds: Math.max(1, days) * 24 * 60 * 60 } });
+  }
+
+  function snoozeLabel(days: string) {
+    return days === '-1'
+      ? i18n.t('file.snoozeCustom')
+      : `${days} ${days === '1' ? i18n.t('file.day') : i18n.t('file.days')}`;
   }
 
   async function openLocation() {
@@ -122,45 +135,25 @@
         return 'border-l-4 border-l-neutral-400';
     }
   }
-
-  function getPillBg(state: string) {
-    switch (state) {
-      case 'Fresh':
-        return 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-200 dark:border-green-900/50';
-      case 'Stale':
-        return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50';
-      case 'Decaying':
-        return 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-900/50';
-      case 'Pinned':
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50';
-      default:
-        return 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700/50';
-    }
-  }
 </script>
 
-<article
-  class="fluent-card p-4 flex flex-col gap-2 relative overflow-hidden transition-all duration-200 {getBorderColor(
-    file.state,
-  )}"
->
+<Card.Root class="relative gap-3 p-4 transition-all duration-200 {getBorderColor(file.state)}">
   <!-- Main Grid Info -->
   <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
     <!-- Left: Checkbox + Name/Path -->
     <div class="md:col-span-7 flex items-start gap-3 min-w-0">
       {#if selectable}
-        <input
+        <Checkbox
           aria-label={`Select ${file.file_name}`}
           checked={selected}
-          type="checkbox"
-          class="mt-1.5 h-4.5 w-4.5 rounded border-neutral-300 dark:border-neutral-700 text-fluent-accent focus:ring-fluent-accent cursor-pointer"
-          onchange={(event) => onSelectedChange(file.path, event.currentTarget.checked)}
+          class="mt-1.5"
+          onclick={() => onSelectedChange(file.path, !selected)}
         />
       {/if}
 
       <!-- File type icon representation -->
       <div class="mt-0.5 text-fluent-muted-light dark:text-fluent-muted-dark flex-shrink-0">
-        <IconDocument class="w-6 h-6 opacity-75" />
+        <IconDocument class="opacity-75" />
       </div>
 
       <div class="min-w-0 flex-1">
@@ -193,14 +186,14 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full {getPillBg(file.state)}">
+        <Badge variant="outline">
           {i18n.t(`tab.${file.state.toLowerCase()}`)}
-        </span>
+        </Badge>
 
         <!-- Toggle chevron for details -->
-        <button
+        <Button
           onclick={() => (expanded = !expanded)}
-          class="fluent-button p-1 min-w-[32px] h-[32px] rounded-full border border-neutral-200 dark:border-neutral-800"
+          variant="outline"
           aria-label="Toggle details"
         >
           <IconChevronDown
@@ -208,7 +201,7 @@
               ? 'rotate-180'
               : ''}"
           />
-        </button>
+        </Button>
       </div>
     </div>
   </div>
@@ -229,155 +222,116 @@
     class="flex flex-wrap gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-2"
   >
     {#if file.state === 'Pinned'}
-      <button class="fluent-button" disabled={busy} onclick={() => queueAction('Ignore')}>
+      <Button variant="outline" disabled={busy} onclick={() => queueAction('Ignore')}>
         {i18n.t('file.ignore')}
-      </button>
+      </Button>
     {:else if file.state === 'Ignored'}
-      <button class="fluent-button" disabled={busy} onclick={() => queueAction('Pin')}>
+      <Button variant="outline" disabled={busy} onclick={() => queueAction('Pin')}>
         {i18n.t('file.pin')}
-      </button>
+      </Button>
     {:else}
-      <button
-        class="fluent-button text-blue-600 dark:text-blue-400"
-        disabled={busy}
-        onclick={() => queueAction('Pin')}
-      >
-        <IconPin class="w-3.5 h-3.5 mr-1" />
+      <Button variant="outline" disabled={busy} onclick={() => queueAction('Pin')}>
+        <IconPin />
         {i18n.t('file.pin')}
-      </button>
-      <button class="fluent-button" disabled={busy} onclick={() => queueAction('Ignore')}>
+      </Button>
+      <Button variant="outline" disabled={busy} onclick={() => queueAction('Ignore')}>
         {i18n.t('file.ignore')}
-      </button>
+      </Button>
     {/if}
 
-    <button class="fluent-button" disabled={busy} onclick={() => queueAction('MoveToSafeFolder')}>
-      <IconFolderArrowRight class="w-3.5 h-3.5 mr-1" />
+    <Button variant="outline" disabled={busy} onclick={() => queueAction('MoveToSafeFolder')}>
+      <IconFolderArrowRight />
       {i18n.t('file.safeFolder')}
-    </button>
+    </Button>
 
-    <button
-      class="fluent-button text-red-600 dark:text-red-400"
-      disabled={busy}
-      onclick={() => queueAction('TrashNow')}
-    >
-      <IconDelete class="w-3.5 h-3.5 mr-1" />
+    <Button variant="destructive" disabled={busy} onclick={() => queueAction('TrashNow')}>
+      <IconDelete />
       {i18n.t('file.trash')}
-    </button>
+    </Button>
 
-    <button class="fluent-button" type="button" onclick={openLocation}>
+    <Button variant="ghost" type="button" onclick={openLocation}>
       {i18n.t('file.openFolder')}
-    </button>
+    </Button>
   </div>
 
-  <!-- Expandable Details / Forms Panel -->
+  <!-- Expandable Details -->
   {#if expanded}
     <section
       class="border-t border-fluent-border-light dark:border-fluent-border-dark pt-4 space-y-4 animate-expand"
     >
-      <!-- Action Forms -->
+      <!-- Actions -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- Rename Form -->
-        <form
-          class="flex flex-col gap-1.5"
-          onsubmit={(event) => {
-            event.preventDefault();
-            if (renameTemplate.trim()) {
-              queueAction({ Rename: { template: renameTemplate } });
-            }
-          }}
-        >
-          <label
-            for="rename-in-{file.file_name}"
-            class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >{i18n.t('file.renameTitle')}</label
-          >
+        <!-- Rename -->
+        <div class="flex flex-col gap-1.5">
+          <Label for="rename-in-{file.file_name}">
+            {i18n.t('file.renameTitle')}
+          </Label>
           <div class="flex gap-2">
-            <input
+            <Input
               id="rename-in-{file.file_name}"
               bind:value={renameTemplate}
               placeholder={i18n.t('file.renamePlaceholder')}
-              class="fluent-input flex-1 text-xs min-w-0"
             />
-            <button
-              class="fluent-button text-xs font-semibold"
+            <Button
+              variant="outline"
               disabled={busy || !renameTemplate.trim()}
-              type="submit">{i18n.t('file.actionRename')}</button
+              onclick={() => queueAction({ Rename: { template: renameTemplate } })}
             >
+              {i18n.t('file.actionRename')}
+            </Button>
           </div>
-        </form>
+        </div>
 
-        <!-- Move Form -->
-        <form
-          class="flex flex-col gap-1.5"
-          onsubmit={(event) => {
-            event.preventDefault();
-            if (moveDestination.trim()) {
-              queueAction({ Move: { destination_path: moveDestination } });
-            }
-          }}
-        >
-          <label
-            for="move-in-{file.file_name}"
-            class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-            >{i18n.t('file.moveTitle')}</label
-          >
+        <!-- Move -->
+        <div class="flex flex-col gap-1.5">
+          <Label for="move-in-{file.file_name}">
+            {i18n.t('file.moveTitle')}
+          </Label>
           <div class="flex gap-2">
-            <input
+            <Input
               id="move-in-{file.file_name}"
               bind:value={moveDestination}
               placeholder={i18n.t('file.movePlaceholder')}
-              class="fluent-input flex-1 text-xs min-w-0"
             />
-            <button
-              class="fluent-button text-xs font-semibold"
+            <Button
+              variant="outline"
               disabled={busy || !moveDestination.trim()}
-              type="submit">{i18n.t('file.actionMove')}</button
+              onclick={() => queueAction({ Move: { destination_path: moveDestination } })}
             >
+              {i18n.t('file.actionMove')}
+            </Button>
           </div>
-        </form>
-      </div>
-
-      <!-- Snooze Form -->
-      <form
-        class="flex flex-col gap-1.5 max-w-md"
-        onsubmit={(event) => {
-          event.preventDefault();
-          snoozeAction();
-        }}
-      >
-        <label
-          for="snooze-in-{file.file_name}"
-          class="text-xs font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
-          >{i18n.t('file.snoozeTitle')}</label
-        >
-        <div class="flex gap-2">
-          <select
-            id="snooze-in-{file.file_name}"
-            bind:value={snoozeDays}
-            class="fluent-input flex-1 text-xs min-w-0"
-          >
-            {#each snoozeOptions as days (days)}
-              <option value={days}
-                >{days === -1
-                  ? i18n.t('file.snoozeCustom')
-                  : `${days} ${days === 1 ? i18n.t('file.day') : i18n.t('file.days')}`}</option
-              >
-            {/each}
-          </select>
-          {#if snoozeDays === -1}
-            <input
-              min="1"
-              type="number"
-              bind:value={customSnoozeDays}
-              class="fluent-input w-24 text-xs"
-              placeholder={i18n.t('file.days')}
-            />
-          {/if}
-          <button class="fluent-button text-xs font-semibold" disabled={busy} type="submit"
-            >{i18n.t('file.snooze')}</button
-          >
         </div>
-      </form>
+        <!-- Snooze -->
+        <div class="flex flex-col gap-1.5">
+          <Label for="snooze-in-{file.file_name}">
+            {i18n.t('file.snoozeTitle')}
+          </Label>
+          <div class="flex gap-2">
+            <Select.Root type="single" bind:value={snoozeDays}>
+              <Select.Trigger id="snooze-in-{file.file_name}" class="flex-1 min-w-0">
+                <span data-slot="select-value">{snoozeLabel(snoozeDays)}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each snoozeOptions as days (days)}
+                  <Select.Item value={days} label={snoozeLabel(days)} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+            {#if snoozeDays === '-1'}
+              <Input
+                min="1"
+                type="number"
+                bind:value={customSnoozeDays}
+                placeholder={i18n.t('file.days')}
+              />
+            {/if}
+            <Button variant="outline" disabled={busy} onclick={snoozeAction}>
+              {i18n.t('file.snooze')}
+            </Button>
+          </div>
+        </div>
+      </div>
     </section>
   {/if}
 
@@ -390,7 +344,7 @@
     onCancel={() => (pendingAction = null)}
     onConfirm={confirmPendingAction}
   />
-</article>
+</Card.Root>
 
 <style>
   @keyframes expand {

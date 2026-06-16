@@ -10,6 +10,7 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { AutomationRule, RuleMatchExplanation } from '$lib/types';
   import { notifications } from '$lib/stores/notifications.svelte';
+  import { Button } from '$lib/components/ui/button';
 
   let previewResults = $state<RuleMatchExplanation[]>([]);
   let editingRule = $state<AutomationRule | null>(null);
@@ -91,31 +92,28 @@
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <button class="fluent-button" onclick={() => rulesState.refresh()}>
+      <Button variant="outline" onclick={() => rulesState.refresh()}>
         {i18n.t('rules.refresh')}
-      </button>
-      <button
-        class="fluent-button fluent-button-primary"
+      </Button>
+      <Button
         onclick={() => {
           showNewEditor = true;
           editingRule = null;
         }}
       >
         + {i18n.t('rules.newRule')}
-      </button>
+      </Button>
     </div>
   </header>
 
   <div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
     {#if showNewEditor || editingRule}
-      <div
-        class="fluent-card p-6 bg-fluent-card-light dark:bg-fluent-card-dark border border-fluent-accent/20 shadow-md"
-      >
-        <h3 class="text-base font-semibold mb-4 text-fluent-accent">
+      <div class="space-y-4">
+        <h2 class="text-lg font-semibold text-primary">
           {editingRule
             ? i18n.t('rules.editRule', { name: editingRule.name })
             : i18n.t('rules.newRule')}
-        </h3>
+        </h2>
         <RuleEditor rule={editingRule} onSaved={refreshAfterSave} onCancel={handleCancel} />
       </div>
     {/if}

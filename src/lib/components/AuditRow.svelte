@@ -4,13 +4,16 @@
   import type { AuditEntry } from '$lib/types';
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
   import { notifications } from '$lib/stores/notifications.svelte';
-  import IconDelete from '~icons/fluent/delete-20-regular';
-  import IconFolderArrowRight from '~icons/fluent/folder-arrow-right-20-regular';
-  import IconEdit from '~icons/fluent/edit-20-regular';
-  import IconPin from '~icons/fluent/pin-20-regular';
-  import IconClock from '~icons/fluent/clock-20-regular';
-  import IconEyeOff from '~icons/fluent/eye-off-20-regular';
-  import IconCheckmark from '~icons/fluent/checkmark-16-regular';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import IconDelete from '@lucide/svelte/icons/trash-2';
+  import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
+  import IconEdit from '@lucide/svelte/icons/pencil';
+  import IconPin from '@lucide/svelte/icons/pin';
+  import IconClock from '@lucide/svelte/icons/clock';
+  import IconEyeOff from '@lucide/svelte/icons/eye-off';
+  import IconCheckmark from '@lucide/svelte/icons/check';
 
   let { entry, onRefresh } = $props<{ entry: AuditEntry; onRefresh: () => Promise<void> }>();
   let busy = $state(false);
@@ -60,95 +63,87 @@
   }
 </script>
 
-<div
-  class="fluent-card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-fluent-card-light dark:bg-fluent-card-dark"
->
-  <div class="flex items-start gap-3 min-w-0 flex-1">
-    <!-- Action icon badge -->
-    <div class="p-2.5 rounded-lg flex-shrink-0 {getActionColors(entry.action_kind)}">
-      {#if entry.action_kind === 'Trash'}
-        <IconDelete class="w-5 h-5" />
-      {:else if entry.action_kind === 'Move'}
-        <IconFolderArrowRight class="w-5 h-5" />
-      {:else if entry.action_kind === 'Rename'}
-        <IconEdit class="w-5 h-5" />
-      {:else if entry.action_kind === 'Pin'}
-        <IconPin class="w-5 h-5" />
-      {:else if entry.action_kind === 'Snooze'}
-        <IconClock class="w-5 h-5" />
-      {:else}
-        <IconEyeOff class="w-5 h-5" />
-      {/if}
-    </div>
-
-    <!-- Info details -->
-    <div class="min-w-0 flex-1 space-y-0.5">
-      <div class="flex items-center gap-2">
-        <span
-          class="text-sm font-semibold tracking-tight text-fluent-text-light dark:text-fluent-text-dark"
-          >{entry.file_name}</span
-        >
-        <span
-          class="text-[10px] px-1.5 py-0.2 rounded bg-black/5 dark:bg-white/5 font-semibold text-fluent-muted-light dark:text-fluent-muted-dark uppercase tracking-wider"
-          >{entry.action_kind}</span
-        >
-      </div>
-      <p
-        class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate"
-        title={entry.source_path}
-      >
-        {i18n.t('audit.source', { path: entry.source_path })}
-      </p>
-      {#if entry.destination_path}
-        <p
-          class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate"
-          title={entry.destination_path}
-        >
-          {i18n.t('audit.destLabel', { path: entry.destination_path })}
-        </p>
-      {/if}
-      <div
-        class="flex items-center gap-2 pt-1 text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark"
-      >
-        <span>{i18n.t('audit.size', { size: formatBytes(entry.size_bytes) })}</span>
-        <span>•</span>
-        <span>{formatDate(entry.timestamp)}</span>
-        {#if entry.rule_name}
-          <span>•</span>
-          <span class="font-medium text-fluent-accent"
-            >{i18n.t('audit.rule', { name: entry.rule_name })}</span
-          >
-        {/if}
-      </div>
-    </div>
-  </div>
-
-  <!-- Right: Undo Action -->
-  <div
-    class="flex flex-col items-end gap-1 flex-shrink-0 self-stretch sm:self-center justify-between sm:justify-center"
-  >
-    {#if undoAvailable}
-      <button class="fluent-button text-xs font-bold px-3 py-1.5" onclick={undo} disabled={busy}>
-        {#if busy}
-          {i18n.t('audit.undoing')}
+<Card.Root>
+  <Card.Header class="items-center">
+    <div class="flex items-start gap-3 min-w-0 flex-1">
+      <!-- Action icon badge -->
+      <div class="p-2.5 rounded-lg flex-shrink-0 {getActionColors(entry.action_kind)}">
+        {#if entry.action_kind === 'Trash'}
+          <IconDelete class="w-5 h-5" />
+        {:else if entry.action_kind === 'Move'}
+          <IconFolderArrowRight class="w-5 h-5" />
+        {:else if entry.action_kind === 'Rename'}
+          <IconEdit class="w-5 h-5" />
+        {:else if entry.action_kind === 'Pin'}
+          <IconPin class="w-5 h-5" />
+        {:else if entry.action_kind === 'Snooze'}
+          <IconClock class="w-5 h-5" />
         {:else}
-          {i18n.t('audit.undo')}
+          <IconEyeOff class="w-5 h-5" />
         {/if}
-      </button>
-    {:else if entry.undo_status === 'Completed'}
-      <span
-        class="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-semibold px-2.5 py-1 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/40 rounded"
-      >
-        <IconCheckmark class="w-3.5 h-3.5" />
-        {i18n.t('audit.undone')}
-      </span>
-    {:else}
-      <span
-        class="text-[10px] max-w-[150px] text-right text-fluent-muted-light dark:text-fluent-muted-dark italic truncate"
-        title={statusText}
-      >
-        {statusText}
-      </span>
-    {/if}
-  </div>
-</div>
+      </div>
+
+      <!-- Info details -->
+      <div class="min-w-0 flex-1 space-y-0.5">
+        <div class="flex items-center gap-2">
+          <Card.Title class="text-sm font-semibold tracking-tight">
+            {entry.file_name}
+          </Card.Title>
+          <Badge variant="secondary">
+            {entry.action_kind}
+          </Badge>
+        </div>
+        <Card.Description class="text-xs truncate" title={entry.source_path}>
+          {i18n.t('audit.source', { path: entry.source_path })}
+        </Card.Description>
+        {#if entry.destination_path}
+          <Card.Description class="text-xs truncate" title={entry.destination_path}>
+            {i18n.t('audit.destLabel', { path: entry.destination_path })}
+          </Card.Description>
+        {/if}
+        <div class="flex items-center gap-2 pt-1 text-[10px] text-muted-foreground">
+          <span>{i18n.t('audit.size', { size: formatBytes(entry.size_bytes) })}</span>
+          <span>•</span>
+          <span>{formatDate(entry.timestamp)}</span>
+          {#if entry.rule_name}
+            <span>•</span>
+            <span class="font-medium text-primary">
+              {i18n.t('audit.rule', { name: entry.rule_name })}
+            </span>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Undo Action -->
+    <Card.Action
+      class="flex flex-col items-end gap-1 flex-shrink-0 self-stretch sm:self-center justify-between sm:justify-center"
+    >
+      {#if undoAvailable}
+        <Button variant="outline" onclick={undo} disabled={busy}>
+          {#if busy}
+            {i18n.t('audit.undoing')}
+          {:else}
+            {i18n.t('audit.undo')}
+          {/if}
+        </Button>
+      {:else if entry.undo_status === 'Completed'}
+        <Button
+          variant="outline"
+          disabled
+          class="border-green-200 dark:border-green-900/40 bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 disabled:opacity-100 disabled:bg-green-50 dark:disabled:bg-green-950/20 disabled:text-green-600 dark:disabled:text-green-400 disabled:border-green-200 dark:disabled:border-green-900/40"
+        >
+          <IconCheckmark class="w-4 h-4" />
+          {i18n.t('audit.undone')}
+        </Button>
+      {:else}
+        <span
+          class="text-[10px] max-w-[150px] text-right text-muted-foreground italic truncate"
+          title={statusText}
+        >
+          {statusText}
+        </span>
+      {/if}
+    </Card.Action>
+  </Card.Header>
+</Card.Root>

@@ -6,10 +6,10 @@
     isWindowMaximized,
     onWindowResized,
   } from '$lib/api/window';
-  import IconMinimize from '~icons/fluent/subtract-16-regular';
-  import IconMaximize from '~icons/fluent/square-16-regular';
-  import IconRestore from '~icons/fluent/square-multiple-16-regular';
-  import IconDismiss from '~icons/fluent/dismiss-16-regular';
+  import IconMinimize from '@lucide/svelte/icons/minus';
+  import IconMaximize from '@lucide/svelte/icons/square';
+  import IconRestore from '@lucide/svelte/icons/copy';
+  import IconDismiss from '@lucide/svelte/icons/x';
 
   let isMaximized = $state(false);
 

@@ -2,8 +2,9 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { AutomationRule } from '$lib/types';
   import RuleCard from './RuleCard.svelte';
-  import IconSpinner from '~icons/fluent/spinner-ios-20-regular';
-  import IconDocumentBulletList from '~icons/fluent/document-bullet-list-24-regular';
+  import * as Empty from '$lib/components/ui/empty';
+  import { Spinner } from '$lib/components/ui/spinner';
+  import IconDocumentBulletList from '@lucide/svelte/icons/list-checks';
 
   let {
     rules,
@@ -26,21 +27,25 @@
 
 {#if loading && rules.length === 0}
   <div class="py-12 flex flex-col items-center justify-center gap-3">
-    <IconSpinner class="animate-spin h-8 w-8 text-fluent-accent" />
-    <span class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark">
+    <Spinner class="h-8 w-8 text-primary" />
+    <span class="text-sm text-muted-foreground">
       {i18n.t('rules.loading')}
     </span>
   </div>
 {:else if rules.length === 0}
-  <div class="fluent-card py-16 text-center">
-    <IconDocumentBulletList
-      class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3"
-    />
-    <h3 class="text-base font-semibold">{i18n.t('rules.noRules')}</h3>
-    <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-      {i18n.t('rules.noRulesDesc')}
-    </p>
-  </div>
+  <Empty.Root class="border bg-muted/30">
+    <Empty.Header>
+      <Empty.Media>
+        <IconDocumentBulletList
+          class="h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50"
+        />
+      </Empty.Media>
+      <Empty.Title>{i18n.t('rules.noRules')}</Empty.Title>
+      <Empty.Description>
+        {i18n.t('rules.noRulesDesc')}
+      </Empty.Description>
+    </Empty.Header>
+  </Empty.Root>
 {:else}
   <section class="space-y-3">
     {#each rules as rule (rule.id)}
