@@ -81,9 +81,10 @@ pub fn apply_rules_to_tracked_file(
         let first_rule_id = &tracked.matched_rule_ids[0];
         if let Some(rule) = rules.iter().find(|r| &r.id == first_rule_id) {
             if !matches!(rule.mode, crate::models::RuleMode::PreviewOnly) {
-                matched_rule_ttl = Some(rule.ttl_seconds);
                 if matches!(rule.action, crate::models::RuleAction::Ignore) {
                     matched_rule_is_ignore = true;
+                } else {
+                    matched_rule_ttl = Some(rule.ttl_seconds);
                 }
             }
         }

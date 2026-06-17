@@ -53,6 +53,11 @@ pub fn run_async_reconciliation(app_handle: AppHandle, state: AppState) {
         match result {
             Ok(report) => {
                 emit_reconciliation_report(&app_handle_clone, &report);
+                state_clone.wake_rule_scheduler();
+                crate::commands::automation::run_async_expired_rule_execution(
+                    app_handle_clone,
+                    state_clone,
+                );
             }
             Err(error) => {
                 let _ = app_handle_clone.emit("action_failed", error);
@@ -69,7 +74,10 @@ pub async fn save_config(
 ) -> Result<AppConfig, AppError> {
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
-    engine::watcher::restart_watcher(&state, watcher_event_sink(app_handle.clone()))?;
+    engine::watcher::restart_watcher(
+        &state,
+        watcher_event_sink(app_handle.clone(), state.inner().clone()),
+    )?;
     crate::tray::update_tray_icon(&app_handle);
     run_async_reconciliation(app_handle, state.inner().clone());
     Ok(config)
@@ -112,7 +120,10 @@ pub async fn update_watch_targets(
     config.watch_targets = targets;
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
-    engine::watcher::restart_watcher(&state, watcher_event_sink(app_handle.clone()))?;
+    engine::watcher::restart_watcher(
+        &state,
+        watcher_event_sink(app_handle.clone(), state.inner().clone()),
+    )?;
     crate::tray::update_tray_icon(&app_handle);
     run_async_reconciliation(app_handle, state.inner().clone());
     Ok(())
@@ -142,7 +153,10 @@ pub async fn resume_watching(
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    engine::watcher::resume_watching(&state, watcher_event_sink(app_handle.clone()))?;
+    engine::watcher::resume_watching(
+        &state,
+        watcher_event_sink(app_handle.clone(), state.inner().clone()),
+    )?;
     crate::tray::update_tray_icon(&app_handle);
     Ok(())
 }
@@ -175,10 +189,18 @@ pub fn emit_reconciliation_report(app_handle: &AppHandle, report: &Reconciliatio
     let _ = app_handle.emit("reconciliation_completed", report);
 }
 
-pub fn watcher_event_sink(app_handle: AppHandle) -> engine::watcher::WatcherEventSink {
+pub fn watcher_event_sink(
+    app_handle: AppHandle,
+    state: AppState,
+) -> engine::watcher::WatcherEventSink {
     Arc::new(move |event| match event {
         engine::watcher::WatcherEvent::Reconciled(report) => {
             emit_reconciliation_report(&app_handle, &report);
+            state.wake_rule_scheduler();
+            crate::commands::automation::run_async_expired_rule_execution(
+                app_handle.clone(),
+                state.clone(),
+            );
         }
         engine::watcher::WatcherEvent::Error(error) => {
             let _ = app_handle.emit("action_failed", error);

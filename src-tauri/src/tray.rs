@@ -119,7 +119,7 @@ fn resume_watching(app_handle: &AppHandle) {
     let state = app_handle.state::<AppState>();
     if let Err(error) = crate::engine::watcher::resume_watching(
         &state,
-        crate::commands::watcher_event_sink(app_handle.clone()),
+        crate::commands::watcher_event_sink(app_handle.clone(), state.inner().clone()),
     ) {
         let _ = app_handle.emit("action_failed", error);
     } else {

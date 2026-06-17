@@ -33,6 +33,11 @@ pub async fn save_rule(
 
     let report = crate::engine::refresh_tracked_rule_state(&state.db)?;
     crate::commands::config::emit_reconciliation_report(&app_handle, &report);
+    state.wake_rule_scheduler();
+    crate::commands::automation::run_async_expired_rule_execution(
+        app_handle,
+        state.inner().clone(),
+    );
 
     Ok(rule)
 }
@@ -103,6 +108,7 @@ pub async fn delete_rule(
 
     let report = crate::engine::refresh_tracked_rule_state(&state.db)?;
     crate::commands::config::emit_reconciliation_report(&app_handle, &report);
+    state.wake_rule_scheduler();
 
     Ok(())
 }

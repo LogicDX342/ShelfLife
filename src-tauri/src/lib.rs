@@ -33,7 +33,7 @@ pub fn run() {
             tray::setup(app).map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             engine::watcher::restart_watcher(
                 &state,
-                commands::watcher_event_sink(app.handle().clone()),
+                commands::watcher_event_sink(app.handle().clone(), state.clone()),
             )
             .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             tray::update_tray_icon(app.handle());
@@ -66,13 +66,19 @@ pub fn run() {
                 match report {
                     Ok(rep) => {
                         commands::emit_reconciliation_report(&app_handle, &rep);
+                        state_clone.wake_rule_scheduler();
+                        commands::run_async_expired_rule_execution(
+                            app_handle.clone(),
+                            state_clone.clone(),
+                        );
                     }
                     Err(error) => {
                         let _ = app_handle.emit("action_failed", error);
                     }
                 }
             });
-            commands::start_periodic_reconciliation(app.handle().clone(), state);
+            commands::start_periodic_reconciliation(app.handle().clone(), state.clone());
+            commands::start_periodic_rule_execution(app.handle().clone(), state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

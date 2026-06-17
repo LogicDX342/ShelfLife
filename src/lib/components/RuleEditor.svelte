@@ -149,6 +149,12 @@
     applyRule(rule);
   });
 
+  $effect(() => {
+    if (actionKind === 'Ignore' && mode === 'AskFirst') {
+      mode = 'PreviewOnly';
+    }
+  });
+
   function buildRule(): AutomationRule {
     const now = Math.floor(Date.now() / 1000);
     return {
@@ -274,7 +280,9 @@
             </Select.Trigger>
             <Select.Content>
               <Select.Item value="PreviewOnly" label={i18n.t('rules.modePreviewOnly')} />
-              <Select.Item value="AskFirst" label={i18n.t('rules.modeAskFirst')} />
+              {#if actionKind !== 'Ignore'}
+                <Select.Item value="AskFirst" label={i18n.t('rules.modeAskFirst')} />
+              {/if}
               <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
             </Select.Content>
           </Select.Root>

@@ -9,8 +9,8 @@ use uuid::Uuid;
 use crate::engine::freshness::{now_seconds, tracked_file_from_metadata};
 use crate::engine::paths::root_contains;
 use crate::models::{
-    AppConfig, AppError, AuditActionKind, AuditEntry, Expiry, FileDecayState, TrackedFile,
-    UndoStatus, UserTriageAction,
+    AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
+    RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus, UserTriageAction,
 };
 use crate::rules::protected_pattern_match;
 use crate::storage;
@@ -120,7 +120,7 @@ pub fn execute_triage_action(
             let destination = move_destination(&source, &safe_folder, None)?;
             fs::rename(&source, &destination)?;
             destination_path = Some(destination.to_string_lossy().to_string());
-            tracked.path = destination.to_string_lossy().to_string();
+            apply_tracked_destination(&mut tracked, &destination);
             action_kind = AuditActionKind::Move;
             undo_status = UndoStatus::Available;
         }
@@ -132,7 +132,7 @@ pub fn execute_triage_action(
             let destination = move_destination(&source, &destination_folder, None)?;
             fs::rename(&source, &destination)?;
             destination_path = Some(destination.to_string_lossy().to_string());
-            tracked.path = destination.to_string_lossy().to_string();
+            apply_tracked_destination(&mut tracked, &destination);
             action_kind = AuditActionKind::Move;
             undo_status = UndoStatus::Available;
         }
@@ -178,6 +178,104 @@ pub fn execute_triage_action(
         rule_id: None,
         rule_name: None,
         explanation: None,
+        undo_status,
+    };
+    storage::audit::append_audit_entry(db, &entry)?;
+    Ok(entry)
+}
+
+pub fn execute_automation_rule_action(
+    db: &Database,
+    path: &str,
+    rule: &AutomationRule,
+    explanation: RuleMatchExplanation,
+) -> Result<AuditEntry, AppError> {
+    if !matches!(rule.mode, RuleMode::Automatic) {
+        return Err(AppError::new(
+            "RULE_NOT_AUTOMATIC",
+            "Only automatic rules can execute without user confirmation.",
+            true,
+        ));
+    }
+
+    let config = storage::get_config(db)?;
+    let source = PathBuf::from(path);
+    if !source.exists() {
+        return Err(AppError::path_not_found(path));
+    }
+    validate_source_scope(&source, &config)?;
+
+    let mut tracked = load_or_create_tracked(db, &source, &config)?;
+    let original_tracked_path = tracked.path.clone();
+    let timestamp = now_seconds();
+    let mut destination_path = None;
+    let action_kind;
+    let undo_status;
+
+    match &rule.action {
+        RuleAction::Ignore => {
+            tracked.state = FileDecayState::Ignored;
+            action_kind = AuditActionKind::Ignore;
+            undo_status = UndoStatus::Available;
+        }
+        RuleAction::Move {
+            destination_folder,
+            rename_template,
+        } => {
+            validate_not_protected_for_filesystem_change(&source, &config)?;
+            let destination_folder = PathBuf::from(destination_folder);
+            validate_move_destination_folder(&destination_folder, &config)?;
+            fs::create_dir_all(&destination_folder)?;
+            let destination =
+                move_destination(&source, &destination_folder, rename_template.as_deref())?;
+            fs::rename(&source, &destination)?;
+            destination_path = Some(destination.to_string_lossy().to_string());
+            apply_tracked_destination(&mut tracked, &destination);
+            action_kind = AuditActionKind::Move;
+            undo_status = UndoStatus::Available;
+        }
+        RuleAction::Trash => {
+            validate_not_protected_for_filesystem_change(&source, &config)?;
+            trash::delete(&source).map_err(|error| {
+                AppError::with_details(
+                    "ACTION_FAILED",
+                    "The file could not be moved to the Recycle Bin. No raw deletion was attempted.",
+                    true,
+                    error.to_string(),
+                )
+            })?;
+            tracked.state = FileDecayState::Missing;
+            action_kind = AuditActionKind::Trash;
+            undo_status = if is_trash_supported() {
+                UndoStatus::Available
+            } else {
+                UndoStatus::Unavailable {
+                    reason: String::from(
+                        "Recycle Bin is not supported or not fully functional on this system.",
+                    ),
+                }
+            };
+        }
+    }
+
+    tracked.last_user_action_at = Some(timestamp);
+    if tracked.path != original_tracked_path {
+        storage::tracked::remove_tracked_file(db, &original_tracked_path)?;
+    }
+    storage::tracked::upsert_tracked_file(db, &tracked)?;
+
+    let entry = AuditEntry {
+        id: Uuid::new_v4().to_string(),
+        sequence: storage::audit::next_audit_sequence(db)?,
+        timestamp,
+        action_kind,
+        source_path: path.to_string(),
+        destination_path,
+        file_name: tracked.file_name.clone(),
+        size_bytes: tracked.size_bytes,
+        rule_id: Some(rule.id.clone()),
+        rule_name: Some(rule.name.clone()),
+        explanation: Some(explanation),
         undo_status,
     };
     storage::audit::append_audit_entry(db, &entry)?;
@@ -476,6 +574,15 @@ fn validate_not_protected_for_filesystem_change(
     }
 
     Ok(())
+}
+
+fn apply_tracked_destination(tracked: &mut TrackedFile, destination: &Path) {
+    tracked.path = destination.to_string_lossy().to_string();
+    tracked.file_name = destination
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(&tracked.file_name)
+        .to_string();
 }
 
 pub fn move_destination(

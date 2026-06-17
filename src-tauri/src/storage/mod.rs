@@ -4,9 +4,11 @@ pub mod rules;
 pub mod test_util;
 pub mod tracked;
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
 
 use redb::{Database, ReadableDatabase, TableDefinition};
 
@@ -32,6 +34,21 @@ pub struct AppState {
     pub watcher: Arc<Mutex<Option<crate::engine::watcher::ShelflifeDebouncer>>>,
     pub watching_paused: Arc<AtomicBool>,
     pub reconciliation_active: Arc<AtomicBool>,
+    pub rule_execution_active: Arc<AtomicBool>,
+    pub rule_scheduler_wake: Arc<(Mutex<bool>, Condvar)>,
+    automatic_rule_retries: Arc<Mutex<HashMap<AutomaticRuleRetryKey, AutomaticRuleRetry>>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AutomaticRuleRetryKey {
+    path: String,
+    rule_id: String,
+}
+
+#[derive(Debug, Clone)]
+struct AutomaticRuleRetry {
+    failure_count: u32,
+    retry_after: u64,
 }
 
 impl AppState {
@@ -41,6 +58,9 @@ impl AppState {
             watcher: Arc::new(Mutex::new(None)),
             watching_paused: Arc::new(AtomicBool::new(false)),
             reconciliation_active: Arc::new(AtomicBool::new(false)),
+            rule_execution_active: Arc::new(AtomicBool::new(false)),
+            rule_scheduler_wake: Arc::new((Mutex::new(false), Condvar::new())),
+            automatic_rule_retries: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -50,6 +70,91 @@ impl AppState {
 
     pub fn set_watching_paused(&self, paused: bool) {
         self.watching_paused.store(paused, Ordering::Relaxed);
+        self.wake_rule_scheduler();
+    }
+
+    pub fn wake_rule_scheduler(&self) {
+        let (lock, wake) = &*self.rule_scheduler_wake;
+        if let Ok(mut pending) = lock.lock() {
+            *pending = true;
+            wake.notify_all();
+        }
+    }
+
+    pub fn wait_for_rule_scheduler_wake(&self, timeout: Option<Duration>) -> bool {
+        let (lock, wake) = &*self.rule_scheduler_wake;
+        let Ok(mut pending) = lock.lock() else {
+            return false;
+        };
+
+        if *pending {
+            *pending = false;
+            return true;
+        }
+
+        match timeout {
+            Some(timeout) => match wake.wait_timeout(pending, timeout) {
+                Ok((mut guard, result)) => {
+                    let was_woken = *guard || !result.timed_out();
+                    *guard = false;
+                    was_woken
+                }
+                Err(_) => false,
+            },
+            None => match wake.wait(pending) {
+                Ok(mut guard) => {
+                    let was_woken = *guard;
+                    *guard = false;
+                    was_woken
+                }
+                Err(_) => false,
+            },
+        }
+    }
+
+    pub fn automatic_rule_retry_after(&self, path: &str, rule_id: &str) -> Option<u64> {
+        let retries = self.automatic_rule_retries.lock().ok()?;
+        retries
+            .get(&AutomaticRuleRetryKey {
+                path: path.to_string(),
+                rule_id: rule_id.to_string(),
+            })
+            .map(|retry| retry.retry_after)
+    }
+
+    pub fn record_automatic_rule_failure(&self, path: &str, rule_id: &str, now: u64) -> u64 {
+        const RETRY_BACKOFF_SECONDS: [u64; 4] = [60, 5 * 60, 15 * 60, 60 * 60];
+
+        let Ok(mut retries) = self.automatic_rule_retries.lock() else {
+            return now + RETRY_BACKOFF_SECONDS[0];
+        };
+
+        let retry = retries
+            .entry(AutomaticRuleRetryKey {
+                path: path.to_string(),
+                rule_id: rule_id.to_string(),
+            })
+            .or_insert(AutomaticRuleRetry {
+                failure_count: 0,
+                retry_after: now,
+            });
+
+        retry.failure_count = retry.failure_count.saturating_add(1);
+        let backoff = RETRY_BACKOFF_SECONDS
+            .get(retry.failure_count.saturating_sub(1) as usize)
+            .copied()
+            .unwrap_or(*RETRY_BACKOFF_SECONDS.last().unwrap_or(&60));
+        retry.retry_after = now + backoff;
+        retry.retry_after
+    }
+
+    pub fn clear_automatic_rule_failure(&self, path: &str, rule_id: &str) {
+        if let Ok(mut retries) = self.automatic_rule_retries.lock() {
+            retries.remove(&AutomaticRuleRetryKey {
+                path: path.to_string(),
+                rule_id: rule_id.to_string(),
+            });
+        }
     }
 }
 
