@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use chrono::Local;
 use redb::Database;
 use uuid::Uuid;
 
@@ -114,29 +115,21 @@ pub fn execute_triage_action(
         UserTriageAction::MoveToSafeFolder => {
             validate_not_protected_for_filesystem_change(&source, &config)?;
             let safe_folder = PathBuf::from(&config.safe_folder_path);
+            validate_move_destination_folder(&safe_folder, &config)?;
             fs::create_dir_all(&safe_folder)?;
-            let destination = unique_destination(&safe_folder.join(&tracked.file_name));
+            let destination = move_destination(&source, &safe_folder, None)?;
             fs::rename(&source, &destination)?;
             destination_path = Some(destination.to_string_lossy().to_string());
             tracked.path = destination.to_string_lossy().to_string();
             action_kind = AuditActionKind::Move;
             undo_status = UndoStatus::Available;
         }
-        UserTriageAction::Move {
-            destination_path: destination,
-        } => {
+        UserTriageAction::Move { destination_folder } => {
             validate_not_protected_for_filesystem_change(&source, &config)?;
-            let destination = PathBuf::from(destination);
-            let parent = destination.parent().ok_or_else(|| {
-                AppError::new(
-                    "RULE_INVALID_DESTINATION",
-                    "Move destination has no parent directory. No file was changed.",
-                    true,
-                )
-            })?;
-            validate_destination_scope(parent, &config)?;
-            fs::create_dir_all(parent)?;
-            let destination = unique_destination(&destination);
+            let destination_folder = PathBuf::from(destination_folder);
+            validate_move_destination_folder(&destination_folder, &config)?;
+            fs::create_dir_all(&destination_folder)?;
+            let destination = move_destination(&source, &destination_folder, None)?;
             fs::rename(&source, &destination)?;
             destination_path = Some(destination.to_string_lossy().to_string());
             tracked.path = destination.to_string_lossy().to_string();
@@ -164,20 +157,6 @@ pub fn execute_triage_action(
                     ),
                 }
             };
-        }
-        UserTriageAction::Rename { template } => {
-            validate_not_protected_for_filesystem_change(&source, &config)?;
-            let destination = rename_destination(&source, &template)?;
-            fs::rename(&source, &destination)?;
-            destination_path = Some(destination.to_string_lossy().to_string());
-            tracked.path = destination.to_string_lossy().to_string();
-            tracked.file_name = destination
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or(&tracked.file_name)
-                .to_string();
-            action_kind = AuditActionKind::Rename;
-            undo_status = UndoStatus::Available;
         }
     }
 
@@ -221,7 +200,7 @@ pub fn undo_audit_entry(db: &Database, audit_id: &str) -> Result<AuditEntry, App
     }
 
     let result = match entry.action_kind {
-        AuditActionKind::Move | AuditActionKind::Rename => undo_move_like(db, &entry),
+        AuditActionKind::Move => undo_move_like(db, &entry),
         AuditActionKind::Pin | AuditActionKind::Snooze | AuditActionKind::Ignore => {
             undo_state_only(db, &entry)
         }
@@ -259,7 +238,7 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     })?;
     let from = PathBuf::from(destination);
     let to = PathBuf::from(&entry.source_path);
-    validate_source_scope(&from, &config)?;
+    validate_move_source_for_undo(&from, &config)?;
     let to_parent = to.parent().ok_or_else(|| {
         AppError::new(
             "UNDO_FAILED",
@@ -267,7 +246,7 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
             true,
         )
     })?;
-    validate_destination_scope(to_parent, &config)?;
+    validate_restore_destination_scope(to_parent, &config)?;
 
     if !from.exists() {
         return Err(AppError::new(
@@ -427,13 +406,12 @@ fn validate_source_scope(path: &Path, config: &AppConfig) -> Result<(), AppError
     Err(AppError::path_out_of_scope(path.to_string_lossy().as_ref()))
 }
 
-fn validate_destination_scope(parent: &Path, config: &AppConfig) -> Result<(), AppError> {
+fn validate_restore_destination_scope(parent: &Path, config: &AppConfig) -> Result<(), AppError> {
     if config
         .watch_targets
         .iter()
         .filter(|target| target.enabled)
         .any(|target| root_contains(&target.path, parent))
-        || root_contains(&config.safe_folder_path, parent)
     {
         return Ok(());
     }
@@ -441,6 +419,43 @@ fn validate_destination_scope(parent: &Path, config: &AppConfig) -> Result<(), A
     Err(AppError::path_out_of_scope(
         parent.to_string_lossy().as_ref(),
     ))
+}
+
+fn validate_move_source_for_undo(path: &Path, config: &AppConfig) -> Result<(), AppError> {
+    if path.exists() && destination_inside_watch_targets(path, config) {
+        return Err(AppError::path_out_of_scope(path.to_string_lossy().as_ref()));
+    }
+
+    Ok(())
+}
+
+pub fn validate_move_destination_folder(folder: &Path, config: &AppConfig) -> Result<(), AppError> {
+    if folder.as_os_str().is_empty() {
+        return Err(AppError::new(
+            "RULE_INVALID_DESTINATION",
+            "Move destination folder is required. No file was changed.",
+            true,
+        ));
+    }
+
+    if destination_inside_watch_targets(folder, config) {
+        return Err(AppError::with_details(
+            "RULE_INVALID_DESTINATION",
+            "Move destination folder must be outside all enabled watch targets.",
+            true,
+            folder.to_string_lossy().to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn destination_inside_watch_targets(path: &Path, config: &AppConfig) -> bool {
+    config
+        .watch_targets
+        .iter()
+        .filter(|target| target.enabled)
+        .any(|target| root_contains(&target.path, path))
 }
 
 fn validate_not_protected_for_filesystem_change(
@@ -463,14 +478,31 @@ fn validate_not_protected_for_filesystem_change(
     Ok(())
 }
 
-fn rename_destination(source: &Path, template: &str) -> Result<PathBuf, AppError> {
-    let parent = source.parent().ok_or_else(|| {
-        AppError::new(
-            "ACTION_FAILED",
-            "The file has no parent directory for rename. No file was changed.",
-            true,
-        )
-    })?;
+pub fn move_destination(
+    source: &Path,
+    destination_folder: &Path,
+    rename_template: Option<&str>,
+) -> Result<PathBuf, AppError> {
+    let file_name = match rename_template {
+        Some(template) if !template.trim().is_empty() => render_rename_template(source, template)?,
+        _ => source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| {
+                AppError::new(
+                    "ACTION_FAILED",
+                    "The file name could not be read. No file was changed.",
+                    true,
+                )
+            })?
+            .to_string(),
+    };
+
+    Ok(unique_destination(&destination_folder.join(file_name)))
+}
+
+pub fn render_rename_template(source: &Path, template: &str) -> Result<String, AppError> {
+    validate_rename_template(template)?;
     let current_name = source
         .file_name()
         .and_then(|value| value.to_str())
@@ -481,13 +513,130 @@ fn rename_destination(source: &Path, template: &str) -> Result<PathBuf, AppError
                 true,
             )
         })?;
+    let stem = source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(current_name);
+    let extension = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
+    let date = Local::now().format("%Y-%m-%d").to_string();
 
-    let cleaned = clean_file_name(if template.trim().is_empty() {
+    let rendered = template
+        .replace("{name}", stem)
+        .replace("{ext}", extension)
+        .replace("{file}", current_name)
+        .replace("{date}", &date);
+
+    let cleaned = clean_file_name(if rendered.trim().is_empty() {
         current_name
     } else {
-        template
+        &rendered
     });
-    Ok(unique_destination(&parent.join(cleaned)))
+    validate_windows_reserved_name(&cleaned)?;
+    Ok(cleaned)
+}
+
+pub fn validate_rename_template(template: &str) -> Result<(), AppError> {
+    if template.trim().is_empty() {
+        return Ok(());
+    }
+
+    let invalid_character = template.chars().find(|character| {
+        matches!(
+            character,
+            '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+        )
+    });
+    if let Some(character) = invalid_character {
+        return Err(AppError::with_details(
+            "RULE_INVALID_RENAME_TEMPLATE",
+            "Rename template contains a character that is not valid in Windows file names.",
+            true,
+            character.to_string(),
+        ));
+    }
+
+    let mut remaining = template;
+    while let Some(open_index) = remaining.find('{') {
+        let after_open = &remaining[open_index + 1..];
+        let Some(close_index) = after_open.find('}') else {
+            return Err(AppError::new(
+                "RULE_INVALID_RENAME_TEMPLATE",
+                "Rename template has an unclosed placeholder.",
+                true,
+            ));
+        };
+        let placeholder = &after_open[..close_index];
+        if !matches!(placeholder, "name" | "ext" | "file" | "date") {
+            return Err(AppError::with_details(
+                "RULE_INVALID_RENAME_TEMPLATE",
+                "Rename template contains an unknown placeholder.",
+                true,
+                format!("{{{placeholder}}}"),
+            ));
+        }
+        remaining = &after_open[close_index + 1..];
+    }
+
+    if remaining.contains('}') {
+        return Err(AppError::new(
+            "RULE_INVALID_RENAME_TEMPLATE",
+            "Rename template has a closing placeholder brace without an opening brace.",
+            true,
+        ));
+    }
+
+    if !template.contains('{') {
+        validate_windows_reserved_name(&clean_file_name(template))?;
+    }
+
+    Ok(())
+}
+
+fn validate_windows_reserved_name(file_name: &str) -> Result<(), AppError> {
+    let stem = Path::new(file_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(file_name)
+        .trim_end_matches('.');
+    let upper = stem.to_ascii_uppercase();
+    let reserved = matches!(
+        upper.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    );
+    if reserved {
+        return Err(AppError::with_details(
+            "RULE_INVALID_RENAME_TEMPLATE",
+            "Rename template resolves to a reserved Windows file name.",
+            true,
+            file_name.to_string(),
+        ));
+    }
+
+    Ok(())
 }
 
 fn clean_file_name(file_name: &str) -> String {
@@ -496,6 +645,7 @@ fn clean_file_name(file_name: &str) -> String {
         .replace("_copy", "")
         .replace(" copy", "");
     name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    name = name.trim_matches(' ').trim_end_matches('.').to_string();
     if name.is_empty() {
         String::from("renamed-file")
     } else {
@@ -537,29 +687,32 @@ mod tests {
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
 
-    use super::execute_triage_action;
+    use super::{execute_triage_action, render_rename_template};
 
     #[test]
-    fn rename_avoids_collision_and_updates_tracked_path() {
+    fn manual_move_preserves_name_avoids_collision_and_updates_tracked_path() {
         let fixture = Fixture::new("shelflife-test");
-        let source = fixture.write_watch_file("report (1).txt", "download");
-        fixture.write_watch_file("report.txt", "existing");
+        let source = fixture.write_watch_file("report.txt", "download");
+        let destination_folder = fixture.outside.join("sorted");
+        std::fs::create_dir_all(&destination_folder).expect("destination folder should exist");
+        fixture.write_file(&destination_folder.join("report.txt"), "existing");
         fixture.save_config();
 
         let entry = execute_triage_action(
             &fixture.db,
             &path_string(&source),
-            UserTriageAction::Rename {
-                template: String::new(),
+            UserTriageAction::Move {
+                destination_folder: path_string(&destination_folder),
             },
         )
-        .expect("rename should succeed");
+        .expect("move should succeed");
 
         let destination = entry
             .destination_path
             .expect("destination should be recorded");
         assert!(Path::new(&destination).exists());
         assert!(destination.ends_with("report-1.txt"));
+        assert_eq!(entry.action_kind, AuditActionKind::Move);
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
                 .expect("tracked lookup should work")
@@ -620,14 +773,17 @@ mod tests {
     fn scoped_custom_move_succeeds_and_avoids_destination_collision() {
         let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("report.txt", "download");
-        let existing_destination = fixture.write_watch_file("sorted.txt", "existing");
+        let destination_folder = fixture.outside.join("sorted");
+        std::fs::create_dir_all(&destination_folder).expect("destination folder should exist");
+        let existing_destination =
+            fixture.write_file(&destination_folder.join("report.txt"), "existing");
         fixture.save_config();
 
         let entry = execute_triage_action(
             &fixture.db,
             &path_string(&source),
             UserTriageAction::Move {
-                destination_path: path_string(&existing_destination),
+                destination_folder: path_string(&destination_folder),
             },
         )
         .expect("custom move should succeed");
@@ -635,7 +791,7 @@ mod tests {
         let destination = entry
             .destination_path
             .expect("destination should be recorded");
-        assert!(destination.ends_with("sorted-1.txt"));
+        assert!(destination.ends_with("report-1.txt"));
         assert!(Path::new(&destination).exists());
         assert!(!source.exists());
         assert!(existing_destination.exists());
@@ -646,16 +802,17 @@ mod tests {
         let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("report.txt", "download");
         fixture.save_config();
-        let destination = fixture.watch.join("sorted").join("report.txt");
+        let destination_folder = fixture.outside.join("sorted");
+        let destination = destination_folder.join("report.txt");
 
         let entry = execute_triage_action(
             &fixture.db,
             &path_string(&source),
             UserTriageAction::Move {
-                destination_path: path_string(&destination),
+                destination_folder: path_string(&destination_folder),
             },
         )
-        .expect("custom move into allowed subfolder should succeed");
+        .expect("custom move into outside subfolder should succeed");
 
         assert_eq!(entry.destination_path, Some(path_string(&destination)));
         assert!(destination.exists());
@@ -663,24 +820,24 @@ mod tests {
     }
 
     #[test]
-    fn custom_move_outside_scope_is_rejected_before_change() {
+    fn custom_move_inside_watch_target_is_rejected_before_change() {
         let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("report.txt", "download");
         fixture.save_config();
-        let destination = fixture.outside.join("report.txt");
+        let destination_folder = fixture.watch.join("sorted");
 
         let error = execute_triage_action(
             &fixture.db,
             &path_string(&source),
             UserTriageAction::Move {
-                destination_path: path_string(&destination),
+                destination_folder: path_string(&destination_folder),
             },
         )
-        .expect_err("out-of-scope destination should fail");
+        .expect_err("in-watch destination should fail");
 
-        assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
+        assert_eq!(error.code, "RULE_INVALID_DESTINATION");
         assert!(source.exists());
-        assert!(!destination.exists());
+        assert!(!destination_folder.exists());
     }
 
     #[test]
@@ -692,15 +849,37 @@ mod tests {
         let error = execute_triage_action(
             &fixture.db,
             &path_string(&source),
-            UserTriageAction::Rename {
-                template: String::from("renamed.txt"),
+            UserTriageAction::Move {
+                destination_folder: path_string(&fixture.outside),
             },
         )
-        .expect_err("protected file should not be renamed");
+        .expect_err("protected file should not be moved");
 
         assert_eq!(error.code, "ACTION_FAILED");
         assert!(source.exists());
-        assert!(!fixture.watch.join("renamed.txt").exists());
+        assert!(!fixture.outside.join("tax_receipt.txt").exists());
+    }
+
+    #[test]
+    fn rename_template_drops_empty_extension_trailing_dot() {
+        let fixture = Fixture::new("shelflife-test");
+        let source = fixture.write_watch_file("README", "download");
+
+        let rendered =
+            render_rename_template(&source, "{name}.{ext}").expect("template should render");
+
+        assert_eq!(rendered, "README");
+    }
+
+    #[test]
+    fn rename_template_rejects_unknown_placeholder() {
+        let fixture = Fixture::new("shelflife-test");
+        let source = fixture.write_watch_file("report.pdf", "download");
+
+        let error = render_rename_template(&source, "{month}-{file}")
+            .expect_err("unknown placeholder should fail");
+
+        assert_eq!(error.code, "RULE_INVALID_RENAME_TEMPLATE");
     }
 
     #[test]

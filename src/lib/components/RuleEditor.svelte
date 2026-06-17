@@ -20,11 +20,11 @@
   let {
     onSaved,
     rule = null,
-    onCancel = null,
+    onCancel,
   } = $props<{
     onSaved: () => Promise<void>;
     rule?: AutomationRule | null;
-    onCancel?: (() => void) | null;
+    onCancel: () => void;
   }>();
 
   let name = $state('');
@@ -33,8 +33,8 @@
   let priority = $state(0);
   let ttlDays = $state(30);
   let mode = $state<RuleMode>('PreviewOnly');
-  let actionKind = $state<'Ignore' | 'Trash' | 'Move' | 'Rename'>('Ignore');
-  let destinationPath = $state('');
+  let actionKind = $state<'Ignore' | 'Trash' | 'Move'>('Ignore');
+  let destinationFolder = $state('');
   let renameTemplate = $state('');
   let extensions = $state('');
   let filenameGlobs = $state('');
@@ -59,9 +59,9 @@
 
   async function browseDestinationPath() {
     try {
-      const selected = await selectDirectory('Select Destination Path', destinationPath);
+      const selected = await selectDirectory('Select Destination Folder', destinationFolder);
       if (selected) {
-        destinationPath = selected;
+        destinationFolder = selected;
       }
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('rules.errorSelectFolder')));
@@ -89,8 +89,13 @@
 
   function ruleAction(): RuleAction {
     if (actionKind === 'Trash') return 'Trash';
-    if (actionKind === 'Move') return { Move: { destination_path: destinationPath } };
-    if (actionKind === 'Rename') return { Rename: { template: renameTemplate } };
+    if (actionKind === 'Move')
+      return {
+        Move: {
+          destination_folder: destinationFolder,
+          rename_template: renameTemplate.trim() ? renameTemplate : null,
+        },
+      };
     return 'Ignore';
   }
 
@@ -98,7 +103,7 @@
     if (action === 'Trash') return 'Trash';
     if (action === 'Ignore') return 'Ignore';
     if ('Move' in action) return 'Move';
-    return 'Rename';
+    return 'Ignore';
   }
 
   function applyRule(next: AutomationRule | null) {
@@ -109,13 +114,13 @@
     ttlDays = next ? Math.max(1, Math.round(next.ttl_seconds / 86400)) : 30;
     mode = next?.mode ?? 'PreviewOnly';
     actionKind = next ? actionKindFromRule(next.action) : 'Ignore';
-    destinationPath =
+    destinationFolder =
       next && typeof next.action === 'object' && 'Move' in next.action
-        ? next.action.Move.destination_path
+        ? next.action.Move.destination_folder
         : '';
     renameTemplate =
-      next && typeof next.action === 'object' && 'Rename' in next.action
-        ? next.action.Rename.template
+      next && typeof next.action === 'object' && 'Move' in next.action
+        ? (next.action.Move.rename_template ?? '')
         : '';
     extensions = next?.conditions.extensions.join(', ') ?? '';
     filenameGlobs = next?.conditions.filename_globs.join(', ') ?? '';
@@ -211,7 +216,6 @@
   function actionKindLabel(value: typeof actionKind) {
     if (value === 'Trash') return i18n.t('file.trash');
     if (value === 'Move') return i18n.t('rules.actionMoveLabel');
-    if (value === 'Rename') return i18n.t('rules.actionRenameLabel');
     return i18n.t('rules.actionIgnoreLabel');
   }
 </script>
@@ -261,12 +265,6 @@
           <Label for="rule-priority">{i18n.t('rules.priority')}</Label>
           <Input id="rule-priority" type="number" bind:value={priority} />
         </div>
-        {#if actionKind !== 'Ignore'}
-          <div class="flex flex-col gap-1.5">
-            <Label for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Label>
-            <Input id="ttl-days" min="1" type="number" bind:value={ttlDays} />
-          </div>
-        {/if}
 
         <div class="flex flex-col gap-1.5">
           <Label for="rule-mode">{i18n.t('rules.mode')}</Label>
@@ -329,10 +327,10 @@
             placeholder={i18n.t('rules.sourceDomainsPlaceholder')}
           />
         </div>
-      </div>
+        <!-- </div> -->
 
-      <!-- Size Match Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <!-- Size Match Grid -->
+        <!-- <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2"> -->
         <div class="flex flex-col gap-1.5">
           <Label for="size-criteria">{i18n.t('rules.fileSizeCriteria')}</Label>
           <Select.Root type="single" bind:value={sizeKind}>
@@ -348,19 +346,29 @@
           </Select.Root>
         </div>
 
-        {#if sizeKind === 'GreaterThan' || sizeKind === 'Between'}
+        <div class="grid grid-cols-2 gap-2">
           <div class="flex flex-col gap-1.5">
             <Label for="min-size-mb">{i18n.t('rules.minSizeMb')}</Label>
-            <Input id="min-size-mb" min="0" type="number" bind:value={sizeMinMb} />
+            <Input
+              id="min-size-mb"
+              min="0"
+              type="number"
+              bind:value={sizeMinMb}
+              disabled={sizeKind === 'LessThan' || sizeKind === 'Any'}
+            />
           </div>
-        {/if}
 
-        {#if sizeKind === 'LessThan' || sizeKind === 'Between'}
           <div class="flex flex-col gap-1.5">
             <Label for="max-size-mb">{i18n.t('rules.maxSizeMb')}</Label>
-            <Input id="max-size-mb" min="0" type="number" bind:value={sizeMaxMb} />
+            <Input
+              id="max-size-mb"
+              min="0"
+              type="number"
+              bind:value={sizeMaxMb}
+              disabled={sizeKind === 'GreaterThan' || sizeKind === 'Any'}
+            />
           </div>
-        {/if}
+        </div>
       </div>
     </Card.Content>
   </Card.Root>
@@ -384,39 +392,50 @@
               <Select.Item value="Ignore" label={i18n.t('rules.actionIgnoreLabel')} />
               <Select.Item value="Trash" label={i18n.t('file.trash')} />
               <Select.Item value="Move" label={i18n.t('rules.actionMoveLabel')} />
-              <Select.Item value="Rename" label={i18n.t('rules.actionRenameLabel')} />
             </Select.Content>
           </Select.Root>
         </div>
 
-        {#if actionKind === 'Move'}
-          <div class="flex flex-col gap-1.5">
-            <Label for="destination-path">{i18n.t('rules.destinationPath')}</Label>
-            <div class="flex gap-2 w-full">
-              <Input
-                id="destination-path"
-                bind:value={destinationPath}
-                placeholder="C:\SafeFolder"
-                required
-              />
-              <Button type="button" variant="outline" onclick={browseDestinationPath}>
-                {i18n.t('settings.browse')}
-              </Button>
-            </div>
-          </div>
-        {/if}
+        <div class="flex flex-col gap-1.5">
+          <Label for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Label>
+          <Input
+            id="ttl-days"
+            min="1"
+            type="number"
+            bind:value={ttlDays}
+            disabled={actionKind === 'Ignore'}
+          />
+        </div>
 
-        {#if actionKind === 'Rename'}
-          <div class="flex flex-col gap-1.5">
-            <Label for="rename-template">{i18n.t('rules.renameTemplate')}</Label>
+        <div class="flex flex-col gap-1.5">
+          <Label for="destination-path">{i18n.t('rules.destinationPath')}</Label>
+          <div class="flex gap-2 w-full">
             <Input
-              id="rename-template"
-              bind:value={renameTemplate}
-              placeholder="e.g. YYYY-MM-DD_{name}.ext"
-              required
+              id="destination-path"
+              bind:value={destinationFolder}
+              placeholder="C:\SafeFolder"
+              required={actionKind === 'Move'}
+              disabled={actionKind !== 'Move'}
             />
+            <Button
+              type="button"
+              variant="outline"
+              onclick={browseDestinationPath}
+              disabled={actionKind !== 'Move'}
+            >
+              {i18n.t('settings.browse')}
+            </Button>
           </div>
-        {/if}
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <Label for="rename-template">{i18n.t('rules.renameTemplate')}</Label>
+          <Input
+            id="rename-template"
+            bind:value={renameTemplate}
+            placeholder={'{date}-{name}.{ext}'}
+            disabled={actionKind !== 'Move'}
+          />
+        </div>
       </div>
     </Card.Content>
   </Card.Root>
@@ -430,11 +449,9 @@
         {i18n.t('rules.testRule')}
       {/if}
     </Button>
-    {#if onCancel}
-      <Button variant="outline" type="button" onclick={onCancel}>
-        {i18n.t('dialog.no')}
-      </Button>
-    {/if}
+    <Button variant="outline" type="button" onclick={onCancel}>
+      {i18n.t('dialog.cancel')}
+    </Button>
     <Button type="submit" disabled={saving}>
       {i18n.t('rules.saveRule')}
     </Button>

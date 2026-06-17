@@ -6,7 +6,6 @@ use super::RuleMatchExplanation;
 pub enum AuditActionKind {
     Trash,
     Move,
-    Rename,
     Pin,
     Snooze,
     Ignore,
@@ -55,7 +54,6 @@ pub enum UserTriageAction {
     Snooze { seconds: u64 },
     Ignore,
     MoveToSafeFolder,
-    Move { destination_path: String },
+    Move { destination_folder: String },
     TrashNow,
-    Rename { template: String },
 }

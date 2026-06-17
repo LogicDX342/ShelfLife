@@ -33,8 +33,7 @@ export type TrackedFile = {
 export type RuleMode = 'PreviewOnly' | 'AskFirst' | 'Automatic';
 export type RuleAction =
   | 'Trash'
-  | { Move: { destination_path: string } }
-  | { Rename: { template: string } }
+  | { Move: { destination_folder: string; rename_template: string | null } }
   | 'Ignore';
 
 export type SizeCondition =
@@ -86,14 +85,7 @@ export type UndoStatus =
   | { Unavailable: { reason: string } }
   | { Failed: { reason: string } };
 
-export type AuditActionKind =
-  | 'Trash'
-  | 'Move'
-  | 'Rename'
-  | 'Pin'
-  | 'Snooze'
-  | 'Ignore'
-  | 'RulePreview';
+export type AuditActionKind = 'Trash' | 'Move' | 'Pin' | 'Snooze' | 'Ignore' | 'RulePreview';
 
 export type AuditEntry = {
   id: string;
@@ -125,9 +117,8 @@ export type UserTriageAction =
   | { Snooze: { seconds: number } }
   | 'Ignore'
   | 'MoveToSafeFolder'
-  | { Move: { destination_path: string } }
-  | 'TrashNow'
-  | { Rename: { template: string } };
+  | { Move: { destination_folder: string } }
+  | 'TrashNow';
 
 export type WatchTarget = {
   id: string;

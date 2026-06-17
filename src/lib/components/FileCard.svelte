@@ -43,7 +43,6 @@
 
   let busy = $state(false);
   let expanded = $state(false);
-  let renameTemplate = $state('');
   let moveDestination = $state('');
   let snoozeDays = $state('7');
   let customSnoozeDays = $state(7);
@@ -82,7 +81,6 @@
     if (action === 'MoveToSafeFolder') return i18n.t('file.safeFolder');
     if (action === 'TrashNow') return i18n.t('file.trash');
     if (typeof action === 'object' && 'Snooze' in action) return i18n.t('file.snooze');
-    if (typeof action === 'object' && 'Rename' in action) return i18n.t('file.actionRename');
     if (typeof action === 'object' && 'Move' in action) return i18n.t('file.actionMove');
     return i18n.t('file.actionLabel');
   }
@@ -263,27 +261,6 @@
     >
       <!-- Actions -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- Rename -->
-        <div class="flex flex-col gap-1.5">
-          <Label for="rename-in-{file.file_name}">
-            {i18n.t('file.renameTitle')}
-          </Label>
-          <div class="flex gap-2">
-            <Input
-              id="rename-in-{file.file_name}"
-              bind:value={renameTemplate}
-              placeholder={i18n.t('file.renamePlaceholder')}
-            />
-            <Button
-              variant="outline"
-              disabled={busy || !renameTemplate.trim()}
-              onclick={() => queueAction({ Rename: { template: renameTemplate } })}
-            >
-              {i18n.t('file.actionRename')}
-            </Button>
-          </div>
-        </div>
-
         <!-- Move -->
         <div class="flex flex-col gap-1.5">
           <Label for="move-in-{file.file_name}">
@@ -298,7 +275,7 @@
             <Button
               variant="outline"
               disabled={busy || !moveDestination.trim()}
-              onclick={() => queueAction({ Move: { destination_path: moveDestination } })}
+              onclick={() => queueAction({ Move: { destination_folder: moveDestination } })}
             >
               {i18n.t('file.actionMove')}
             </Button>

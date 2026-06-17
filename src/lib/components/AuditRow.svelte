@@ -3,7 +3,6 @@
   import IconClock from '@lucide/svelte/icons/clock';
   import IconEyeOff from '@lucide/svelte/icons/eye-off';
   import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
-  import IconEdit from '@lucide/svelte/icons/pencil';
   import IconPin from '@lucide/svelte/icons/pin';
   import IconDelete from '@lucide/svelte/icons/trash-2';
 
@@ -50,8 +49,6 @@
         return 'text-red-500 bg-red-100 dark:bg-red-950/30';
       case 'Move':
         return 'text-blue-500 bg-blue-100 dark:bg-blue-950/30';
-      case 'Rename':
-        return 'text-purple-500 bg-purple-100 dark:bg-purple-950/30';
       case 'Pin':
         return 'text-green-500 bg-green-100 dark:bg-green-950/30';
       case 'Snooze':
@@ -73,8 +70,6 @@
           <IconDelete class="w-5 h-5" />
         {:else if entry.action_kind === 'Move'}
           <IconFolderArrowRight class="w-5 h-5" />
-        {:else if entry.action_kind === 'Rename'}
-          <IconEdit class="w-5 h-5" />
         {:else if entry.action_kind === 'Pin'}
           <IconPin class="w-5 h-5" />
         {:else if entry.action_kind === 'Snooze'}

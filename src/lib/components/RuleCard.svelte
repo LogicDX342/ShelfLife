@@ -55,13 +55,14 @@
         </Badge>
       {:else if 'Move' in rule.action}
         <Badge variant="outline">
-          {i18n.t('rules.action')}: {rule.action.Move.destination_path.split('/').pop() ||
-            rule.action.Move.destination_path}
+          {i18n.t('rules.action')}: {rule.action.Move.destination_folder.split('/').pop() ||
+            rule.action.Move.destination_folder}
         </Badge>
-      {:else if 'Rename' in rule.action}
-        <Badge variant="outline">
-          {i18n.t('rules.action')}: {rule.action.Rename.template}
-        </Badge>
+        {#if rule.action.Move.rename_template}
+          <Badge variant="outline">
+            {i18n.t('rules.renameTemplate')}: {rule.action.Move.rename_template}
+          </Badge>
+        {/if}
       {/if}
       {#if rule.action !== 'Ignore'}
         <Badge variant="secondary">

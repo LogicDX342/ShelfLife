@@ -2,7 +2,6 @@
   import IconEyeOff from '@lucide/svelte/icons/eye-off';
   import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
   import IconLockClosed from '@lucide/svelte/icons/lock';
-  import IconEdit from '@lucide/svelte/icons/pencil';
   import IconDelete from '@lucide/svelte/icons/trash-2';
 
   import { i18n } from '$lib/i18n/i18n.svelte';
@@ -20,10 +19,7 @@
           ? 'Ignore'
           : typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action
             ? 'Move'
-            : typeof explanation.proposed_action === 'object' &&
-                'Rename' in explanation.proposed_action
-              ? 'Rename'
-              : 'Other',
+            : 'Other',
   );
 
   let actionLabel = $derived(
@@ -33,10 +29,7 @@
         ? i18n.t('file.ignore')
         : typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action
           ? i18n.t('file.actionMove')
-          : typeof explanation.proposed_action === 'object' &&
-              'Rename' in explanation.proposed_action
-            ? i18n.t('file.actionRename')
-            : i18n.t('file.actionLabel'),
+          : i18n.t('file.actionLabel'),
   );
 
   let styleClasses = $derived(
@@ -61,26 +54,19 @@
               leftSide:
                 'border-violet-200 dark:border-violet-950/40 bg-violet-100/20 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400',
             }
-          : actionType === 'Rename'
+          : actionType === 'Ignore'
             ? {
                 container:
-                  'border-amber-200 bg-amber-50/20 dark:border-amber-950/40 dark:bg-amber-950/10 text-neutral-800 dark:text-neutral-200 hover:bg-amber-50/30 dark:hover:bg-amber-950/20',
+                  'border-neutral-200 bg-neutral-50/30 dark:border-neutral-800 dark:bg-neutral-900/10 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/40 dark:hover:bg-neutral-900/20',
                 leftSide:
-                  'border-amber-200 dark:border-amber-950/40 bg-amber-100/20 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
+                  'border-neutral-200 dark:border-neutral-800 bg-neutral-100/30 dark:bg-neutral-800/30 text-neutral-600 dark:text-neutral-400',
               }
-            : actionType === 'Ignore'
-              ? {
-                  container:
-                    'border-neutral-200 bg-neutral-50/30 dark:border-neutral-800 dark:bg-neutral-900/10 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/40 dark:hover:bg-neutral-900/20',
-                  leftSide:
-                    'border-neutral-200 dark:border-neutral-800 bg-neutral-100/30 dark:bg-neutral-800/30 text-neutral-600 dark:text-neutral-400',
-                }
-              : {
-                  container:
-                    'border-neutral-200 bg-neutral-50/30 dark:border-fluent-border-dark dark:bg-white/5 text-fluent-text-light dark:text-fluent-text-dark',
-                  leftSide:
-                    'border-neutral-200 dark:border-fluent-border-dark bg-black/5 dark:bg-white/5 text-fluent-muted-light dark:text-fluent-muted-dark',
-                },
+            : {
+                container:
+                  'border-neutral-200 bg-neutral-50/30 dark:border-fluent-border-dark dark:bg-white/5 text-fluent-text-light dark:text-fluent-text-dark',
+                leftSide:
+                  'border-neutral-200 dark:border-fluent-border-dark bg-black/5 dark:bg-white/5 text-fluent-muted-light dark:text-fluent-muted-dark',
+              },
   );
 
   let modeLabel = $derived(
@@ -124,9 +110,6 @@
       {:else if actionType === 'Move'}
         <!-- Move / Folder icon -->
         <IconFolderArrowRight class="w-3 h-3" />
-      {:else if actionType === 'Rename'}
-        <!-- Rename / Edit icon -->
-        <IconEdit class="w-3 h-3" />
       {:else if actionType === 'Ignore'}
         <!-- Ignore / Ban icon -->
         <IconEyeOff class="w-3 h-3" />

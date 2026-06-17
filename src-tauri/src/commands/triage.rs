@@ -157,7 +157,6 @@ impl AuditActionKindLabel for crate::models::AuditActionKind {
         match self {
             crate::models::AuditActionKind::Trash => "Trash Now",
             crate::models::AuditActionKind::Move => "Move",
-            crate::models::AuditActionKind::Rename => "Rename",
             crate::models::AuditActionKind::Pin => "Pin",
             crate::models::AuditActionKind::Snooze => "Snooze",
             crate::models::AuditActionKind::Ignore => "Ignore",

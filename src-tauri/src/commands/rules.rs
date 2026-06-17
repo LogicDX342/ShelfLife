@@ -149,24 +149,15 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
         return Err(AppError::path_out_of_scope(&rule.watch_path));
     }
 
-    if let RuleAction::Move { destination_path } = &rule.action {
-        let destination = std::path::PathBuf::from(destination_path);
-        let has_valid_parent = destination.parent().is_some_and(|parent| {
-            config
-                .watch_targets
-                .iter()
-                .filter(|target| target.enabled)
-                .any(|target| root_contains(&target.path, parent))
-                || root_contains(&config.safe_folder_path, parent)
-        });
-
-        if !has_valid_parent {
-            return Err(AppError::with_details(
-                "RULE_INVALID_DESTINATION",
-                "Move destination must be inside a watch target or safe folder. Rule was not saved.",
-                true,
-                destination_path,
-            ));
+    if let RuleAction::Move {
+        destination_folder,
+        rename_template,
+    } = &rule.action
+    {
+        let destination = std::path::PathBuf::from(destination_folder);
+        crate::engine::validate_move_destination_folder(&destination, config)?;
+        if let Some(template) = rename_template {
+            crate::engine::validate_rename_template(template)?;
         }
     }
 
@@ -242,15 +233,16 @@ mod tests {
     }
 
     #[test]
-    fn move_rule_destination_can_be_inside_uncreated_safe_folder() {
+    fn move_rule_destination_can_be_uncreated_folder_outside_watch_targets() {
         let fixture = Fixture::new("shelflife-rule");
         let config = fixture.config();
         let mut rule = fixture.rule();
         rule.action = RuleAction::Move {
-            destination_path: path_string(&fixture.root.join("safe").join("download.zip")),
+            destination_folder: path_string(&fixture.outside.join("archive")),
+            rename_template: None,
         };
 
-        validate_rule(&rule, &config).expect("safe folder destination should validate");
+        validate_rule(&rule, &config).expect("outside destination should validate");
     }
 
     #[test]
@@ -266,18 +258,32 @@ mod tests {
     }
 
     #[test]
-    fn move_rule_destination_with_parent_escape_is_rejected() {
+    fn move_rule_destination_inside_watch_target_is_rejected() {
         let fixture = Fixture::new("shelflife-rule");
         let config = fixture.config();
         let mut rule = fixture.rule();
         rule.action = RuleAction::Move {
-            destination_path: path_string(
-                &fixture.root.join("safe").join("..").join("outside.txt"),
-            ),
+            destination_folder: path_string(&fixture.watch.join("archive")),
+            rename_template: None,
         };
 
-        let error = validate_rule(&rule, &config).expect_err("escaped destination should fail");
+        let error = validate_rule(&rule, &config).expect_err("in-watch destination should fail");
 
         assert_eq!(error.code, "RULE_INVALID_DESTINATION");
+    }
+
+    #[test]
+    fn move_rule_unknown_rename_placeholder_is_rejected() {
+        let fixture = Fixture::new("shelflife-rule");
+        let config = fixture.config();
+        let mut rule = fixture.rule();
+        rule.action = RuleAction::Move {
+            destination_folder: path_string(&fixture.outside),
+            rename_template: Some(String::from("{month}-{file}")),
+        };
+
+        let error = validate_rule(&rule, &config).expect_err("unknown placeholder should fail");
+
+        assert_eq!(error.code, "RULE_INVALID_RENAME_TEMPLATE");
     }
 }
