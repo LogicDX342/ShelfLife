@@ -8,7 +8,7 @@ import ts from 'typescript-eslint';
 export default ts.config(
   // 1. Global ignores
   {
-    ignores: ['build/', '.svelte-kit/', 'dist/', 'node_modules/', 'src-tauri/'],
+    ignores: ['build/', '.svelte-kit/', 'dist/', 'node_modules/', 'src-tauri/', '.agents/'],
   },
 
   // 2. Base recommended configs

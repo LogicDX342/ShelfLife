@@ -6,7 +6,6 @@
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import * as Select from '$lib/components/ui/select';
-  import { Switch } from '$lib/components/ui/switch';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
   import type {
@@ -281,11 +280,6 @@
               <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
             </Select.Content>
           </Select.Root>
-        </div>
-
-        <div class="flex items-center gap-3 pt-6 select-none">
-          <Label for="rule-enabled" class="cursor-pointer">{i18n.t('rules.enabled')}</Label>
-          <Switch id="rule-enabled" bind:checked={enabled} />
         </div>
       </div>
     </Card.Content>

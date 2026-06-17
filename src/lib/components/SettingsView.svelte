@@ -14,6 +14,7 @@
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
+  import * as Item from '$lib/components/ui/item';
   import { Label } from '$lib/components/ui/label';
   import * as Select from '$lib/components/ui/select';
   import { Spinner } from '$lib/components/ui/spinner';
@@ -25,6 +26,7 @@
   import { getErrorMessage } from '$lib/utils/format';
 
   import ConfirmDialog from './ConfirmDialog.svelte';
+  import DecayTimelineSlider from './DecayTimelineSlider.svelte';
 
   type PendingWatchTarget = {
     target: WatchTarget;
@@ -36,9 +38,7 @@
   let pendingWatchTarget = $state<PendingWatchTarget | null>(null);
   let targetPath = $state('');
   let safeFolderPath = $state('');
-  let defaultTtlDays = $state(30);
-  let staleThresholdDays = $state(5);
-  let decayingThresholdHours = $state(24);
+  let sliderValue = $state([5, 29, 30]);
   let notificationsEnabled = $state(true);
   let startAtLogin = $state(false);
   let closeBehavior = $state<CloseBehavior>('Ask');
@@ -85,9 +85,15 @@
   async function refreshConfig() {
     config = await getConfig();
     safeFolderPath = config.safe_folder_path;
-    defaultTtlDays = Math.round(config.default_ttl_seconds / 86400);
-    staleThresholdDays = Math.round(config.stale_threshold_seconds / 86400);
-    decayingThresholdHours = Math.round(config.decaying_threshold_seconds / 3600);
+    const stale = Math.round(config.stale_threshold_seconds / 86400);
+    const expiry = Math.round(config.default_ttl_seconds / 86400);
+    const decayBufferDays = config.decaying_threshold_seconds / 86400;
+    const decayStart = Math.max(stale + 1, Math.round(expiry - decayBufferDays));
+    sliderValue = [
+      Math.max(1, stale),
+      Math.max(stale + 1, decayStart),
+      Math.max(decayStart + 1, expiry),
+    ];
     notificationsEnabled = config.notifications_enabled;
     startAtLogin = config.start_at_login;
     closeBehavior = config.close_behavior;
@@ -238,9 +244,9 @@
       await saveConfig({
         ...config,
         safe_folder_path: trimmedSafeFolderPath,
-        default_ttl_seconds: Math.max(1, defaultTtlDays) * 86400,
-        stale_threshold_seconds: Math.max(1, staleThresholdDays) * 86400,
-        decaying_threshold_seconds: Math.max(1, decayingThresholdHours) * 3600,
+        default_ttl_seconds: Math.max(1, sliderValue[2]) * 86400,
+        stale_threshold_seconds: Math.max(1, sliderValue[0]) * 86400,
+        decaying_threshold_seconds: Math.max(1, sliderValue[2] - sliderValue[1]) * 86400,
         notifications_enabled: notificationsEnabled,
         start_at_login: startAtLogin,
         close_behavior: closeBehavior,
@@ -371,7 +377,9 @@
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div
+                class="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-fluent-border-light dark:border-fluent-border-dark pb-4"
+              >
                 <div class="flex flex-col gap-1.5">
                   <Label for="safe-folder-path">{i18n.t('settings.safeFolder')}</Label>
                   <div class="flex gap-2">
@@ -384,39 +392,6 @@
                       {i18n.t('settings.browse')}
                     </Button>
                   </div>
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <Label for="default-ttl-days">{i18n.t('settings.defaultTtlDays')}</Label>
-                  <Input
-                    id="default-ttl-days"
-                    min="1"
-                    type="number"
-                    bind:value={defaultTtlDays}
-                    onchange={savePreferences}
-                  />
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <Label for="stale-threshold-days">{i18n.t('settings.staleAge')}</Label>
-                  <Input
-                    id="stale-threshold-days"
-                    min="1"
-                    type="number"
-                    bind:value={staleThresholdDays}
-                    onchange={savePreferences}
-                  />
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <Label for="decaying-threshold-hours">{i18n.t('settings.decayBuffer')}</Label>
-                  <Input
-                    id="decaying-threshold-hours"
-                    min="1"
-                    type="number"
-                    bind:value={decayingThresholdHours}
-                    onchange={savePreferences}
-                  />
                 </div>
 
                 <div class="flex flex-col gap-1.5">
@@ -485,36 +460,81 @@
               </div>
 
               <!-- Notification & Boot Toggles -->
-              <div class="flex flex-col sm:flex-row sm:items-center gap-6 pt-2 select-none">
-                <div class="flex items-center gap-3">
-                  <span
-                    class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                    >{i18n.t('settings.notifications')}</span
-                  >
-                  <Switch
-                    checked={notificationsEnabled}
-                    onclick={async () => {
-                      notificationsEnabled = !notificationsEnabled;
-                      await savePreferences();
-                    }}
-                    aria-label={i18n.t('settings.notifications')}
-                  />
-                </div>
+              <Item.Group class="select-none flex flex-col gap-3">
+                <Item.Root
+                  class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
+                >
+                  <Item.Content class="flex flex-col gap-0.5">
+                    <Item.Title
+                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200"
+                    >
+                      {i18n.t('settings.notifications')}
+                    </Item.Title>
+                    <Item.Description
+                      class="text-[11px] text-fluent-muted-light dark:text-fluent-muted-dark leading-normal line-clamp-none"
+                    >
+                      {i18n.t('settings.notificationsDesc')}
+                    </Item.Description>
+                  </Item.Content>
+                  <Item.Actions class="flex-shrink-0 ml-4">
+                    <Switch
+                      checked={notificationsEnabled}
+                      onclick={async () => {
+                        notificationsEnabled = !notificationsEnabled;
+                        await savePreferences();
+                      }}
+                      aria-label={i18n.t('settings.notifications')}
+                    />
+                  </Item.Actions>
+                </Item.Root>
 
-                <div class="flex items-center gap-3">
-                  <span
-                    class="text-xs font-semibold text-fluent-muted-light dark:text-fluent-muted-dark"
-                    >{i18n.t('settings.startAtLogin')}</span
-                  >
-                  <Switch
-                    checked={startAtLogin}
-                    onclick={async () => {
-                      startAtLogin = !startAtLogin;
-                      await savePreferences();
-                    }}
-                    aria-label={i18n.t('settings.startAtLogin')}
-                  />
-                </div>
+                <Item.Root
+                  class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
+                >
+                  <Item.Content class="flex flex-col gap-0.5">
+                    <Item.Title
+                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200"
+                    >
+                      {i18n.t('settings.startAtLogin')}
+                    </Item.Title>
+                    <Item.Description
+                      class="text-[11px] text-fluent-muted-light dark:text-fluent-muted-dark leading-normal line-clamp-none"
+                    >
+                      {i18n.t('settings.startAtLoginDesc')}
+                    </Item.Description>
+                  </Item.Content>
+                  <Item.Actions class="flex-shrink-0 ml-4">
+                    <Switch
+                      checked={startAtLogin}
+                      onclick={async () => {
+                        startAtLogin = !startAtLogin;
+                        await savePreferences();
+                      }}
+                      aria-label={i18n.t('settings.startAtLogin')}
+                    />
+                  </Item.Actions>
+                </Item.Root>
+              </Item.Group>
+            </Card.Content>
+          </Card.Root>
+
+          <!-- Decay Timeline Card -->
+          <Card.Root>
+            <Card.Content class="space-y-4">
+              <div
+                class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
+              >
+                <h3 class="text-sm font-semibold text-primary">
+                  {i18n.t('settings.decayTimeline')}
+                </h3>
+              </div>
+              <p
+                class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark leading-relaxed"
+              >
+                {i18n.t('settings.decayTimelineDesc')}
+              </p>
+              <div class="pt-2">
+                <DecayTimelineSlider bind:value={sliderValue} onCommit={savePreferences} />
               </div>
             </Card.Content>
           </Card.Root>

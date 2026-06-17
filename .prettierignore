@@ -22,3 +22,5 @@ vite.config.ts.timestamp-*
 #shadcn components
 src/lib/components/ui/**
 components.json
+
+.agents
