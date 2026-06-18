@@ -1,35 +1,35 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ['CI Checks']
-    types:
-      - completed
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   release:
     permissions:
       contents: write
+
     runs-on: windows-latest
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 11
-          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -42,13 +42,17 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run release verification
+        run: pnpm verify
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__
-          releaseName: 'ShelfLife v__VERSION__'
-          releaseBody: 'Release version v__VERSION__'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'ShelfLife ${{ github.ref_name }}'
+          releaseBody: 'See the assets below to download this version.'
+          generateReleaseNotes: true
           prerelease: false
-          releaseAssetNamePattern: '[name]_[version]_[arch][setup][ext]'
+          assetNamePattern: '[name]_[version]_[arch][setup][ext]'
