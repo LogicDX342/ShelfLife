@@ -86,7 +86,7 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 +---------------------------v------------------------------+
 |                     Tauri v2 Core                        |
 |                                                          |
-|  Rust application state                                  |
+|  AppRuntime lifecycle state                              |
 |  Tray menu                                               |
 |  Window lifecycle                                        |
 |  Notifications                                           |
@@ -97,7 +97,7 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 +---------------------------v------------------------------+
 |                 Rust File Hygiene Engine                 |
 |                                                          |
-|  notify watcher                                          |
+|  notify watcher signal source                            |
 |  debounced event queue                                   |
 |  quiescence detector                                     |
 |  rule evaluator                                          |
@@ -213,13 +213,15 @@ Each watch target has:
 
 The watcher is a signal source, not the only source of truth.
 
-The engine has three layers:
+The runtime and engine cooperate in three layers:
 
 ```text
 1. Filesystem events: fast signals from notify.
-2. Quiescence detection: wait until file size and mtime are stable.
-3. Reconciliation scans: startup and low-frequency integrity checks.
+2. Quiescence detection: watcher emits stable changed paths only.
+3. Reconciliation scans: runtime reconciles stable paths or full watch targets.
 ```
+
+The watcher must not own database access. It debounces file events, waits for path stability, and emits stable paths. `AppRuntime` owns the database handle and calls reconciliation logic with those paths.
 
 ### 5.3 Debounce and event normalization
 
@@ -426,10 +428,15 @@ Default mode for every new rule: `PreviewOnly`.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum RuleAction {
     Trash,
-    Move { destination_path: String },
-    Rename { template: String },
+    Move {
+        destination_folder: String,
+        rename_template: Option<String>,
+    },
     Ignore,
-    Archive { archive_root: String, compress_level: i32 },
+    Archive {
+        archive_root: String,
+        compress_level: i32,
+    },
 }
 ```
 
@@ -498,6 +505,8 @@ Rules are evaluated in this order:
 6. Queue proposed action based on mode.
 ```
 
+Automatic rule execution records failed attempts as audit entries with `UndoStatus::Failed`. A stored failed attempt for the same path and rule prevents future automatic scheduling for that pair. There is no in-memory retry/backoff state.
+
 ### 8.6 Global protected patterns
 
 A master protection list runs before normal rules.
@@ -511,7 +520,7 @@ Default examples:
 If a file matches a protected pattern:
 
 - It is bypass-protected.
-- It is not automatically moved, renamed, or trashed.
+- It is not automatically moved (including renamed) or trashed.
 - The UI may display it as Protected if the user enables protected-file visibility.
 
 ### 8.7 Rule explanations
@@ -548,7 +557,6 @@ The UI must show this explanation before user-confirmed actions.
 - Ignore.
 - Move to Safe Folder.
 - Trash Now.
-- Rename.
 - Archive.
 - Open file location.
 - Undo recent action where possible.
@@ -575,11 +583,11 @@ Default suggestion:
 
 The app may also support platform-specific defaults selected during onboarding.
 
-### 9.5 Rename behavior
+### 9.5 Move with rename behavior
 
-Rename is limited to the same directory in v1.
+Move actions can optionally rename the file using a rename template.
 
-Default cleanup transformations:
+Default cleanup transformations when a template is used:
 
 ```text
 remove duplicate suffixes: " (1)", "_copy", " copy"
@@ -587,7 +595,7 @@ normalize whitespace
 optionally prepend ISO date: YYYY-MM-DD_filename.ext
 ```
 
-Rename must detect collisions and produce a safe alternative instead of overwriting.
+The execution must detect name collisions in the destination folder and produce a safe alternative instead of overwriting.
 
 ### 9.6 Dry run versus staging
 
@@ -624,7 +632,6 @@ It supports:
 pub enum AuditActionKind {
     Trash,
     Move,
-    Rename,
     Pin,
     Snooze,
     Ignore,
@@ -688,18 +695,33 @@ Permission denied.
 
 ### 11.1 Database
 
-The app uses redb as an embedded key-value store.
+The app uses redb as an embedded key-value store. Storage owns database opening, migrations, table definitions, and CRUD only. Runtime lifecycle state does not live in storage.
 
-Database handle:
+Runtime state:
 
 ```rust
 use std::sync::Arc;
 use redb::Database;
 
-pub struct AppState {
+pub struct AppRuntime {
     pub db: Arc<Database>,
+    // watcher handle, pause flag, reconciliation flag,
+    // rule execution flag, scheduler wake condition
 }
 ```
+
+`AppRuntime` is managed by Tauri and owns lifecycle orchestration:
+
+```text
+startup setup
+watcher restart / pause / resume
+dropzone monitor sync
+startup, manual, and periodic reconciliation
+automatic rule execution scheduling
+runtime event emission
+```
+
+`lib.rs` only declares modules and builds the Tauri app. Command modules validate input, persist requested config/model changes, and delegate lifecycle effects to `AppRuntime`.
 
 ### 11.2 Serialization
 
@@ -1193,7 +1215,7 @@ freshness calculation
 expiry calculation
 path scope validation
 symlink rejection
-rename collision handling
+move destination collision handling
 audit row creation
 undo state transitions
 serialization compatibility
@@ -1210,10 +1232,10 @@ rename file
 delete file
 partial download simulation
 rapid event bursts
+watcher stable-path emission without database access
 move to safe folder
 trash action mock or platform-gated test
-undo move
-undo rename
+undo move (including with rename)
 missing file reconciliation
 ```
 
@@ -1369,9 +1391,8 @@ Snooze
 Ignore
 Move to Safe Folder
 Trash Now
-Rename
 AuditEntry records
-Undo for move and rename
+Undo for move (including with rename)
 Best-effort undo for trash
 ```
 
@@ -1456,11 +1477,13 @@ v1 is implemented when:
 ```text
 App can watch configured folders.
 App can index files without polling aggressively.
+Watcher emits stable file paths without opening storage directly.
 App can recover missed events through reconciliation.
+Runtime owns reconciliation and automatic rule scheduling lifecycle.
 App can classify files into ambient decay states.
 App can explain every proposed action.
 App can protect files matching global protected patterns.
-App can perform user-confirmed move, rename, pin, ignore, snooze, and trash actions.
+App can perform user-confirmed move (with optional rename), pin, ignore, snooze, and trash actions.
 App logs every file-changing action.
 App exposes undo status for every logged action.
 App does not perform automatic destructive actions by default.

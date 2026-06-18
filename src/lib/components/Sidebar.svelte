@@ -10,7 +10,7 @@
   import IconFlash from '@lucide/svelte/icons/zap';
 
   import { base } from '$app/paths';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { pauseWatching, resumeWatching } from '$lib/api/config';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
@@ -68,9 +68,9 @@
 
   function isActive(path: string) {
     if (path === '/') {
-      return $page.url.pathname === '/';
+      return page.url.pathname === '/';
     }
-    return $page.url.pathname.startsWith(path);
+    return page.url.pathname.startsWith(path);
   }
 </script>
 

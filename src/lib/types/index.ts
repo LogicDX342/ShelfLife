@@ -168,13 +168,11 @@ export type WatchTarget = {
   default_ttl_seconds: number | null;
   ignore_patterns: string[];
   include_hidden_patterns: string[];
-  rule_ids: string[];
 };
 
 export type CloseBehavior = 'Ask' | 'HideToTray' | 'Quit';
 
 export type AppConfig = {
-  version: number;
   watch_targets: WatchTarget[];
   protected_patterns: string[];
   default_ttl_seconds: number;

@@ -776,7 +776,6 @@ mod tests {
                     default_ttl_seconds: None,
                     ignore_patterns: Vec::new(),
                     include_hidden_patterns: Vec::new(),
-                    rule_ids: Vec::new(),
                 }],
                 safe_folder_path: path_string(&self.root.join("safe")),
                 ..AppConfig::default()
@@ -794,7 +793,6 @@ mod tests {
                     default_ttl_seconds: None,
                     ignore_patterns,
                     include_hidden_patterns: Vec::new(),
-                    rule_ids: Vec::new(),
                 }],
                 safe_folder_path: path_string(&self.root.join("safe")),
                 ..AppConfig::default()

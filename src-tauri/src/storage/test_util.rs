@@ -56,7 +56,6 @@ impl Fixture {
             default_ttl_seconds: None,
             ignore_patterns: Vec::new(),
             include_hidden_patterns: Vec::new(),
-            rule_ids: Vec::new(),
         }
     }
 

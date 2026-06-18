@@ -3,29 +3,30 @@
   import IconMinimize from '@lucide/svelte/icons/minus';
   import IconMaximize from '@lucide/svelte/icons/square';
   import IconDismiss from '@lucide/svelte/icons/x';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
 
-  import {
-    closeWindow,
-    isWindowMaximized,
-    minimizeWindow,
-    onWindowResized,
-    toggleMaximizeWindow,
-  } from '$lib/api/window';
-
+  const appWindow = getCurrentWindow();
   let isMaximized = $state(false);
 
   $effect(() => {
     // Check initial state
-    isWindowMaximized().then((val) => {
+    appWindow.isMaximized().then((val) => {
       isMaximized = val;
     });
 
     // Listen for resize events to update the state
-    const cleanup = onWindowResized(async () => {
-      isMaximized = await isWindowMaximized();
-    });
+    let unlisten: (() => void) | undefined;
+    appWindow
+      .onResized(async () => {
+        isMaximized = await appWindow.isMaximized();
+      })
+      .then((unsub) => {
+        unlisten = unsub;
+      });
 
-    return cleanup;
+    return () => {
+      unlisten?.();
+    };
   });
 </script>
 
@@ -42,7 +43,7 @@
     <button
       type="button"
       class="w-[46px] h-full flex items-center justify-center text-fluent-text-light dark:text-fluent-text-dark hover:bg-black/10 dark:hover:bg-white/10 active:bg-black/20 dark:active:bg-white/20 transition-colors duration-100 focus:outline-none"
-      onclick={minimizeWindow}
+      onclick={() => appWindow.minimize()}
       title="Minimize"
     >
       <IconMinimize class="w-3.5 h-3.5" />
@@ -52,7 +53,7 @@
     <button
       type="button"
       class="w-[46px] h-full flex items-center justify-center text-fluent-text-light dark:text-fluent-text-dark hover:bg-black/10 dark:hover:bg-white/10 active:bg-black/20 dark:active:bg-white/20 transition-colors duration-100 focus:outline-none"
-      onclick={toggleMaximizeWindow}
+      onclick={() => appWindow.toggleMaximize()}
       title={isMaximized ? 'Restore' : 'Maximize'}
     >
       {#if isMaximized}
@@ -66,7 +67,7 @@
     <button
       type="button"
       class="w-[46px] h-full flex items-center justify-center text-fluent-text-light dark:text-fluent-text-dark hover:bg-[#e81123] hover:text-white active:bg-[#f1707a] active:text-white transition-colors duration-100 focus:outline-none"
-      onclick={closeWindow}
+      onclick={() => appWindow.close()}
       title="Close"
     >
       <IconDismiss class="w-3.5 h-3.5" />

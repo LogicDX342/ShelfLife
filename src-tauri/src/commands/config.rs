@@ -280,7 +280,6 @@ mod tests {
                 default_ttl_seconds: None,
                 ignore_patterns: Vec::new(),
                 include_hidden_patterns: Vec::new(),
-                rule_ids: Vec::new(),
             }],
             safe_folder_path: root.join("safe").to_string_lossy().to_string(),
             ..AppConfig::default()
@@ -304,7 +303,6 @@ mod tests {
                 default_ttl_seconds: None,
                 ignore_patterns: Vec::new(),
                 include_hidden_patterns: Vec::new(),
-                rule_ids: Vec::new(),
             }],
             safe_folder_path: root.join("safe").to_string_lossy().to_string(),
             ..AppConfig::default()
@@ -330,7 +328,6 @@ mod tests {
                     default_ttl_seconds: None,
                     ignore_patterns: Vec::new(),
                     include_hidden_patterns: Vec::new(),
-                    rule_ids: Vec::new(),
                 },
                 WatchTarget {
                     id: String::from("nested"),
@@ -340,7 +337,6 @@ mod tests {
                     default_ttl_seconds: None,
                     ignore_patterns: Vec::new(),
                     include_hidden_patterns: Vec::new(),
-                    rule_ids: Vec::new(),
                 },
             ],
             safe_folder_path: root.join("safe").to_string_lossy().to_string(),
@@ -366,7 +362,6 @@ mod tests {
                 default_ttl_seconds: None,
                 ignore_patterns: Vec::new(),
                 include_hidden_patterns: Vec::new(),
-                rule_ids: Vec::new(),
             }],
             safe_folder_path: watch.join("safe").to_string_lossy().to_string(),
             ..AppConfig::default()
@@ -392,7 +387,6 @@ mod tests {
                 default_ttl_seconds: None,
                 ignore_patterns: Vec::new(),
                 include_hidden_patterns: Vec::new(),
-                rule_ids: Vec::new(),
             }],
             safe_folder_path: safe.to_string_lossy().to_string(),
             ..AppConfig::default()

@@ -88,80 +88,21 @@ pub fn execute_triage_action(
     let mut tracked = load_or_create_tracked(db, &source, &config)?;
     let original_tracked_path = tracked.path.clone();
     let timestamp = now_seconds();
-    let mut destination_path = None;
-    let action_kind;
-    let undo_status;
-
-    match action {
-        UserTriageAction::Pin => {
-            tracked.state = FileDecayState::Pinned;
-            tracked.expiry = Expiry::Permanent;
-            tracked.last_user_action_at = Some(timestamp);
-            action_kind = AuditActionKind::Pin;
-            undo_status = UndoStatus::Available;
-        }
-        UserTriageAction::Snooze { seconds } => {
-            let until = timestamp + seconds;
-            tracked.freshness_at = until;
-            tracked.expiry = Expiry::SnoozedUntil(until);
-            tracked.state = FileDecayState::Fresh;
-            tracked.last_user_action_at = Some(timestamp);
-            action_kind = AuditActionKind::Snooze;
-            undo_status = UndoStatus::Available;
-        }
-        UserTriageAction::Ignore => {
-            tracked.state = FileDecayState::Ignored;
-            tracked.last_user_action_at = Some(timestamp);
-            action_kind = AuditActionKind::Ignore;
-            undo_status = UndoStatus::Available;
-        }
-        UserTriageAction::MoveToSafeFolder => {
-            validate_not_protected_for_filesystem_change(&source, &config)?;
-            let safe_folder = PathBuf::from(&config.safe_folder_path);
-            validate_move_destination_folder(&safe_folder, &config)?;
-            fs::create_dir_all(&safe_folder)?;
-            let destination = move_destination(&source, &safe_folder, None)?;
-            fs::rename(&source, &destination)?;
-            destination_path = Some(destination.to_string_lossy().to_string());
-            apply_tracked_destination(&mut tracked, &destination);
-            action_kind = AuditActionKind::Move;
-            undo_status = UndoStatus::Available;
-        }
-        UserTriageAction::Move { destination_folder } => {
-            validate_not_protected_for_filesystem_change(&source, &config)?;
-            let destination_folder = PathBuf::from(destination_folder);
-            validate_move_destination_folder(&destination_folder, &config)?;
-            fs::create_dir_all(&destination_folder)?;
-            let destination = move_destination(&source, &destination_folder, None)?;
-            fs::rename(&source, &destination)?;
-            destination_path = Some(destination.to_string_lossy().to_string());
-            apply_tracked_destination(&mut tracked, &destination);
-            action_kind = AuditActionKind::Move;
-            undo_status = UndoStatus::Available;
-        }
-        UserTriageAction::TrashNow => {
-            validate_not_protected_for_filesystem_change(&source, &config)?;
-            trash::delete(&source).map_err(|error| {
-                AppError::with_details(
-                    "ACTION_FAILED",
-                    "The file could not be moved to the Recycle Bin. No raw deletion was attempted.",
-                    true,
-                    error.to_string(),
-                )
-            })?;
-            tracked.state = FileDecayState::Missing;
-            action_kind = AuditActionKind::Trash;
-            undo_status = if is_trash_supported() {
-                UndoStatus::Available
-            } else {
-                UndoStatus::Unavailable {
-                    reason: String::from(
-                        "Recycle Bin is not supported or not fully functional on this system.",
-                    ),
-                }
-            };
-        }
-    }
+    let action = match action {
+        UserTriageAction::Pin => FileAction::Pin,
+        UserTriageAction::Snooze { seconds } => FileAction::Snooze { seconds },
+        UserTriageAction::Ignore => FileAction::Ignore,
+        UserTriageAction::MoveToSafeFolder => FileAction::Move {
+            destination_folder: PathBuf::from(&config.safe_folder_path),
+            rename_template: None,
+        },
+        UserTriageAction::Move { destination_folder } => FileAction::Move {
+            destination_folder: PathBuf::from(destination_folder),
+            rename_template: None,
+        },
+        UserTriageAction::TrashNow => FileAction::Trash,
+    };
+    let applied = apply_file_action(&source, &mut tracked, &config, timestamp, action)?;
 
     tracked.last_user_action_at = Some(timestamp);
     if tracked.path != original_tracked_path {
@@ -173,15 +114,15 @@ pub fn execute_triage_action(
         id: Uuid::new_v4().to_string(),
         sequence: storage::audit::next_audit_sequence(db)?,
         timestamp,
-        action_kind,
+        action_kind: applied.action_kind,
         source_path: path.to_string(),
-        destination_path,
+        destination_path: applied.destination_path,
         file_name: tracked.file_name.clone(),
         size_bytes: tracked.size_bytes,
         rule_id: None,
         rule_name: None,
         explanation: None,
-        undo_status,
+        undo_status: applied.undo_status,
     };
     storage::audit::append_audit_entry(db, &entry)?;
     Ok(entry)
@@ -211,55 +152,13 @@ pub fn execute_automation_rule_action(
     let mut tracked = load_or_create_tracked(db, &source, &config)?;
     let original_tracked_path = tracked.path.clone();
     let timestamp = now_seconds();
-    let mut destination_path = None;
-    let action_kind;
-    let undo_status;
-
-    match &rule.action {
-        RuleAction::Ignore => {
-            tracked.state = FileDecayState::Ignored;
-            action_kind = AuditActionKind::Ignore;
-            undo_status = UndoStatus::Available;
-        }
-        RuleAction::Move {
-            destination_folder,
-            rename_template,
-        } => {
-            validate_not_protected_for_filesystem_change(&source, &config)?;
-            let destination_folder = PathBuf::from(destination_folder);
-            validate_move_destination_folder(&destination_folder, &config)?;
-            fs::create_dir_all(&destination_folder)?;
-            let destination =
-                move_destination(&source, &destination_folder, rename_template.as_deref())?;
-            fs::rename(&source, &destination)?;
-            destination_path = Some(destination.to_string_lossy().to_string());
-            apply_tracked_destination(&mut tracked, &destination);
-            action_kind = AuditActionKind::Move;
-            undo_status = UndoStatus::Available;
-        }
-        RuleAction::Trash => {
-            validate_not_protected_for_filesystem_change(&source, &config)?;
-            trash::delete(&source).map_err(|error| {
-                AppError::with_details(
-                    "ACTION_FAILED",
-                    "The file could not be moved to the Recycle Bin. No raw deletion was attempted.",
-                    true,
-                    error.to_string(),
-                )
-            })?;
-            tracked.state = FileDecayState::Missing;
-            action_kind = AuditActionKind::Trash;
-            undo_status = if is_trash_supported() {
-                UndoStatus::Available
-            } else {
-                UndoStatus::Unavailable {
-                    reason: String::from(
-                        "Recycle Bin is not supported or not fully functional on this system.",
-                    ),
-                }
-            };
-        }
-    }
+    let applied = apply_file_action(
+        &source,
+        &mut tracked,
+        &config,
+        timestamp,
+        file_action_from_rule_action(&rule.action),
+    )?;
 
     tracked.last_user_action_at = Some(timestamp);
     if tracked.path != original_tracked_path {
@@ -271,15 +170,15 @@ pub fn execute_automation_rule_action(
         id: Uuid::new_v4().to_string(),
         sequence: storage::audit::next_audit_sequence(db)?,
         timestamp,
-        action_kind,
+        action_kind: applied.action_kind,
         source_path: path.to_string(),
-        destination_path,
+        destination_path: applied.destination_path,
         file_name: tracked.file_name.clone(),
         size_bytes: tracked.size_bytes,
         rule_id: Some(rule.id.clone()),
         rule_name: Some(rule.name.clone()),
         explanation: Some(explanation),
-        undo_status,
+        undo_status: applied.undo_status,
     };
     storage::audit::append_audit_entry(db, &entry)?;
     Ok(entry)
@@ -316,56 +215,16 @@ pub fn execute_dropzone_rule_action(
     let mut tracked = load_or_create_tracked(db, &source, &config)?;
     let original_tracked_path = tracked.path.clone();
     let timestamp = now_seconds();
-    let mut destination_path = None;
-    let action_kind;
-    let undo_status;
-
-    match &rule.action {
-        RuleAction::Ignore => {
-            validate_source_scope(&source, &config)?;
-            tracked.state = FileDecayState::Ignored;
-            action_kind = AuditActionKind::Ignore;
-            undo_status = UndoStatus::Available;
-        }
-        RuleAction::Move {
-            destination_folder,
-            rename_template,
-        } => {
-            validate_not_protected_for_filesystem_change(&source, &config)?;
-            let destination_folder = PathBuf::from(destination_folder);
-            validate_move_destination_folder(&destination_folder, &config)?;
-            fs::create_dir_all(&destination_folder)?;
-            let destination =
-                move_destination(&source, &destination_folder, rename_template.as_deref())?;
-            fs::rename(&source, &destination)?;
-            destination_path = Some(destination.to_string_lossy().to_string());
-            apply_tracked_destination(&mut tracked, &destination);
-            action_kind = AuditActionKind::Move;
-            undo_status = UndoStatus::Available;
-        }
-        RuleAction::Trash => {
-            validate_not_protected_for_filesystem_change(&source, &config)?;
-            trash::delete(&source).map_err(|error| {
-                AppError::with_details(
-                    "ACTION_FAILED",
-                    "The file could not be moved to the Recycle Bin. No raw deletion was attempted.",
-                    true,
-                    error.to_string(),
-                )
-            })?;
-            tracked.state = FileDecayState::Missing;
-            action_kind = AuditActionKind::Trash;
-            undo_status = if is_trash_supported() {
-                UndoStatus::Available
-            } else {
-                UndoStatus::Unavailable {
-                    reason: String::from(
-                        "Recycle Bin is not supported or not fully functional on this system.",
-                    ),
-                }
-            };
-        }
+    if matches!(rule.action, RuleAction::Ignore) {
+        validate_source_scope(&source, &config)?;
     }
+    let applied = apply_file_action(
+        &source,
+        &mut tracked,
+        &config,
+        timestamp,
+        file_action_from_rule_action(&rule.action),
+    )?;
 
     tracked.last_user_action_at = Some(timestamp);
     if tracked.path != original_tracked_path {
@@ -377,18 +236,131 @@ pub fn execute_dropzone_rule_action(
         id: Uuid::new_v4().to_string(),
         sequence: storage::audit::next_audit_sequence(db)?,
         timestamp,
-        action_kind,
+        action_kind: applied.action_kind,
         source_path: path.to_string(),
-        destination_path,
+        destination_path: applied.destination_path,
         file_name: tracked.file_name.clone(),
         size_bytes: tracked.size_bytes,
         rule_id: Some(format!("{DROPZONE_RULE_AUDIT_ID_PREFIX}{}", rule.id)),
         rule_name: Some(rule.name.clone()),
         explanation: Some(explanation),
-        undo_status,
+        undo_status: applied.undo_status,
     };
     storage::audit::append_audit_entry(db, &entry)?;
     Ok(entry)
+}
+
+enum FileAction<'a> {
+    Pin,
+    Snooze {
+        seconds: u64,
+    },
+    Ignore,
+    Move {
+        destination_folder: PathBuf,
+        rename_template: Option<&'a str>,
+    },
+    Trash,
+}
+
+struct AppliedFileAction {
+    action_kind: AuditActionKind,
+    destination_path: Option<String>,
+    undo_status: UndoStatus,
+}
+
+fn file_action_from_rule_action(action: &RuleAction) -> FileAction<'_> {
+    match action {
+        RuleAction::Ignore => FileAction::Ignore,
+        RuleAction::Move {
+            destination_folder,
+            rename_template,
+        } => FileAction::Move {
+            destination_folder: PathBuf::from(destination_folder),
+            rename_template: rename_template.as_deref(),
+        },
+        RuleAction::Trash => FileAction::Trash,
+    }
+}
+
+fn apply_file_action(
+    source: &Path,
+    tracked: &mut TrackedFile,
+    config: &AppConfig,
+    timestamp: u64,
+    action: FileAction<'_>,
+) -> Result<AppliedFileAction, AppError> {
+    let mut destination_path = None;
+    let action_kind;
+    let undo_status;
+
+    match action {
+        FileAction::Pin => {
+            tracked.state = FileDecayState::Pinned;
+            tracked.expiry = Expiry::Permanent;
+            action_kind = AuditActionKind::Pin;
+            undo_status = UndoStatus::Available;
+        }
+        FileAction::Snooze { seconds } => {
+            let until = timestamp + seconds;
+            tracked.freshness_at = until;
+            tracked.expiry = Expiry::SnoozedUntil(until);
+            tracked.state = FileDecayState::Fresh;
+            action_kind = AuditActionKind::Snooze;
+            undo_status = UndoStatus::Available;
+        }
+        FileAction::Ignore => {
+            tracked.state = FileDecayState::Ignored;
+            action_kind = AuditActionKind::Ignore;
+            undo_status = UndoStatus::Available;
+        }
+        FileAction::Move {
+            destination_folder,
+            rename_template,
+        } => {
+            validate_not_protected_for_filesystem_change(source, config)?;
+            validate_move_destination_folder(&destination_folder, config)?;
+            fs::create_dir_all(&destination_folder)?;
+            let destination = move_destination(source, &destination_folder, rename_template)?;
+            fs::rename(source, &destination)?;
+            destination_path = Some(destination.to_string_lossy().to_string());
+            apply_tracked_destination(tracked, &destination);
+            action_kind = AuditActionKind::Move;
+            undo_status = UndoStatus::Available;
+        }
+        FileAction::Trash => {
+            validate_not_protected_for_filesystem_change(source, config)?;
+            trash::delete(source).map_err(|error| {
+                AppError::with_details(
+                    "ACTION_FAILED",
+                    "The file could not be moved to the Recycle Bin. No raw deletion was attempted.",
+                    true,
+                    error.to_string(),
+                )
+            })?;
+            tracked.state = FileDecayState::Missing;
+            action_kind = AuditActionKind::Trash;
+            undo_status = recycle_bin_undo_status();
+        }
+    }
+
+    Ok(AppliedFileAction {
+        action_kind,
+        destination_path,
+        undo_status,
+    })
+}
+
+fn recycle_bin_undo_status() -> UndoStatus {
+    if is_trash_supported() {
+        UndoStatus::Available
+    } else {
+        UndoStatus::Unavailable {
+            reason: String::from(
+                "Recycle Bin is not supported or not fully functional on this system.",
+            ),
+        }
+    }
 }
 
 pub fn ingest_dropzone_file(

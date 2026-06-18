@@ -19,9 +19,13 @@ src-tauri/src/
 │   ├── triage.rs            # execute_triage_action, undo_audit_entry
 │   ├── rules.rs             # list_rules, save_rule, test_rule, delete_rule
 │   └── config.rs            # update_watch_targets, get_config, save_config
+├── runtime/                 # Tauri lifecycle orchestration and background workers
+│   ├── mod.rs               # AppRuntime, setup(), sync_after_config_change()
+│   ├── reconciliation.rs    # Async/manual/periodic reconciliation orchestration
+│   └── rule_scheduler.rs    # Async/periodic automatic rule execution scheduling
 ├── engine/                  # File hygiene engine (no Tauri dependency)
 │   ├── mod.rs               # Re-exports
-│   ├── watcher.rs           # notify watcher setup, debounced event loop
+│   ├── watcher.rs           # notify watcher setup, debounced stable-path emission
 │   ├── quiescence.rs        # File stability checks (size + mtime confirmation)
 │   ├── reconciliation.rs    # Startup and periodic full-directory scans
 │   ├── freshness.rs         # freshness_at calculation, decay state transitions
@@ -52,10 +56,14 @@ src-tauri/src/
 
 - `lib.rs` only contains `mod` declarations and the `run()` function that builds the Tauri app. No business logic.
 - `main.rs` only calls `shelflife_lib::run()`. Never modify it.
-- `commands/` files are thin wrappers — they validate input, call into `engine/` or `storage/`, and return results.
+- `commands/` files are thin wrappers — they validate input, call into `engine/`, `storage/`, or `runtime/`, and return results.
+- `runtime/` owns lifecycle state and orchestration: watcher restart/pause/resume, dropzone monitor sync, reconciliation scheduling, automatic rule execution scheduling, and runtime event emission.
+- `runtime/mod.rs` should stay small: `AppRuntime`, `setup()`, and `sync_after_config_change()`. Put reconciliation orchestration in `runtime/reconciliation.rs` and rule scheduling in `runtime/rule_scheduler.rs`.
 - `engine/` and `rules/` must NOT depend on Tauri types. They are pure Rust libraries testable without Tauri.
+- `engine::watcher` must not open storage or hold database handles. It debounces events, waits for stable paths, and emits paths for `runtime/` to reconcile.
 - `models/` contains only data structures with `serde` derives. No methods beyond basic constructors.
-- `storage/` owns all redb access. Other modules never open database transactions directly.
+- `storage/` owns all redb access. Other modules never open database transactions directly, and runtime lifecycle state must not live in `storage/`.
+- Automatic rule failures are stored as audit entries. Do not reintroduce in-memory retry/backoff state unless the product spec is updated first.
 
 ### Frontend (Svelte 5) — `src/`
 

@@ -18,14 +18,11 @@ pub struct WatchTarget {
     /// Glob patterns for hidden directories that should be included in recursive scanning.
     /// By default all hidden directories are skipped. Add patterns like `.git` or `.vscode`
     /// to allow scanning into specific hidden subdirectories.
-    #[serde(default)]
     pub include_hidden_patterns: Vec<String>,
-    pub rule_ids: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
-    pub version: u32,
     pub watch_targets: Vec<WatchTarget>,
     pub protected_patterns: Vec<String>,
     pub default_ttl_seconds: u64,
@@ -41,7 +38,6 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: 1,
             watch_targets: Vec::new(),
             protected_patterns: vec![String::from(
                 "(?i)(tax|invoice|receipt|passport|lease|contract|project_alpha)",

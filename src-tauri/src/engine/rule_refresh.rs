@@ -1,6 +1,6 @@
 use redb::Database;
 
-use crate::models::{AppConfig, AppError, ReconciliationReport, TrackedFile, WatchTarget};
+use crate::models::{AppConfig, AppError, ReconciliationReport, TrackedFile};
 use crate::rules::matching_rule_ids;
 use crate::storage;
 
@@ -43,13 +43,7 @@ fn effective_ttl_seconds_for_file(config: &AppConfig, file: &TrackedFile) -> u64
         .watch_targets
         .iter()
         .find(|target| target.id == file.watch_target_id)
-        .map(|target| effective_ttl_seconds(config, target))
-        .unwrap_or(config.default_ttl_seconds)
-}
-
-fn effective_ttl_seconds(config: &AppConfig, target: &WatchTarget) -> u64 {
-    target
-        .default_ttl_seconds
+        .and_then(|target| target.default_ttl_seconds)
         .unwrap_or(config.default_ttl_seconds)
 }
 
