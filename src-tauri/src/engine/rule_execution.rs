@@ -1,4 +1,5 @@
 use redb::Database;
+use std::collections::HashSet;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -12,35 +13,18 @@ use crate::storage;
 #[derive(Debug, Clone)]
 pub struct RuleExecutionReport {
     pub entries: Vec<AuditEntry>,
-    pub failures: Vec<RuleExecutionFailure>,
-    pub successes: Vec<RuleExecutionSuccess>,
+    pub failures: Vec<AppError>,
 }
 
-#[derive(Debug, Clone)]
-pub struct RuleExecutionFailure {
-    pub path: String,
-    pub rule_id: String,
-    pub error: AppError,
-}
-
-#[derive(Debug, Clone)]
-pub struct RuleExecutionSuccess {
-    pub path: String,
-    pub rule_id: String,
-}
-
-pub fn execute_expired_automatic_rules(
-    db: &Database,
-    retry_after: impl Fn(&str, &str) -> Option<u64>,
-) -> Result<RuleExecutionReport, AppError> {
+pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionReport, AppError> {
     let config = storage::get_config(db)?;
     let rules = storage::rules::list_rules(db)?;
     let now = crate::engine::freshness::now_seconds();
     let files = storage::tracked::list_tracked_files(db)?;
+    let mut failed_attempts = failed_automatic_rule_attempts(db)?;
 
     let mut entries = Vec::new();
     let mut failures = Vec::new();
-    let mut successes = Vec::new();
 
     for file in files {
         if !is_expired_action_candidate(&file, now) {
@@ -51,8 +35,7 @@ pub fn execute_expired_automatic_rules(
         else {
             continue;
         };
-
-        if retry_after(&file.path, &rule.id).is_some_and(|retry_after| retry_after > now) {
+        if failed_attempts.contains(&(file.path.clone(), rule.id.clone())) {
             continue;
         }
 
@@ -63,14 +46,9 @@ pub fn execute_expired_automatic_rules(
             explanation.clone(),
         ) {
             Ok(entry) => {
-                successes.push(RuleExecutionSuccess {
-                    path: file.path.clone(),
-                    rule_id: rule.id.clone(),
-                });
                 entries.push(entry);
             }
             Err(error) => {
-                let retryable_path = file.path.clone();
                 let failure_entry = append_failed_rule_execution_audit_entry(
                     db,
                     &file,
@@ -79,31 +57,24 @@ pub fn execute_expired_automatic_rules(
                     &error,
                 )?;
                 entries.push(failure_entry);
-                failures.push(RuleExecutionFailure {
-                    path: retryable_path,
-                    rule_id: rule.id.clone(),
-                    error,
-                });
+                failures.push(error);
+                failed_attempts.insert((file.path.clone(), rule.id.clone()));
             }
         }
     }
 
-    Ok(RuleExecutionReport {
-        entries,
-        failures,
-        successes,
-    })
+    Ok(RuleExecutionReport { entries, failures })
 }
 
 pub fn next_automatic_rule_execution_delay(
     db: &Database,
     minimum_interval: Duration,
-    retry_after: impl Fn(&str, &str) -> Option<u64>,
 ) -> Result<Option<Duration>, AppError> {
     let config = storage::get_config(db)?;
     let rules = storage::rules::list_rules(db)?;
     let now = crate::engine::freshness::now_seconds();
     let mut nearest_expiry: Option<u64> = None;
+    let failed_attempts = failed_automatic_rule_attempts(db)?;
 
     for file in storage::tracked::list_tracked_files(db)? {
         let Expiry::At(expires_at) = file.expiry else {
@@ -118,13 +89,12 @@ pub fn next_automatic_rule_execution_delay(
         let Some((rule, _)) = automatic_rule_match_for_file(&file, &config, &rules)? else {
             continue;
         };
-        let eligible_at = retry_after(&file.path, &rule.id)
-            .filter(|retry_after| *retry_after > expires_at)
-            .unwrap_or(expires_at);
-
+        if failed_attempts.contains(&(file.path.clone(), rule.id.clone())) {
+            continue;
+        }
         nearest_expiry = Some(match nearest_expiry {
-            Some(existing) => existing.min(eligible_at),
-            None => eligible_at,
+            Some(existing) => existing.min(expires_at),
+            None => expires_at,
         });
     }
 
@@ -168,6 +138,17 @@ fn append_failed_rule_execution_audit_entry(
     };
     storage::audit::append_audit_entry(db, &entry)?;
     Ok(entry)
+}
+
+fn failed_automatic_rule_attempts(db: &Database) -> Result<HashSet<(String, String)>, AppError> {
+    Ok(storage::audit::list_audit_entries(db)?
+        .into_iter()
+        .filter(|entry| matches!(entry.undo_status, UndoStatus::Failed { .. }))
+        .filter_map(|entry| {
+            let rule_id = entry.rule_id?;
+            Some((entry.source_path, rule_id))
+        })
+        .collect())
 }
 
 fn audit_action_kind_for_rule_action(action: &RuleAction) -> AuditActionKind {
@@ -241,8 +222,8 @@ mod tests {
         };
         storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
 
-        let report = execute_expired_automatic_rules(&fixture.db, |_, _| None)
-            .expect("rule execution should run");
+        let report =
+            execute_expired_automatic_rules(&fixture.db).expect("rule execution should run");
 
         let destination = fixture.outside.join("archived-download.zip");
         assert!(report.failures.is_empty());
@@ -278,8 +259,8 @@ mod tests {
         };
         storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
 
-        let report = execute_expired_automatic_rules(&fixture.db, |_, _| None)
-            .expect("rule execution should run");
+        let report =
+            execute_expired_automatic_rules(&fixture.db).expect("rule execution should run");
 
         assert!(report.entries.is_empty());
         assert!(report.failures.is_empty());
@@ -312,8 +293,8 @@ mod tests {
         };
         storage::rules::save_rule(&fixture.db, &automatic_rule).expect("rule should save");
 
-        let report = execute_expired_automatic_rules(&fixture.db, |_, _| None)
-            .expect("rule execution should run");
+        let report =
+            execute_expired_automatic_rules(&fixture.db).expect("rule execution should run");
 
         assert!(report.entries.is_empty());
         assert!(report.failures.is_empty());
@@ -336,8 +317,8 @@ mod tests {
         };
         storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
 
-        let report = execute_expired_automatic_rules(&fixture.db, |_, _| None)
-            .expect("rule execution should run");
+        let report =
+            execute_expired_automatic_rules(&fixture.db).expect("rule execution should run");
 
         assert_eq!(report.failures.len(), 1);
         assert_eq!(report.entries.len(), 1);
@@ -354,6 +335,17 @@ mod tests {
                 .len(),
             1
         );
+        let second_report =
+            execute_expired_automatic_rules(&fixture.db).expect("rule execution should run again");
+        let delay = super::next_automatic_rule_execution_delay(
+            &fixture.db,
+            std::time::Duration::from_secs(5),
+        )
+        .expect("delay should calculate");
+
+        assert!(second_report.entries.is_empty());
+        assert!(second_report.failures.is_empty());
+        assert!(delay.is_none());
     }
 
     #[test]
@@ -369,12 +361,11 @@ mod tests {
         rule.action = RuleAction::Ignore;
         storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
 
-        let report = execute_expired_automatic_rules(&fixture.db, |_, _| None)
-            .expect("rule execution should run");
+        let report =
+            execute_expired_automatic_rules(&fixture.db).expect("rule execution should run");
         let delay = super::next_automatic_rule_execution_delay(
             &fixture.db,
             std::time::Duration::from_secs(5),
-            |_, _| None,
         )
         .expect("delay should calculate");
 
@@ -405,7 +396,6 @@ mod tests {
         let delay = super::next_automatic_rule_execution_delay(
             &fixture.db,
             std::time::Duration::from_secs(5),
-            |_, _| None,
         )
         .expect("delay should calculate")
         .expect("automatic rule delay should exist");

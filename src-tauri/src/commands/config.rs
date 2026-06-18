@@ -1,93 +1,35 @@
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
+use tauri::{AppHandle, Manager, State};
 
-use tauri::{AppHandle, Emitter, Manager, State};
-
-use crate::engine;
-use crate::models::{AppConfig, AppError, CloseBehavior, ReconciliationReport, WatchTarget};
-use crate::storage::{self, AppState};
-
-const PERIODIC_RECONCILIATION_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+use crate::models::{AppConfig, AppError, CloseBehavior, WatchTarget};
+use crate::runtime::AppRuntime;
+use crate::storage;
 
 #[tauri::command]
-pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, AppError> {
+pub async fn get_config(state: State<'_, AppRuntime>) -> Result<AppConfig, AppError> {
     storage::get_config(&state.db)
 }
 
 #[tauri::command]
-pub async fn is_reconciliation_active(state: State<'_, AppState>) -> Result<bool, AppError> {
-    Ok(state.reconciliation_active.load(Ordering::Relaxed))
-}
-
-pub fn run_async_reconciliation(app_handle: AppHandle, state: AppState) {
-    if state.reconciliation_active.swap(true, Ordering::SeqCst) {
-        return;
-    }
-
-    let db = state.db.clone();
-    let app_handle_clone = app_handle.clone();
-    let state_clone = state.clone();
-
-    let _ = app_handle.emit("reconciliation_started", ());
-
-    tauri::async_runtime::spawn(async move {
-        let app = app_handle_clone.clone();
-        let progress_emitter = move |path: &str, current: usize, total: usize| {
-            let _ = app.emit(
-                "reconciliation_progress",
-                (path.to_string(), current, total),
-            );
-        };
-
-        let result = crate::engine::reconciliation::reconcile_with_report_with_progress(
-            &db,
-            Some(&progress_emitter),
-        );
-
-        state_clone
-            .reconciliation_active
-            .store(false, Ordering::SeqCst);
-
-        match result {
-            Ok(report) => {
-                emit_reconciliation_report(&app_handle_clone, &report);
-                state_clone.wake_rule_scheduler();
-                crate::commands::automation::run_async_expired_rule_execution(
-                    app_handle_clone,
-                    state_clone,
-                );
-            }
-            Err(error) => {
-                let _ = app_handle_clone.emit("action_failed", error);
-            }
-        }
-    });
+pub async fn is_reconciliation_active(state: State<'_, AppRuntime>) -> Result<bool, AppError> {
+    Ok(state.is_reconciliation_active())
 }
 
 #[tauri::command]
 pub async fn save_config(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     config: AppConfig,
 ) -> Result<AppConfig, AppError> {
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
-    crate::dropzone::sync_dropzone_monitor(&app_handle, &state)?;
-    engine::watcher::restart_watcher(
-        &state,
-        watcher_event_sink(app_handle.clone(), state.inner().clone()),
-    )?;
-    crate::tray::update_tray_icon(&app_handle);
-    run_async_reconciliation(app_handle, state.inner().clone());
+    state.sync_after_config_change(&app_handle)?;
     Ok(config)
 }
 
 #[tauri::command]
 pub async fn resolve_close_request(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     behavior: CloseBehavior,
     remember: bool,
 ) -> Result<(), AppError> {
@@ -114,99 +56,40 @@ pub async fn resolve_close_request(
 #[tauri::command]
 pub async fn update_watch_targets(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     targets: Vec<WatchTarget>,
 ) -> Result<(), AppError> {
     let mut config = storage::get_config(&state.db)?;
     config.watch_targets = targets;
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
-    engine::watcher::restart_watcher(
-        &state,
-        watcher_event_sink(app_handle.clone(), state.inner().clone()),
-    )?;
-    crate::tray::update_tray_icon(&app_handle);
-    run_async_reconciliation(app_handle, state.inner().clone());
+    state.sync_after_config_change(&app_handle)?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn run_reconciliation_scan(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
 ) -> Result<(), AppError> {
-    run_async_reconciliation(app_handle, state.inner().clone());
+    crate::runtime::reconciliation::run_async_reconciliation(app_handle, state.inner().clone());
     Ok(())
 }
 
 #[tauri::command]
 pub async fn pause_watching(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
 ) -> Result<(), AppError> {
-    engine::watcher::pause_watching(&state)?;
-    crate::tray::update_tray_icon(&app_handle);
-    Ok(())
+    state.pause_watching(&app_handle)
 }
 
 #[tauri::command]
 pub async fn resume_watching(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
 ) -> Result<(), AppError> {
-    engine::watcher::resume_watching(
-        &state,
-        watcher_event_sink(app_handle.clone(), state.inner().clone()),
-    )?;
-    crate::tray::update_tray_icon(&app_handle);
-    Ok(())
-}
-
-pub fn start_periodic_reconciliation(app_handle: AppHandle, state: AppState) {
-    thread::spawn(move || loop {
-        thread::sleep(PERIODIC_RECONCILIATION_INTERVAL);
-        if state.is_watching_paused() {
-            continue;
-        }
-
-        run_async_reconciliation(app_handle.clone(), state.clone());
-    });
-}
-
-fn emit_indexed_files(app_handle: &AppHandle, paths: &[String]) {
-    for path in paths {
-        let _ = app_handle.emit("file_indexed", path);
-    }
-}
-
-pub fn emit_reconciliation_report(app_handle: &AppHandle, report: &ReconciliationReport) {
-    emit_indexed_files(app_handle, &report.indexed);
-    for path in &report.updated {
-        let _ = app_handle.emit("file_updated", path);
-    }
-    for path in &report.removed {
-        let _ = app_handle.emit("file_removed", path);
-    }
-    let _ = app_handle.emit("reconciliation_completed", report);
-}
-
-pub fn watcher_event_sink(
-    app_handle: AppHandle,
-    state: AppState,
-) -> engine::watcher::WatcherEventSink {
-    Arc::new(move |event| match event {
-        engine::watcher::WatcherEvent::Reconciled(report) => {
-            emit_reconciliation_report(&app_handle, &report);
-            state.wake_rule_scheduler();
-            crate::commands::automation::run_async_expired_rule_execution(
-                app_handle.clone(),
-                state.clone(),
-            );
-        }
-        engine::watcher::WatcherEvent::Error(error) => {
-            let _ = app_handle.emit("action_failed", error);
-        }
-    })
+    state.resume_watching(&app_handle)
 }
 
 fn validate_config(config: &AppConfig) -> Result<(), AppError> {

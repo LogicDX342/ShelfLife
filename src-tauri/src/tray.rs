@@ -3,7 +3,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{App, AppHandle, Emitter, Manager, Window, WindowEvent};
 
 use crate::models::CloseBehavior;
-use crate::storage::AppState;
+use crate::runtime::AppRuntime;
 
 pub fn setup(app: &mut App) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open shelflife", true, None::<&str>)?;
@@ -74,8 +74,8 @@ pub fn hide_window_on_close(window: &Window, event: &WindowEvent) {
 
     if let WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
-        let state = window.state::<AppState>();
-        let behavior = crate::storage::get_config(&state.db)
+        let runtime = window.state::<AppRuntime>();
+        let behavior = crate::storage::get_config(&runtime.db)
             .map(|config| config.close_behavior)
             .unwrap_or(CloseBehavior::Ask);
 
@@ -107,37 +107,33 @@ fn show_main_window(app_handle: &AppHandle, route: Option<&str>) {
 }
 
 fn pause_watching(app_handle: &AppHandle) {
-    let state = app_handle.state::<AppState>();
-    if let Err(error) = crate::engine::watcher::pause_watching(&state) {
+    let runtime = app_handle.state::<AppRuntime>();
+    if let Err(error) = runtime.pause_watching(app_handle) {
         let _ = app_handle.emit("action_failed", error);
-    } else {
-        update_tray_icon(app_handle);
     }
 }
 
 fn resume_watching(app_handle: &AppHandle) {
-    let state = app_handle.state::<AppState>();
-    if let Err(error) = crate::engine::watcher::resume_watching(
-        &state,
-        crate::commands::watcher_event_sink(app_handle.clone(), state.inner().clone()),
-    ) {
+    let runtime = app_handle.state::<AppRuntime>();
+    if let Err(error) = runtime.resume_watching(app_handle) {
         let _ = app_handle.emit("action_failed", error);
-    } else {
-        update_tray_icon(app_handle);
     }
 }
 
 fn run_reconciliation(app_handle: &AppHandle) {
-    let state = app_handle.state::<AppState>();
-    crate::commands::config::run_async_reconciliation(app_handle.clone(), state.inner().clone());
+    let runtime = app_handle.state::<AppRuntime>();
+    crate::runtime::reconciliation::run_async_reconciliation(
+        app_handle.clone(),
+        runtime.inner().clone(),
+    );
 }
 
 pub fn update_tray_icon(app_handle: &AppHandle) {
-    let state = app_handle.state::<AppState>();
-    let is_watching = if state.is_watching_paused() {
+    let runtime = app_handle.state::<AppRuntime>();
+    let is_watching = if runtime.is_watching_paused() {
         false
     } else {
-        match crate::storage::get_config(&state.db) {
+        match crate::storage::get_config(&runtime.db) {
             Ok(config) => config.watch_targets.iter().any(|t| t.enabled),
             Err(_) => false,
         }

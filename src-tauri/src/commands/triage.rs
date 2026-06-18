@@ -3,12 +3,13 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::engine;
 use crate::models::{AppError, AuditEntry, BulkTriageFailure, BulkTriageResult, UserTriageAction};
-use crate::storage::{self, AppState};
+use crate::runtime::AppRuntime;
+use crate::storage;
 
 #[tauri::command]
 pub async fn execute_triage_action(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     path: String,
     action: UserTriageAction,
 ) -> Result<AuditEntry, AppError> {
@@ -43,7 +44,7 @@ pub async fn execute_triage_action(
 #[tauri::command]
 pub async fn execute_bulk_triage_action(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     paths: Vec<String>,
     action: UserTriageAction,
 ) -> Result<BulkTriageResult, AppError> {
@@ -92,7 +93,7 @@ fn execute_bulk_triage(
 #[tauri::command]
 pub async fn undo_audit_entry(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     audit_id: String,
 ) -> Result<AuditEntry, AppError> {
     match engine::undo_audit_entry(&state.db, &audit_id) {
@@ -106,7 +107,10 @@ pub async fn undo_audit_entry(
             );
 
             // Run reconciliation asynchronously and report progress/completion.
-            crate::commands::config::run_async_reconciliation(app_handle, state.inner().clone());
+            crate::runtime::reconciliation::run_async_reconciliation(
+                app_handle,
+                state.inner().clone(),
+            );
 
             Ok(entry)
         }
@@ -123,13 +127,13 @@ pub async fn undo_audit_entry(
 }
 
 #[tauri::command]
-pub async fn list_audit_entries(state: State<'_, AppState>) -> Result<Vec<AuditEntry>, AppError> {
+pub async fn list_audit_entries(state: State<'_, AppRuntime>) -> Result<Vec<AuditEntry>, AppError> {
     storage::audit::list_audit_entries(&state.db)
 }
 
 fn notify_if_enabled(
     app_handle: &AppHandle,
-    state: &State<'_, AppState>,
+    state: &State<'_, AppRuntime>,
     title: &str,
     body: impl Into<String>,
 ) {

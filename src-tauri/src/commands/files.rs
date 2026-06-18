@@ -8,10 +8,11 @@ use crate::models::{
     AppError, FileDecayState, FilePreview, FilePreviewContent, RuleMatchExplanation, TrackedFile,
 };
 use crate::rules::explain_file_against_rules;
-use crate::storage::{self, AppState};
+use crate::runtime::AppRuntime;
+use crate::storage;
 
 #[tauri::command]
-pub async fn get_active_files(state: State<'_, AppState>) -> Result<Vec<TrackedFile>, AppError> {
+pub async fn get_active_files(state: State<'_, AppRuntime>) -> Result<Vec<TrackedFile>, AppError> {
     active_files(&state.db)
 }
 
@@ -29,7 +30,7 @@ fn active_files(db: &redb::Database) -> Result<Vec<TrackedFile>, AppError> {
 
 #[tauri::command]
 pub async fn explain_file(
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     path: String,
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
     validate_path_scope(&state, &path)?;
@@ -43,7 +44,7 @@ pub async fn explain_file(
 
 #[tauri::command]
 pub async fn preview_file(
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     path: String,
 ) -> Result<FilePreview, AppError> {
     validate_path_scope(&state, &path)?;
@@ -219,7 +220,10 @@ fn pdf_metadata(path: &Path) -> Result<(Option<u32>, Option<String>), AppError> 
 }
 
 #[tauri::command]
-pub async fn open_file_location(state: State<'_, AppState>, path: String) -> Result<(), AppError> {
+pub async fn open_file_location(
+    state: State<'_, AppRuntime>,
+    path: String,
+) -> Result<(), AppError> {
     validate_path_scope(&state, &path)?;
     let path_ref = Path::new(&path);
     if !path_ref.exists() {
@@ -247,7 +251,7 @@ fn open_location(_path: &Path) -> Result<(), AppError> {
     ))
 }
 
-fn validate_path_scope(state: &State<'_, AppState>, path: &str) -> Result<(), AppError> {
+fn validate_path_scope(state: &State<'_, AppRuntime>, path: &str) -> Result<(), AppError> {
     let config = storage::get_config(&state.db)?;
     let path = PathBuf::from(path);
 

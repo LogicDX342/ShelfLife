@@ -7,7 +7,6 @@ use tauri::{AppHandle, Manager, PhysicalPosition, Position};
 
 use crate::engine::ShakeDetector;
 use crate::models::AppError;
-use crate::storage::{self, AppState};
 
 const DROPZONE_LABEL: &str = "dropzone";
 const DROPZONE_WIDTH: i32 = 360;
@@ -30,9 +29,8 @@ impl DropzoneMonitor {
     }
 }
 
-pub fn sync_dropzone_monitor(app_handle: &AppHandle, state: &AppState) -> Result<(), AppError> {
-    let config = storage::get_config(&state.db)?;
-    if config.dropzone_enabled {
+pub fn sync_dropzone_monitor(app_handle: &AppHandle, enabled: bool) -> Result<(), AppError> {
+    if enabled {
         start_monitor(app_handle.clone());
     } else {
         stop_monitor();

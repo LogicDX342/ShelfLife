@@ -6,11 +6,12 @@ use crate::models::{
 };
 use crate::rules::conditions::evaluate_conditions;
 use crate::rules::explanation::rule_explanation;
-use crate::storage::{self, AppState};
+use crate::runtime::AppRuntime;
+use crate::storage;
 
 #[tauri::command]
 pub async fn preview_dropzone_files(
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     paths: Vec<String>,
 ) -> Result<DropzonePreview, AppError> {
     crate::dropzone::record_dropzone_drop();
@@ -20,7 +21,7 @@ pub async fn preview_dropzone_files(
 #[tauri::command]
 pub async fn execute_dropzone_ingest(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     paths: Vec<String>,
     watch_target_id: String,
 ) -> Result<DropzoneActionResult, AppError> {
@@ -46,7 +47,7 @@ pub async fn execute_dropzone_ingest(
     emit_dropzone_failures(&app_handle, &result.failures);
     if !result.entries.is_empty() {
         state.wake_rule_scheduler();
-        crate::commands::automation::run_async_expired_rule_execution(
+        crate::runtime::rule_scheduler::run_async_expired_rule_execution(
             app_handle,
             state.inner().clone(),
         );
@@ -58,7 +59,7 @@ pub async fn execute_dropzone_ingest(
 #[tauri::command]
 pub async fn execute_dropzone_rule_group(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     rule_id: String,
     paths: Vec<String>,
 ) -> Result<DropzoneActionResult, AppError> {

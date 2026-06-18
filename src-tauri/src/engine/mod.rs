@@ -11,6 +11,5 @@ pub mod watcher;
 pub use dropzone::*;
 pub use executor::*;
 pub use freshness::*;
-pub use reconciliation::*;
 pub use rule_execution::*;
 pub use rule_refresh::*;

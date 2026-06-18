@@ -7,17 +7,18 @@ use crate::models::{
     RuleMatchExplanation, RuleMode, SizeCondition, UndoStatus,
 };
 use crate::rules::explain_file_against_rules;
-use crate::storage::{self, AppState};
+use crate::runtime::AppRuntime;
+use crate::storage;
 
 #[tauri::command]
-pub async fn list_rules(state: State<'_, AppState>) -> Result<Vec<AutomationRule>, AppError> {
+pub async fn list_rules(state: State<'_, AppRuntime>) -> Result<Vec<AutomationRule>, AppError> {
     storage::rules::list_rules(&state.db)
 }
 
 #[tauri::command]
 pub async fn save_rule(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     mut rule: AutomationRule,
 ) -> Result<AutomationRule, AppError> {
     let config = storage::get_config(&state.db)?;
@@ -32,9 +33,9 @@ pub async fn save_rule(
     storage::rules::save_rule(&state.db, &rule)?;
 
     let report = crate::engine::refresh_tracked_rule_state(&state.db)?;
-    crate::commands::config::emit_reconciliation_report(&app_handle, &report);
+    crate::runtime::reconciliation::emit_reconciliation_report(&app_handle, &report);
     state.wake_rule_scheduler();
-    crate::commands::automation::run_async_expired_rule_execution(
+    crate::runtime::rule_scheduler::run_async_expired_rule_execution(
         app_handle,
         state.inner().clone(),
     );
@@ -45,7 +46,7 @@ pub async fn save_rule(
 #[tauri::command]
 pub async fn test_rule(
     _app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     rule: AutomationRule,
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
     validate_rule(&rule, &storage::get_config(&state.db)?)?;
@@ -101,13 +102,13 @@ fn build_rule_preview_entries(
 #[tauri::command]
 pub async fn delete_rule(
     app_handle: AppHandle,
-    state: State<'_, AppState>,
+    state: State<'_, AppRuntime>,
     id: String,
 ) -> Result<(), AppError> {
     storage::rules::delete_rule(&state.db, &id)?;
 
     let report = crate::engine::refresh_tracked_rule_state(&state.db)?;
-    crate::commands::config::emit_reconciliation_report(&app_handle, &report);
+    crate::runtime::reconciliation::emit_reconciliation_report(&app_handle, &report);
     state.wake_rule_scheduler();
 
     Ok(())
