@@ -41,6 +41,7 @@
   let sliderValue = $state([5, 29, 30]);
   let notificationsEnabled = $state(true);
   let startAtLogin = $state(false);
+  let dropzoneEnabled = $state(false);
   let closeBehavior = $state<CloseBehavior>('Ask');
   let addingTarget = $state(false);
   let rejectedTargetId = $state<string | null>(null);
@@ -96,6 +97,7 @@
     ];
     notificationsEnabled = config.notifications_enabled;
     startAtLogin = config.start_at_login;
+    dropzoneEnabled = config.dropzone_enabled;
     closeBehavior = config.close_behavior;
   }
 
@@ -249,6 +251,7 @@
         decaying_threshold_seconds: Math.max(1, sliderValue[2] - sliderValue[1]) * 86400,
         notifications_enabled: notificationsEnabled,
         start_at_login: startAtLogin,
+        dropzone_enabled: dropzoneEnabled,
         close_behavior: closeBehavior,
       });
 
@@ -479,7 +482,7 @@
                   <Item.Actions class="flex-shrink-0 ml-4">
                     <Switch
                       checked={notificationsEnabled}
-                      onclick={async () => {
+                      onCheckedChange={async () => {
                         notificationsEnabled = !notificationsEnabled;
                         await savePreferences();
                       }}
@@ -506,11 +509,38 @@
                   <Item.Actions class="flex-shrink-0 ml-4">
                     <Switch
                       checked={startAtLogin}
-                      onclick={async () => {
+                      onCheckedChange={async () => {
                         startAtLogin = !startAtLogin;
                         await savePreferences();
                       }}
                       aria-label={i18n.t('settings.startAtLogin')}
+                    />
+                  </Item.Actions>
+                </Item.Root>
+
+                <Item.Root
+                  class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
+                >
+                  <Item.Content class="flex flex-col gap-0.5">
+                    <Item.Title
+                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200"
+                    >
+                      {i18n.t('settings.dropzone')}
+                    </Item.Title>
+                    <Item.Description
+                      class="text-[11px] text-fluent-muted-light dark:text-fluent-muted-dark leading-normal line-clamp-none"
+                    >
+                      {i18n.t('settings.dropzoneDesc')}
+                    </Item.Description>
+                  </Item.Content>
+                  <Item.Actions class="flex-shrink-0 ml-4">
+                    <Switch
+                      checked={dropzoneEnabled}
+                      onCheckedChange={async () => {
+                        dropzoneEnabled = !dropzoneEnabled;
+                        await savePreferences();
+                      }}
+                      aria-label={i18n.t('settings.dropzone')}
                     />
                   </Item.Actions>
                 </Item.Root>
@@ -638,7 +668,7 @@
                         >
                           <Switch
                             checked={target.enabled}
-                            onclick={() => toggleTargetEnabled(target, !target.enabled)}
+                            onCheckedChange={() => toggleTargetEnabled(target, !target.enabled)}
                             aria-label="Toggle active status"
                           />
                         </div>

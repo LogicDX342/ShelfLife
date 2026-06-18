@@ -79,7 +79,7 @@
       </span>
       <Switch
         checked={rule.enabled}
-        onclick={() => onToggleEnabled(rule)}
+        onCheckedChange={() => onToggleEnabled(rule)}
         aria-label={i18n.t('rules.enabled')}
       />
     </div>

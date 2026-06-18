@@ -1,4 +1,5 @@
 mod commands;
+mod dropzone;
 mod engine;
 mod models;
 mod rules;
@@ -30,6 +31,8 @@ pub fn run() {
                 .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             let state = storage::AppState::new(db);
             app.manage(state.clone());
+            dropzone::sync_dropzone_monitor(app.handle(), &state)
+                .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             tray::setup(app).map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             engine::watcher::restart_watcher(
                 &state,
@@ -90,6 +93,10 @@ pub fn run() {
             commands::execute_bulk_triage_action,
             commands::undo_audit_entry,
             commands::list_audit_entries,
+            commands::preview_dropzone_files,
+            commands::execute_dropzone_ingest,
+            commands::execute_dropzone_rule_group,
+            commands::hide_dropzone,
             commands::list_rules,
             commands::save_rule,
             commands::test_rule,

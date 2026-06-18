@@ -74,6 +74,7 @@ pub async fn save_config(
 ) -> Result<AppConfig, AppError> {
     validate_config(&config)?;
     storage::save_config(&state.db, &config)?;
+    crate::dropzone::sync_dropzone_monitor(&app_handle, &state)?;
     engine::watcher::restart_watcher(
         &state,
         watcher_event_sink(app_handle.clone(), state.inner().clone()),

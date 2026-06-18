@@ -102,6 +102,46 @@ export type AuditEntry = {
   undo_status: UndoStatus;
 };
 
+export type DropzoneFile = {
+  path: string;
+  file_name: string;
+  size_bytes: number;
+};
+
+export type DropzoneRejectedFile = {
+  path: string;
+  reason: string;
+};
+
+export type DropzoneRuleGroup = {
+  rule_id: string;
+  rule_name: string;
+  mode: RuleMode;
+  action: RuleAction;
+  file_paths: string[];
+  file_count: number;
+  total_size_bytes: number;
+};
+
+export type DropzonePreview = {
+  files: DropzoneFile[];
+  rejected_files: DropzoneRejectedFile[];
+  watch_targets: WatchTarget[];
+  rule_groups: DropzoneRuleGroup[];
+  preview_only: RuleMatchExplanation[];
+  unmatched_files: string[];
+};
+
+export type DropzoneActionFailure = {
+  path: string;
+  error: AppError;
+};
+
+export type DropzoneActionResult = {
+  entries: AuditEntry[];
+  failures: DropzoneActionFailure[];
+};
+
 export type BulkTriageFailure = {
   path: string;
   error: AppError;
@@ -144,6 +184,7 @@ export type AppConfig = {
   notifications_enabled: boolean;
   start_at_login: boolean;
   close_behavior: CloseBehavior;
+  dropzone_enabled: boolean;
 };
 
 export type FilePreviewContent =

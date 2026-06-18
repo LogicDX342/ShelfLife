@@ -1,3 +1,4 @@
+pub mod dropzone;
 pub mod executor;
 pub mod freshness;
 pub mod paths;
@@ -7,6 +8,7 @@ pub mod rule_execution;
 pub mod rule_refresh;
 pub mod watcher;
 
+pub use dropzone::*;
 pub use executor::*;
 pub use freshness::*;
 pub use reconciliation::*;

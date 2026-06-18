@@ -153,6 +153,9 @@ const translations: Record<Language, Record<string, string>> = {
       'Receive desktop alerts before files expire or when automatic cleanup runs.',
     'settings.startAtLogin': 'Start ShelfLife on boot',
     'settings.startAtLoginDesc': 'Automatically run ShelfLife in the background on system startup.',
+    'settings.dropzone': 'Shake-to-dropzone',
+    'settings.dropzoneDesc':
+      'While dragging files, shake the mouse to show a small dropzone near the cursor.',
     'settings.closeBehavior': 'When closing the window',
     'settings.closeAsk': 'Ask every time',
     'settings.closeHideToTray': 'Keep running in tray',
@@ -228,6 +231,22 @@ const translations: Record<Language, Record<string, string>> = {
     'browser.apply': 'Apply',
     'browser.errorBulkAction': 'Bulk action failed.',
     'browser.bulkSummary': '{action}: {succeeded} succeeded, {failed} failed',
+    'dropzone.title': 'Dropzone',
+    'dropzone.titleWindow': 'ShelfLife Dropzone',
+    'dropzone.subtitle.reading': 'Reading dropped files',
+    'dropzone.subtitle.prompt': 'Drop files here',
+    'dropzone.subtitle.files': '{count} files, {size}',
+    'dropzone.subtitle.file': '{count} file, {size}',
+    'dropzone.close': 'Close dropzone',
+    'dropzone.previewFailed': 'Dropzone preview failed.',
+    'dropzone.actionFailed': 'Dropzone action failed.',
+    'dropzone.ruleFailed': 'Rule action failed.',
+    'dropzone.watchTargets': 'Watch targets',
+    'dropzone.ruleGroups': 'Rule groups',
+    'dropzone.badge.preview': '{count} preview',
+    'dropzone.badge.unmatched': '{count} unmatched',
+    'dropzone.badge.failed': '{count} failed',
+    'dropzone.resultSummary': '{completed} completed, {failed} failed',
   },
   zh: {
     'nav.dashboard': '仪表板',
@@ -374,6 +393,8 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.notificationsDesc': '在文件即将过期或自动执行清理动作时，接收桌面通知提示。',
     'settings.startAtLogin': '开机自启动',
     'settings.startAtLoginDesc': '在开机登录系统时自动运行 ShelfLife，以保持后台静默监控。',
+    'settings.dropzone': '摇动鼠标显示投放区',
+    'settings.dropzoneDesc': '拖动文件时摇动鼠标，在光标附近显示小型投放区。',
     'settings.closeBehavior': '关闭窗口时',
     'settings.closeAsk': '每次询问',
     'settings.closeHideToTray': '在托盘中继续运行',
@@ -448,6 +469,22 @@ const translations: Record<Language, Record<string, string>> = {
     'browser.apply': '应用',
     'browser.errorBulkAction': '批量操作失败。',
     'browser.bulkSummary': '操作“{action}”已应用: {succeeded} 个成功，{failed} 个失败。',
+    'dropzone.title': '投放区',
+    'dropzone.titleWindow': 'ShelfLife 投放区',
+    'dropzone.subtitle.reading': '正在读取投放的文件',
+    'dropzone.subtitle.prompt': '拖放文件至此处',
+    'dropzone.subtitle.files': '{count} 个文件, {size}',
+    'dropzone.subtitle.file': '{count} 个文件, {size}',
+    'dropzone.close': '关闭投放区',
+    'dropzone.previewFailed': '投放区预览失败。',
+    'dropzone.actionFailed': '投放区操作失败。',
+    'dropzone.ruleFailed': '规则操作失败。',
+    'dropzone.watchTargets': '监控目标',
+    'dropzone.ruleGroups': '规则组',
+    'dropzone.badge.preview': '{count} 个预览',
+    'dropzone.badge.unmatched': '{count} 个未匹配',
+    'dropzone.badge.failed': '{count} 个失败',
+    'dropzone.resultSummary': '{completed} 个完成，{failed} 个失败',
   },
 };
 
@@ -468,6 +505,22 @@ class AppState {
       if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system') {
         this.currentTheme = savedTheme;
       }
+
+      // Sync theme and language choices across windows
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'shelflife_theme') {
+          const newTheme = e.newValue as Theme;
+          if (newTheme === 'light' || newTheme === 'dark' || newTheme === 'system') {
+            this.currentTheme = newTheme;
+          }
+        }
+        if (e.key === 'shelflife_lang') {
+          const newLang = e.newValue as Language;
+          if (newLang === 'en' || newLang === 'zh') {
+            this.currentLang = newLang;
+          }
+        }
+      });
     }
   }
 

@@ -175,7 +175,7 @@
           </div>
           <Switch
             checked={!isPaused}
-            onclick={toggleWatchStatus}
+            onCheckedChange={toggleWatchStatus}
             aria-label={i18n.t('status.watchStatus')}
           />
         </Card.Content>

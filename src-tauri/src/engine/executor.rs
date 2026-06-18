@@ -16,6 +16,9 @@ use crate::rules::protected_pattern_match;
 use crate::storage;
 use std::sync::OnceLock;
 
+const DROPZONE_INGEST_AUDIT_ID: &str = "__dropzone_ingest__";
+const DROPZONE_RULE_AUDIT_ID_PREFIX: &str = "__dropzone_rule__:";
+
 static TRASH_SUPPORTED: OnceLock<bool> = OnceLock::new();
 
 pub fn init_trash_support() {
@@ -282,6 +285,186 @@ pub fn execute_automation_rule_action(
     Ok(entry)
 }
 
+pub fn execute_dropzone_rule_action(
+    db: &Database,
+    path: &str,
+    rule: &AutomationRule,
+    explanation: RuleMatchExplanation,
+) -> Result<AuditEntry, AppError> {
+    if matches!(rule.mode, RuleMode::PreviewOnly) {
+        return Err(AppError::new(
+            "RULE_NOT_EXECUTABLE",
+            "PreviewOnly rules cannot change files from the dropzone.",
+            true,
+        ));
+    }
+
+    let config = storage::get_config(db)?;
+    let source = PathBuf::from(path);
+    if !source.exists() {
+        return Err(AppError::path_not_found(path));
+    }
+    if !source.is_file() {
+        return Err(AppError::with_details(
+            "PATH_OUT_OF_SCOPE",
+            "Only files can be changed from the dropzone. No file was changed.",
+            true,
+            path,
+        ));
+    }
+
+    let mut tracked = load_or_create_tracked(db, &source, &config)?;
+    let original_tracked_path = tracked.path.clone();
+    let timestamp = now_seconds();
+    let mut destination_path = None;
+    let action_kind;
+    let undo_status;
+
+    match &rule.action {
+        RuleAction::Ignore => {
+            validate_source_scope(&source, &config)?;
+            tracked.state = FileDecayState::Ignored;
+            action_kind = AuditActionKind::Ignore;
+            undo_status = UndoStatus::Available;
+        }
+        RuleAction::Move {
+            destination_folder,
+            rename_template,
+        } => {
+            validate_not_protected_for_filesystem_change(&source, &config)?;
+            let destination_folder = PathBuf::from(destination_folder);
+            validate_move_destination_folder(&destination_folder, &config)?;
+            fs::create_dir_all(&destination_folder)?;
+            let destination =
+                move_destination(&source, &destination_folder, rename_template.as_deref())?;
+            fs::rename(&source, &destination)?;
+            destination_path = Some(destination.to_string_lossy().to_string());
+            apply_tracked_destination(&mut tracked, &destination);
+            action_kind = AuditActionKind::Move;
+            undo_status = UndoStatus::Available;
+        }
+        RuleAction::Trash => {
+            validate_not_protected_for_filesystem_change(&source, &config)?;
+            trash::delete(&source).map_err(|error| {
+                AppError::with_details(
+                    "ACTION_FAILED",
+                    "The file could not be moved to the Recycle Bin. No raw deletion was attempted.",
+                    true,
+                    error.to_string(),
+                )
+            })?;
+            tracked.state = FileDecayState::Missing;
+            action_kind = AuditActionKind::Trash;
+            undo_status = if is_trash_supported() {
+                UndoStatus::Available
+            } else {
+                UndoStatus::Unavailable {
+                    reason: String::from(
+                        "Recycle Bin is not supported or not fully functional on this system.",
+                    ),
+                }
+            };
+        }
+    }
+
+    tracked.last_user_action_at = Some(timestamp);
+    if tracked.path != original_tracked_path {
+        storage::tracked::remove_tracked_file(db, &original_tracked_path)?;
+    }
+    storage::tracked::upsert_tracked_file(db, &tracked)?;
+
+    let entry = AuditEntry {
+        id: Uuid::new_v4().to_string(),
+        sequence: storage::audit::next_audit_sequence(db)?,
+        timestamp,
+        action_kind,
+        source_path: path.to_string(),
+        destination_path,
+        file_name: tracked.file_name.clone(),
+        size_bytes: tracked.size_bytes,
+        rule_id: Some(format!("{DROPZONE_RULE_AUDIT_ID_PREFIX}{}", rule.id)),
+        rule_name: Some(rule.name.clone()),
+        explanation: Some(explanation),
+        undo_status,
+    };
+    storage::audit::append_audit_entry(db, &entry)?;
+    Ok(entry)
+}
+
+pub fn ingest_dropzone_file(
+    db: &Database,
+    path: &str,
+    watch_target_id: &str,
+) -> Result<AuditEntry, AppError> {
+    let config = storage::get_config(db)?;
+    let target = config
+        .watch_targets
+        .iter()
+        .find(|target| target.enabled && target.id == watch_target_id)
+        .ok_or_else(|| {
+            AppError::new(
+                "PATH_OUT_OF_SCOPE",
+                "Selected watch target is unavailable. No file was changed.",
+                true,
+            )
+        })?;
+
+    let source = PathBuf::from(path);
+    if !source.exists() {
+        return Err(AppError::path_not_found(path));
+    }
+    if !source.is_file() {
+        return Err(AppError::with_details(
+            "PATH_OUT_OF_SCOPE",
+            "Only files can be moved into a watch target from the dropzone. No file was changed.",
+            true,
+            path,
+        ));
+    }
+
+    let destination_folder = PathBuf::from(&target.path);
+    fs::create_dir_all(&destination_folder)?;
+    let destination = move_destination(&source, &destination_folder, None)?;
+    let original_tracked_path = source.to_string_lossy().to_string();
+    fs::rename(&source, &destination)?;
+
+    if storage::tracked::get_tracked_file(db, &original_tracked_path)?.is_some() {
+        storage::tracked::remove_tracked_file(db, &original_tracked_path)?;
+    }
+
+    let metadata = fs::metadata(&destination)?;
+    let mut tracked = tracked_file_from_metadata(
+        &destination,
+        &metadata,
+        None,
+        &config,
+        target
+            .default_ttl_seconds
+            .unwrap_or(config.default_ttl_seconds),
+        &target.id,
+    );
+    let timestamp = now_seconds();
+    tracked.last_user_action_at = Some(timestamp);
+    storage::tracked::upsert_tracked_file(db, &tracked)?;
+
+    let entry = AuditEntry {
+        id: Uuid::new_v4().to_string(),
+        sequence: storage::audit::next_audit_sequence(db)?,
+        timestamp,
+        action_kind: AuditActionKind::Move,
+        source_path: path.to_string(),
+        destination_path: Some(destination.to_string_lossy().to_string()),
+        file_name: tracked.file_name.clone(),
+        size_bytes: tracked.size_bytes,
+        rule_id: Some(String::from(DROPZONE_INGEST_AUDIT_ID)),
+        rule_name: Some(String::from("Dropzone ingest")),
+        explanation: None,
+        undo_status: UndoStatus::Available,
+    };
+    storage::audit::append_audit_entry(db, &entry)?;
+    Ok(entry)
+}
+
 pub fn undo_audit_entry(db: &Database, audit_id: &str) -> Result<AuditEntry, AppError> {
     let mut entry = storage::audit::get_audit_entry_by_id(db, audit_id)?
         .ok_or_else(|| AppError::new("UNDO_UNAVAILABLE", "Audit entry was not found.", true))?;
@@ -327,6 +510,7 @@ pub fn undo_audit_entry(db: &Database, audit_id: &str) -> Result<AuditEntry, App
 
 fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     let config = storage::get_config(db)?;
+    let from_dropzone = is_dropzone_audit_entry(entry);
     let destination = entry.destination_path.as_ref().ok_or_else(|| {
         AppError::new(
             "UNDO_UNAVAILABLE",
@@ -336,7 +520,9 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     })?;
     let from = PathBuf::from(destination);
     let to = PathBuf::from(&entry.source_path);
-    validate_move_source_for_undo(&from, &config)?;
+    if !from_dropzone {
+        validate_move_source_for_undo(&from, &config)?;
+    }
     let to_parent = to.parent().ok_or_else(|| {
         AppError::new(
             "UNDO_FAILED",
@@ -344,7 +530,9 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
             true,
         )
     })?;
-    validate_restore_destination_scope(to_parent, &config)?;
+    if !from_dropzone {
+        validate_restore_destination_scope(to_parent, &config)?;
+    }
 
     if !from.exists() {
         return Err(AppError::new(
@@ -373,6 +561,14 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
         storage::tracked::upsert_tracked_file(db, &tracked)?;
     }
     Ok(())
+}
+
+fn is_dropzone_audit_entry(entry: &AuditEntry) -> bool {
+    entry.rule_id.as_deref() == Some(DROPZONE_INGEST_AUDIT_ID)
+        || entry
+            .rule_id
+            .as_deref()
+            .is_some_and(|id| id.starts_with(DROPZONE_RULE_AUDIT_ID_PREFIX))
 }
 
 fn undo_state_only(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
@@ -794,7 +990,7 @@ mod tests {
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
 
-    use super::{execute_triage_action, render_rename_template};
+    use super::{execute_triage_action, ingest_dropzone_file, render_rename_template};
 
     #[test]
     fn manual_move_preserves_name_avoids_collision_and_updates_tracked_path() {
@@ -1038,5 +1234,60 @@ mod tests {
 
         assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
         assert!(source.exists());
+    }
+
+    #[test]
+    fn dropzone_ingest_moves_external_file_to_watch_target_and_undo_restores() {
+        let fixture = Fixture::new("shelflife-dropzone-ingest");
+        let source = fixture.write_outside_file("drop.txt", "external");
+        fixture.save_config();
+
+        let entry = ingest_dropzone_file(&fixture.db, &path_string(&source), "watch")
+            .expect("dropzone ingest should succeed");
+        let destination = entry
+            .destination_path
+            .as_ref()
+            .expect("destination should be recorded");
+
+        assert_eq!(entry.action_kind, AuditActionKind::Move);
+        assert!(!source.exists());
+        assert!(Path::new(destination).exists());
+        assert!(storage::tracked::get_tracked_file(&fixture.db, destination)
+            .expect("tracked lookup should work")
+            .is_some());
+
+        let undone = super::undo_audit_entry(&fixture.db, &entry.id).expect("undo should succeed");
+        assert!(matches!(undone.undo_status, UndoStatus::Completed));
+        assert!(source.exists());
+        assert!(!Path::new(destination).exists());
+    }
+
+    #[test]
+    fn dropzone_ingest_avoids_name_collision_in_watch_target() {
+        let fixture = Fixture::new("shelflife-dropzone-collision");
+        fixture.write_watch_file("drop.txt", "existing");
+        let source = fixture.write_outside_file("drop.txt", "external");
+        fixture.save_config();
+
+        let entry = ingest_dropzone_file(&fixture.db, &path_string(&source), "watch")
+            .expect("dropzone ingest should succeed");
+        let destination = entry
+            .destination_path
+            .expect("destination should be recorded");
+
+        assert!(destination.ends_with("drop-1.txt"));
+        assert!(Path::new(&destination).exists());
+    }
+
+    #[test]
+    fn dropzone_ingest_rejects_folders_before_change() {
+        let fixture = Fixture::new("shelflife-dropzone-folder-ingest");
+        fixture.save_config();
+
+        let error = ingest_dropzone_file(&fixture.db, &path_string(&fixture.outside), "watch")
+            .expect_err("folders should be rejected");
+
+        assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
+        assert!(fixture.outside.exists());
     }
 }

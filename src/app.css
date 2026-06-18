@@ -217,3 +217,7 @@ input[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+body.dropzone-body {
+  background: transparent;
+}

@@ -35,6 +35,7 @@ pub struct AppConfig {
     pub notifications_enabled: bool,
     pub start_at_login: bool,
     pub close_behavior: CloseBehavior,
+    pub dropzone_enabled: bool,
 }
 
 impl Default for AppConfig {
@@ -52,6 +53,7 @@ impl Default for AppConfig {
             notifications_enabled: true,
             start_at_login: false,
             close_behavior: CloseBehavior::Ask,
+            dropzone_enabled: false,
         }
     }
 }
