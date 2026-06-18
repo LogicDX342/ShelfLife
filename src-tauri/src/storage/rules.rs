@@ -1,4 +1,4 @@
-use redb::{Database, ReadableTable};
+use redb::{Database, ReadableDatabase, ReadableTable};
 
 use crate::models::{AppError, AutomationRule};
 use crate::storage::RULES_BY_ID_TABLE;
@@ -19,6 +19,16 @@ pub fn list_rules(db: &Database) -> Result<Vec<AutomationRule>, AppError> {
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     Ok(rules)
+}
+
+pub fn get_rule(db: &Database, id: &str) -> Result<Option<AutomationRule>, AppError> {
+    let read_txn = db.begin_read()?;
+    let table = read_txn.open_table(RULES_BY_ID_TABLE)?;
+    let Some(value) = table.get(id)? else {
+        return Ok(None);
+    };
+
+    Ok(Some(bincode::deserialize(value.value())?))
 }
 
 pub fn save_rule(db: &Database, rule: &AutomationRule) -> Result<(), AppError> {

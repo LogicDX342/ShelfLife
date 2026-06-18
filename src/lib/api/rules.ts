@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+
 import type { AutomationRule, RuleMatchExplanation } from '$lib/types';
 
 export function listRules() {

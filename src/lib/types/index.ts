@@ -33,8 +33,7 @@ export type TrackedFile = {
 export type RuleMode = 'PreviewOnly' | 'AskFirst' | 'Automatic';
 export type RuleAction =
   | 'Trash'
-  | { Move: { destination_path: string } }
-  | { Rename: { template: string } }
+  | { Move: { destination_folder: string; rename_template: string | null } }
   | 'Ignore';
 
 export type SizeCondition =
@@ -86,14 +85,7 @@ export type UndoStatus =
   | { Unavailable: { reason: string } }
   | { Failed: { reason: string } };
 
-export type AuditActionKind =
-  | 'Trash'
-  | 'Move'
-  | 'Rename'
-  | 'Pin'
-  | 'Snooze'
-  | 'Ignore'
-  | 'RulePreview';
+export type AuditActionKind = 'Trash' | 'Move' | 'Pin' | 'Snooze' | 'Ignore' | 'RulePreview';
 
 export type AuditEntry = {
   id: string;
@@ -108,6 +100,46 @@ export type AuditEntry = {
   rule_name: string | null;
   explanation: RuleMatchExplanation | null;
   undo_status: UndoStatus;
+};
+
+export type DropzoneFile = {
+  path: string;
+  file_name: string;
+  size_bytes: number;
+};
+
+export type DropzoneRejectedFile = {
+  path: string;
+  reason: string;
+};
+
+export type DropzoneRuleGroup = {
+  rule_id: string;
+  rule_name: string;
+  mode: RuleMode;
+  action: RuleAction;
+  file_paths: string[];
+  file_count: number;
+  total_size_bytes: number;
+};
+
+export type DropzonePreview = {
+  files: DropzoneFile[];
+  rejected_files: DropzoneRejectedFile[];
+  watch_targets: WatchTarget[];
+  rule_groups: DropzoneRuleGroup[];
+  preview_only: RuleMatchExplanation[];
+  unmatched_files: string[];
+};
+
+export type DropzoneActionFailure = {
+  path: string;
+  error: AppError;
+};
+
+export type DropzoneActionResult = {
+  entries: AuditEntry[];
+  failures: DropzoneActionFailure[];
 };
 
 export type BulkTriageFailure = {
@@ -125,9 +157,8 @@ export type UserTriageAction =
   | { Snooze: { seconds: number } }
   | 'Ignore'
   | 'MoveToSafeFolder'
-  | { Move: { destination_path: string } }
-  | 'TrashNow'
-  | { Rename: { template: string } };
+  | { Move: { destination_folder: string } }
+  | 'TrashNow';
 
 export type WatchTarget = {
   id: string;
@@ -153,6 +184,7 @@ export type AppConfig = {
   notifications_enabled: boolean;
   start_at_login: boolean;
   close_behavior: CloseBehavior;
+  dropzone_enabled: boolean;
 };
 
 export type FilePreviewContent =

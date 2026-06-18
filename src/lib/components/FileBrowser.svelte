@@ -1,15 +1,25 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import IconFolder from '@lucide/svelte/icons/folder';
+  import IconFolderOpen from '@lucide/svelte/icons/folder-open';
   import { listen } from '@tauri-apps/api/event';
-  import { filesState } from '$lib/stores/files.svelte';
-  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { onMount } from 'svelte';
+
   import { getConfig } from '$lib/api/config';
   import { executeBulkTriageAction } from '$lib/api/triage';
+  import * as Breadcrumb from '$lib/components/ui/breadcrumb';
+  import { Button } from '$lib/components/ui/button';
+  import { Checkbox } from '$lib/components/ui/checkbox';
+  import * as Empty from '$lib/components/ui/empty';
+  import { Input } from '$lib/components/ui/input';
+  import * as Select from '$lib/components/ui/select';
+  import { i18n } from '$lib/i18n/i18n.svelte';
+  import { filesState } from '$lib/stores/files.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
   import type { AppConfig, TrackedFile, UserTriageAction } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
-  import FileCard from './FileCard.svelte';
+
   import ConfirmDialog from './ConfirmDialog.svelte';
-  import { notifications } from '$lib/stores/notifications.svelte';
+  import FileCard from './FileCard.svelte';
 
   let config = $state<AppConfig | null>(null);
   let currentDirectory = $state('');
@@ -235,6 +245,10 @@
     return bulkAction;
   }
 
+  function bulkActionLabel(value: typeof bulkAction) {
+    return value;
+  }
+
   async function runBulkAction() {
     confirmBulk = false;
     try {
@@ -278,24 +292,33 @@
     <h1 class="text-2xl font-bold tracking-tight">{i18n.t('nav.browser')}</h1>
 
     <!-- Breadcrumbs Navigation -->
-    <nav
-      class="flex items-center flex-wrap gap-1 mt-2 text-sm text-fluent-muted-light dark:text-fluent-muted-dark"
-    >
-      {#each breadcrumbs as crumb, index (crumb.path)}
-        {#if index > 0}
-          <span class="opacity-50 mx-1">/</span>
-        {/if}
-        <button
-          onclick={() => (currentDirectory = crumb.path)}
-          class="hover:text-fluent-accent hover:underline transition-colors font-medium {index ===
-          breadcrumbs.length - 1
-            ? 'text-fluent-text-light dark:text-fluent-text-dark font-semibold'
-            : ''}"
-        >
-          {crumb.name}
-        </button>
-      {/each}
-    </nav>
+    <Breadcrumb.Root class="mt-2">
+      <Breadcrumb.List>
+        {#each breadcrumbs as crumb, index (crumb.path)}
+          {#if index > 0}
+            <Breadcrumb.Separator />
+          {/if}
+          <Breadcrumb.Item>
+            {#if index === breadcrumbs.length - 1}
+              <Breadcrumb.Page class="font-semibold text-foreground">
+                {crumb.name}
+              </Breadcrumb.Page>
+            {:else}
+              <Breadcrumb.Link
+                href=""
+                onclick={(e) => {
+                  e.preventDefault();
+                  currentDirectory = crumb.path;
+                }}
+                class="cursor-pointer"
+              >
+                {crumb.name}
+              </Breadcrumb.Link>
+            {/if}
+          </Breadcrumb.Item>
+        {/each}
+      </Breadcrumb.List>
+    </Breadcrumb.Root>
   </header>
 
   <!-- Contents List -->
@@ -310,25 +333,16 @@
         </h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {#each directoryContents.folders.slice(0, visibleFoldersCount) as folder (folder.path)}
-            <button
+            <Button
               onclick={() => (currentDirectory = folder.path)}
-              class="fluent-card p-4 flex items-center justify-between text-left hover:border-fluent-accent/50 hover:bg-black/2.5 dark:hover:bg-white/2.5 transition-all select-none group cursor-pointer"
+              variant="outline"
+              class="group h-auto justify-between p-4 text-left"
             >
               <div class="flex items-center gap-3 min-w-0">
                 <!-- Folder Icon -->
-                <svg
-                  class="w-8 h-8 text-fluent-accent/80 group-hover:scale-105 transition-transform flex-shrink-0"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                  />
-                </svg>
+                <IconFolder
+                  class="w-8 h-8 text-primary/80 group-hover:scale-105 transition-transform flex-shrink-0"
+                />
                 <div class="min-w-0">
                   <h3
                     class="text-sm font-semibold truncate text-fluent-text-light dark:text-fluent-text-dark"
@@ -362,21 +376,22 @@
                   ).split(' ')[0]}"
                 ></span>
               </span>
-            </button>
+            </Button>
           {/each}
         </div>
 
         {#if directoryContents.folders.length > visibleFoldersCount}
           <div class="pt-4 flex justify-center">
-            <button
+            <Button
               type="button"
-              class="fluent-button w-full justify-center text-xs font-semibold py-2"
+              variant="outline"
+              class="w-full"
               onclick={() => (visibleFoldersCount += 50)}
             >
               {i18n.t('browser.loadMoreFolders', {
                 count: directoryContents.folders.length - visibleFoldersCount,
               })}
-            </button>
+            </Button>
           </div>
         {/if}
       </div>
@@ -394,23 +409,19 @@
 
           <!-- Bulk Select Operations -->
           <div class="flex items-center gap-3">
-            <button
+            <Button
               type="button"
-              class="text-xs font-semibold text-fluent-accent hover:underline"
+              variant="link"
+              class="h-auto p-0"
               onclick={selectReviewableInFolder}
             >
               {i18n.t('browser.selectReviewable')}
-            </button>
+            </Button>
             <span class="text-fluent-border-light dark:text-fluent-border-dark">|</span>
             <label
               class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none"
             >
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onchange={(e) => toggleSelectAll(e.currentTarget.checked)}
-                class="rounded border-neutral-300 dark:border-neutral-700 text-fluent-accent focus:ring-fluent-accent"
-              />
+              <Checkbox checked={allSelected} onclick={() => toggleSelectAll(!allSelected)} />
               {i18n.t('browser.selectAll')}
             </label>
           </div>
@@ -430,15 +441,16 @@
 
         {#if directoryContents.files.length > visibleFilesCount}
           <div class="pt-4 flex justify-center">
-            <button
+            <Button
               type="button"
-              class="fluent-button w-full justify-center text-xs font-semibold py-2"
+              variant="outline"
+              class="w-full"
               onclick={() => (visibleFilesCount += 50)}
             >
               {i18n.t('browser.loadMoreFiles', {
                 count: directoryContents.files.length - visibleFilesCount,
               })}
-            </button>
+            </Button>
           </div>
         {/if}
       </div>
@@ -446,36 +458,30 @@
 
     <!-- Empty Folder Screen -->
     {#if directoryContents.folders.length === 0 && directoryContents.files.length === 0}
-      <div class="fluent-card py-16 text-center">
-        <svg
-          class="mx-auto h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50 mb-3"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.8"
-            d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5M5 19a2 2 0 002-2v-5M7 10h3m-3 4h3m4-4h.01M17 14h.01"
-          />
-        </svg>
-        <h3 class="text-base font-semibold">{i18n.t('browser.emptyFolder')}</h3>
-        <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-          {i18n.t('browser.emptyFolderDesc')}
-        </p>
-      </div>
+      <Empty.Root class="border bg-muted/30">
+        <Empty.Header>
+          <Empty.Media>
+            <IconFolderOpen
+              class="h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50"
+            />
+          </Empty.Media>
+          <Empty.Title>{i18n.t('browser.emptyFolder')}</Empty.Title>
+          <Empty.Description>
+            {i18n.t('browser.emptyFolderDesc')}
+          </Empty.Description>
+        </Empty.Header>
+      </Empty.Root>
     {/if}
   </div>
 
   <!-- Sticky Bulk Action Bar at Bottom -->
   {#if selectedPaths.length > 0}
     <div
-      class="fixed bottom-6 left-6 right-6 md:left-[264px] acrylic-card p-4 rounded-lg shadow-lg flex items-center justify-between border border-fluent-accent/30 z-10 animate-slide-up"
+      class="fixed bottom-6 left-[88px] right-6 md:left-[264px] border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl flex items-center justify-between z-10 animate-slide-up"
     >
       <div class="flex items-center gap-4">
         <div class="flex flex-col">
-          <span class="text-sm font-semibold text-fluent-accent">
+          <span class="text-sm font-semibold text-primary">
             {i18n.t('dashboard.selected', { count: selectedPaths.length })}
           </span>
           <span class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark">
@@ -484,32 +490,29 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <button class="fluent-button" onclick={() => (selectedPaths = [])}>
+        <Button variant="outline" onclick={() => (selectedPaths = [])}>
           {i18n.t('dashboard.clearSelection')}
-        </button>
+        </Button>
 
-        <select bind:value={bulkAction} class="fluent-input text-xs">
-          <option value="MoveToSafeFolder">MoveToSafeFolder</option>
-          <option value="Pin">Pin</option>
-          <option value="Ignore">Ignore</option>
-          <option value="Snooze">Snooze</option>
-          <option value="TrashNow">TrashNow</option>
-        </select>
+        <Select.Root type="single" bind:value={bulkAction}>
+          <Select.Trigger>
+            <span data-slot="select-value">{bulkActionLabel(bulkAction)}</span>
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="MoveToSafeFolder" label="MoveToSafeFolder" />
+            <Select.Item value="Pin" label="Pin" />
+            <Select.Item value="Ignore" label="Ignore" />
+            <Select.Item value="Snooze" label="Snooze" />
+            <Select.Item value="TrashNow" label="TrashNow" />
+          </Select.Content>
+        </Select.Root>
         {#if bulkAction === 'Snooze'}
-          <input
-            min="1"
-            type="number"
-            bind:value={bulkSnoozeDays}
-            class="fluent-input w-16 text-xs"
-          />
+          <Input min="1" type="number" bind:value={bulkSnoozeDays} class="w-16 text-xs" />
         {/if}
 
-        <button
-          class="fluent-button fluent-button-primary animate-pulse"
-          onclick={() => (confirmBulk = true)}
-        >
+        <Button onclick={() => (confirmBulk = true)}>
           {i18n.t('browser.applyAction')}
-        </button>
+        </Button>
       </div>
     </div>
   {/if}

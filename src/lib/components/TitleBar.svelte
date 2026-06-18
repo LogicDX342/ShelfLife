@@ -1,10 +1,15 @@
 <script lang="ts">
+  import IconRestore from '@lucide/svelte/icons/copy';
+  import IconMinimize from '@lucide/svelte/icons/minus';
+  import IconMaximize from '@lucide/svelte/icons/square';
+  import IconDismiss from '@lucide/svelte/icons/x';
+
   import {
-    minimizeWindow,
-    toggleMaximizeWindow,
     closeWindow,
     isWindowMaximized,
+    minimizeWindow,
     onWindowResized,
+    toggleMaximizeWindow,
   } from '$lib/api/window';
 
   let isMaximized = $state(false);
@@ -40,15 +45,7 @@
       onclick={minimizeWindow}
       title="Minimize"
     >
-      <svg
-        class="w-3.5 h-3.5"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.2"
-        viewBox="0 0 10 10"
-      >
-        <path d="M1 5.5h8" />
-      </svg>
+      <IconMinimize class="w-3.5 h-3.5" />
     </button>
 
     <!-- Maximize / Restore Button -->
@@ -59,26 +56,9 @@
       title={isMaximized ? 'Restore' : 'Maximize'}
     >
       {#if isMaximized}
-        <svg
-          class="w-3.5 h-3.5"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.2"
-          viewBox="0 0 10 10"
-        >
-          <path d="M2 3.5h5v5H2z" />
-          <path d="M3.5 3.5v-2h5v5h-1.5" />
-        </svg>
+        <IconRestore class="w-3.5 h-3.5" />
       {:else}
-        <svg
-          class="w-3.5 h-3.5"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.2"
-          viewBox="0 0 10 10"
-        >
-          <rect x="2" y="2" width="6" height="6" rx="0.5" />
-        </svg>
+        <IconMaximize class="w-3.5 h-3.5" />
       {/if}
     </button>
 
@@ -89,15 +69,7 @@
       onclick={closeWindow}
       title="Close"
     >
-      <svg
-        class="w-3.5 h-3.5"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.2"
-        viewBox="0 0 10 10"
-      >
-        <path d="M2 2l6 6M8 2L2 8" />
-      </svg>
+      <IconDismiss class="w-3.5 h-3.5" />
     </button>
   </div>
 </div>

@@ -1,4 +1,5 @@
 mod commands;
+mod dropzone;
 mod engine;
 mod models;
 mod rules;
@@ -30,12 +31,15 @@ pub fn run() {
                 .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             let state = storage::AppState::new(db);
             app.manage(state.clone());
+            dropzone::sync_dropzone_monitor(app.handle(), &state)
+                .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             tray::setup(app).map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
             engine::watcher::restart_watcher(
                 &state,
-                commands::watcher_event_sink(app.handle().clone()),
+                commands::watcher_event_sink(app.handle().clone(), state.clone()),
             )
             .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
+            tray::update_tray_icon(app.handle());
             let db = state.db.clone();
             let app_handle = app.handle().clone();
             let state_clone = state.clone();
@@ -65,13 +69,19 @@ pub fn run() {
                 match report {
                     Ok(rep) => {
                         commands::emit_reconciliation_report(&app_handle, &rep);
+                        state_clone.wake_rule_scheduler();
+                        commands::run_async_expired_rule_execution(
+                            app_handle.clone(),
+                            state_clone.clone(),
+                        );
                     }
                     Err(error) => {
                         let _ = app_handle.emit("action_failed", error);
                     }
                 }
             });
-            commands::start_periodic_reconciliation(app.handle().clone(), state);
+            commands::start_periodic_reconciliation(app.handle().clone(), state.clone());
+            commands::start_periodic_rule_execution(app.handle().clone(), state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -83,6 +93,10 @@ pub fn run() {
             commands::execute_bulk_triage_action,
             commands::undo_audit_entry,
             commands::list_audit_entries,
+            commands::preview_dropzone_files,
+            commands::execute_dropzone_ingest,
+            commands::execute_dropzone_rule_group,
+            commands::hide_dropzone,
             commands::list_rules,
             commands::save_rule,
             commands::test_rule,

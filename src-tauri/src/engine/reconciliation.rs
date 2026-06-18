@@ -865,6 +865,48 @@ mod tests {
     }
 
     #[test]
+    fn reconcile_treats_ignore_rule_as_filter_without_rule_ttl() {
+        let fixture = Fixture::new();
+        let file = fixture.write_watch_file("download.zip", "body");
+        fixture.save_config();
+
+        let rule = crate::models::AutomationRule {
+            id: String::from("zip-ignore-rule"),
+            name: String::from("Ignore zip downloads"),
+            enabled: true,
+            priority: 10,
+            watch_path: path_string(&fixture.watch),
+            ttl_seconds: 1,
+            conditions: crate::models::RuleConditions {
+                extensions: vec![String::from("zip")],
+                filename_globs: Vec::new(),
+                filename_regexes: Vec::new(),
+                source_domains: Vec::new(),
+                size: crate::models::SizeCondition::Any,
+            },
+            action: crate::models::RuleAction::Ignore,
+            mode: crate::models::RuleMode::Automatic,
+            created_at: 1,
+            updated_at: 1,
+        };
+        storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
+
+        reconcile(&fixture.db).expect("reconciliation should succeed");
+
+        let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
+            .expect("tracked lookup should work")
+            .expect("tracked file should exist");
+
+        assert_eq!(tracked.state, FileDecayState::Ignored);
+        assert_eq!(
+            tracked.expiry,
+            crate::models::Expiry::At(
+                tracked.freshness_at + crate::models::AppConfig::default().default_ttl_seconds
+            )
+        );
+    }
+
+    #[test]
     fn reconcile_removes_subfolder_files_when_switched_to_non_recursive() {
         let fixture = Fixture::new();
         // Create files in root and subfolder

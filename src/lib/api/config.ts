@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+
 import type { AppConfig, CloseBehavior, WatchTarget } from '$lib/types';
 
 export function getConfig() {

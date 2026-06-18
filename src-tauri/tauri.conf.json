@@ -21,6 +21,24 @@
         "center": true,
         "decorations": false,
         "resizable": true
+      },
+      {
+        "label": "dropzone",
+        "title": "ShelfLife Dropzone",
+        "url": "/dropzone",
+        "width": 360,
+        "height": 300,
+        "minWidth": 360,
+        "minHeight": 300,
+        "maxWidth": 360,
+        "maxHeight": 300,
+        "visible": false,
+        "transparent": true,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false
       }
     ],
     "security": {

@@ -18,3 +18,9 @@ pnpm-lock.yaml
 !.env.example
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+#shadcn components
+src/lib/components/ui/**
+components.json
+
+.agents

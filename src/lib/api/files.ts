@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+
 import type { FilePreview, RuleMatchExplanation, TrackedFile } from '$lib/types';
 
 export function getActiveFiles() {

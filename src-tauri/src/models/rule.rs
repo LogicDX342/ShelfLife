@@ -10,8 +10,10 @@ pub enum RuleMode {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum RuleAction {
     Trash,
-    Move { destination_path: String },
-    Rename { template: String },
+    Move {
+        destination_folder: String,
+        rename_template: Option<String>,
+    },
     Ignore,
 }
 

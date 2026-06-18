@@ -1,6 +1,11 @@
 <script lang="ts">
-  import type { RuleMatchExplanation } from '$lib/types';
+  import IconEyeOff from '@lucide/svelte/icons/eye-off';
+  import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
+  import IconLockClosed from '@lucide/svelte/icons/lock';
+  import IconDelete from '@lucide/svelte/icons/trash-2';
+
   import { i18n } from '$lib/i18n/i18n.svelte';
+  import type { RuleMatchExplanation } from '$lib/types';
 
   let { explanation } = $props<{ explanation: RuleMatchExplanation }>();
 
@@ -14,10 +19,7 @@
           ? 'Ignore'
           : typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action
             ? 'Move'
-            : typeof explanation.proposed_action === 'object' &&
-                'Rename' in explanation.proposed_action
-              ? 'Rename'
-              : 'Other',
+            : 'Other',
   );
 
   let actionLabel = $derived(
@@ -27,10 +29,7 @@
         ? i18n.t('file.ignore')
         : typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action
           ? i18n.t('file.actionMove')
-          : typeof explanation.proposed_action === 'object' &&
-              'Rename' in explanation.proposed_action
-            ? i18n.t('file.actionRename')
-            : i18n.t('file.actionLabel'),
+          : i18n.t('file.actionLabel'),
   );
 
   let styleClasses = $derived(
@@ -55,26 +54,19 @@
               leftSide:
                 'border-violet-200 dark:border-violet-950/40 bg-violet-100/20 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400',
             }
-          : actionType === 'Rename'
+          : actionType === 'Ignore'
             ? {
                 container:
-                  'border-amber-200 bg-amber-50/20 dark:border-amber-950/40 dark:bg-amber-950/10 text-neutral-800 dark:text-neutral-200 hover:bg-amber-50/30 dark:hover:bg-amber-950/20',
+                  'border-neutral-200 bg-neutral-50/30 dark:border-neutral-800 dark:bg-neutral-900/10 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/40 dark:hover:bg-neutral-900/20',
                 leftSide:
-                  'border-amber-200 dark:border-amber-950/40 bg-amber-100/20 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400',
+                  'border-neutral-200 dark:border-neutral-800 bg-neutral-100/30 dark:bg-neutral-800/30 text-neutral-600 dark:text-neutral-400',
               }
-            : actionType === 'Ignore'
-              ? {
-                  container:
-                    'border-neutral-200 bg-neutral-50/30 dark:border-neutral-800 dark:bg-neutral-900/10 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/40 dark:hover:bg-neutral-900/20',
-                  leftSide:
-                    'border-neutral-200 dark:border-neutral-800 bg-neutral-100/30 dark:bg-neutral-800/30 text-neutral-600 dark:text-neutral-400',
-                }
-              : {
-                  container:
-                    'border-neutral-200 bg-neutral-50/30 dark:border-fluent-border-dark dark:bg-white/5 text-fluent-text-light dark:text-fluent-text-dark',
-                  leftSide:
-                    'border-neutral-200 dark:border-fluent-border-dark bg-black/5 dark:bg-white/5 text-fluent-muted-light dark:text-fluent-muted-dark',
-                },
+            : {
+                container:
+                  'border-neutral-200 bg-neutral-50/30 dark:border-fluent-border-dark dark:bg-white/5 text-fluent-text-light dark:text-fluent-text-dark',
+                leftSide:
+                  'border-neutral-200 dark:border-fluent-border-dark bg-black/5 dark:bg-white/5 text-fluent-muted-light dark:text-fluent-muted-dark',
+              },
   );
 
   let modeLabel = $derived(
@@ -105,14 +97,7 @@
       class="flex items-center gap-1.5 px-2 py-0.5 border-r font-semibold {styleClasses.leftSide}"
       title={i18n.t('file.protected')}
     >
-      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2.2"
-          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-        />
-      </svg>
+      <IconLockClosed class="w-3 h-3" />
       <span>{i18n.t('file.protected')}</span>
     </div>
   {:else}
@@ -121,44 +106,13 @@
     >
       {#if actionType === 'Trash'}
         <!-- Clean outline trash bin icon (no internal vertical lines) -->
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7M5 7h14m-3 0V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3"
-          />
-        </svg>
+        <IconDelete class="w-3.5 h-3.5" />
       {:else if actionType === 'Move'}
         <!-- Move / Folder icon -->
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-          />
-        </svg>
-      {:else if actionType === 'Rename'}
-        <!-- Rename / Edit icon -->
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-          />
-        </svg>
+        <IconFolderArrowRight class="w-3 h-3" />
       {:else if actionType === 'Ignore'}
         <!-- Ignore / Ban icon -->
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-          />
-        </svg>
+        <IconEyeOff class="w-3 h-3" />
       {/if}
       <span>{actionLabel}</span>
     </div>

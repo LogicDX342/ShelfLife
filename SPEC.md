@@ -1,9 +1,9 @@
 # shelflife Product and Technical Specification
 
-Version: 0.3
-Status: v1 implemented
-Primary goal: Recoverable, explainable file hygiene for desktop clutter
-Target platforms: Windows
+Version: 2.0
+Status: v2 planned / in progress
+Primary goal: Recoverable, explainable file hygiene for desktop clutter with interactive dropzone and archiving
+Target platforms: Windows (macOS and Linux deferred to future phases)
 Core stack: Tauri v2, Rust, Svelte 5, redb
 
 ---
@@ -18,21 +18,23 @@ The product is intentionally cautious. Version 1 does not behave like an aggress
 
 shelflife helps users reduce clutter without losing trust in their filesystem.
 
-### Non-goals for v1
+### Target Features for v2
 
-The first release does not include:
+Version 2 introduces:
 
-- Automatic destructive deletion.
+- **ZIP Archiving**: Non-destructive monthly compression/consolidation of stale files under a user-defined archive folder.
+- **Interactive Desktop Overlay (Dropzone)**: Transparent always-on-top desktop dropzone for immediate file ingestion and triage.
+- **Resource Limit Safety**: Automated CPU and battery checking to throttle background scans.
+
+### Non-goals for v2
+
+The second release does not include:
+
 - OCR extraction.
-- WebP conversion.
+- WebP conversion or other image transcoding.
 - Asset metadata stripping.
-- Transparent always-on-top desktop dropzone.
-- Monthly ZIP archiving automation.
-- Fully automatic rule execution by default.
-- Dependence on source-origin metadata for correctness.
-- Process runtime diagnostics and system resource consumption metrics (memory RSS, CPU usage).
-
-These features are deferred until the core file-safety loop is stable.
+- Process runtime diagnostics details in the UI.
+- Multi-platform support (macOS/Linux) for advanced features.
 
 ---
 
@@ -140,13 +142,12 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 - trash crate or platform-specific equivalent for OS Trash/Recycle Bin behavior.
 - regex and globset for pattern matching.
 
-### 3.3 Avoided in v1
+### 3.3 Avoided in v2
 
 - tesseract-sys or other native OCR bindings.
 - Heavy thumbnail services.
 - Bundled ML models.
-- Native compression automation.
-- Always-on-top transparent overlay windows.
+- Image transcoding or EXIF metadata stripping.
 
 ---
 
@@ -428,6 +429,7 @@ pub enum RuleAction {
     Move { destination_path: String },
     Rename { template: String },
     Ignore,
+    Archive { archive_root: String, compress_level: i32 },
 }
 ```
 
@@ -435,7 +437,6 @@ Deferred actions for later releases:
 
 ```rust
 pub enum DeferredRuleAction {
-    Archive { archive_root: String },
     ConvertImage { format: String },
     StripMetadata,
     ExtractText,
@@ -548,6 +549,7 @@ The UI must show this explanation before user-confirmed actions.
 - Move to Safe Folder.
 - Trash Now.
 - Rename.
+- Archive.
 - Open file location.
 - Undo recent action where possible.
 
@@ -592,6 +594,10 @@ Rename must detect collisions and produce a safe alternative instead of overwrit
 Dry run means no filesystem changes.
 
 Staging means files are copied or moved only after explicit approval.
+
+### 9.7 Archive behavior
+
+Archive processes files by packaging them into a monthly ZIP file under the user-defined archive folder (e.g., `shelflife_archive_2026-06.zip`). The original file is then safely removed, and an audit ledger entry is created allowing undo (restoring the file from the ZIP archive).
 
 Automatic movement to an internal staging directory is not considered dry run and is not enabled by default.
 
@@ -962,20 +968,20 @@ Quit
 
 The dashboard window is the primary UI. It may be hidden instead of destroyed, but memory behavior must be measured on each platform.
 
-### 14.3 Dropzone deferral
+### 14.3 Dropzone behavior
 
-The transparent desktop dropzone is deferred until after v1.
+The dropzone is an optional, transparent desktop overlay:
 
-A future implementation may use:
-
-```text
-transparent: true
-decorations: false
-alwaysOnTop: true
-skipTaskbar: true
-```
-
-But it must be optional and separately permissioned.
+- Rendered as a small circular UI element anchored to the screen corner.
+- Dragging a file over the dropzone runs rule evaluation and shows immediate actions.
+- Right-clicking opens settings and scanning options.
+- Technical implementation requires:
+  ```text
+  transparent: true
+  decorations: false
+  alwaysOnTop: true
+  skipTaskbar: true
+  ```
 
 ---
 
@@ -1114,15 +1120,13 @@ Workspace composition by extension
 Rule preview accuracy, manual review based
 ```
 
-### 18.2 Excluded from v1
+### 18.2 Excluded from v2
 
 ```text
 OCR text extraction metrics
 Image conversion savings
 Metadata stripping savings
-Monthly ZIP archive savings
-Process runtime diagnostics and resource consumption metrics
-
+Process runtime diagnostics detail
 ```
 
 ### 18.3 Computation strategy
@@ -1427,28 +1431,21 @@ All automated actions are auditable.
 Protected files are never modified automatically.
 ```
 
-### Phase 5: Optional advanced modules
+### Phase 5: v2 Features (Dropzone, ZIP Archiving, and Resource Limits)
 
-Goal: add differentiated utilities after trust is established.
+Goal: Implement desktop dropzone, ZIP archiving, and automated resource limit safety.
 
-Candidates:
+Deliverables:
 
-```text
-transparent dropzone
-image conversion
-metadata stripping
-OCR
-monthly archive bundles
-cloud-folder-specific safeguards
-```
+- Transparent dropzone window with drag-and-drop file ingestion.
+- ZIP archiving action within rules and triage flow.
+- CPU and battery level checking using `sysinfo` to throttle scans.
 
 Exit criteria:
 
-```text
-Each module is optional.
-Each module has separate permissions.
-Each module can be disabled without affecting core triage.
-```
+- Dropzone window compiles, can be toggled, and detects dragged files.
+- Stale files can be automatically or manually ZIP-archived.
+- Background scans pause when CPU usage exceeds 70%.
 
 ---
 
@@ -1474,6 +1471,21 @@ App validates all paths in Rust.
 ### 23.1 v1 implementation status
 
 Status: implemented.
+
+## 23.2 Acceptance Criteria for v2
+
+v2 is implemented when:
+
+```text
+Transparent dropzone window displays and correctly ingests dragged files.
+ZIP archiving compression packages files correctly.
+Background scans and file indexing respect resource limit controls (spikes above 70% CPU throttle the engine).
+Code builds and tests successfully on Windows 11.
+```
+
+### 23.3 v2 implementation status
+
+Status: in progress.
 
 Validation commands:
 
@@ -1556,4 +1568,4 @@ The product should sound calm, precise, and reversible.
 
 ## 26. Summary
 
-shelflife is a local-first desktop file hygiene assistant. The revised specification prioritizes user trust, clear explanations, recoverable actions, and conservative automation. The initial product should prove that it can safely observe, classify, and help users triage clutter before expanding into heavier automation, dropzone interactions, image utilities, OCR, or archive workflows.
+shelflife is a local-first desktop file hygiene assistant. The v2 specification prioritizes user trust, clear explanations, recoverable actions, and conservative automation. The revised product supports drag-and-drop workspace interaction via a desktop dropzone overlay, safe compression optimizations via monthly ZIP archiving, and strict background resource throttling to ensure minimal host system footprint.
