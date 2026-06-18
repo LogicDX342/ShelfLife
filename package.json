@@ -21,6 +21,7 @@
     "validate": "pnpm format:check && pnpm lint && pnpm check",
     "test": "pnpm cargo:test",
     "verify": "pnpm validate && pnpm cargo:fmt:check && pnpm cargo:clippy && pnpm test",
+    "i18n:audit": "node scripts/audit-i18n.mjs",
     "tauri": "tauri",
     "prepare": "husky"
   },
