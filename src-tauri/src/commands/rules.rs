@@ -1,7 +1,7 @@
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::engine::paths::root_contains;
+use crate::engine::paths::PathScope;
 use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, RuleAction,
     RuleMatchExplanation, RuleMode, SizeCondition, UndoStatus,
@@ -147,14 +147,8 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
         }
     }
 
-    if !config
-        .watch_targets
-        .iter()
-        .filter(|target| target.enabled)
-        .any(|target| root_contains(&target.path, &rule.watch_path))
-    {
-        return Err(AppError::path_out_of_scope(&rule.watch_path));
-    }
+    let scope = PathScope::new(config);
+    scope.validate_rule_watch_path(std::path::Path::new(&rule.watch_path))?;
 
     if let RuleAction::Move {
         destination_folder,
@@ -162,7 +156,7 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
     } = &rule.action
     {
         let destination = std::path::PathBuf::from(destination_folder);
-        crate::engine::validate_move_destination_folder(&destination, config)?;
+        scope.validate_move_destination(&destination)?;
         if let Some(template) = rename_template {
             crate::engine::validate_rename_template(template)?;
         }

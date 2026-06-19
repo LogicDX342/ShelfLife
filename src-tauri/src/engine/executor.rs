@@ -7,7 +7,7 @@ use redb::Database;
 use uuid::Uuid;
 
 use crate::engine::freshness::{now_seconds, tracked_file_from_metadata};
-use crate::engine::paths::root_contains;
+use crate::engine::paths::PathScope;
 use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
     RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus, UserTriageAction,
@@ -319,7 +319,7 @@ fn apply_file_action(
             rename_template,
         } => {
             validate_not_protected_for_filesystem_change(source, config)?;
-            validate_move_destination_folder(&destination_folder, config)?;
+            PathScope::new(config).validate_move_destination(&destination_folder)?;
             fs::create_dir_all(&destination_folder)?;
             let destination = move_destination(source, &destination_folder, rename_template)?;
             fs::rename(source, &destination)?;
@@ -658,70 +658,19 @@ fn load_or_create_tracked(
 }
 
 fn validate_source_scope(path: &Path, config: &AppConfig) -> Result<(), AppError> {
-    let path = path.canonicalize()?;
-    if config
-        .watch_targets
-        .iter()
-        .filter(|target| target.enabled)
-        .any(|target| root_contains(&target.path, &path))
-        || root_contains(&config.safe_folder_path, &path)
-    {
-        return Ok(());
-    }
-
-    Err(AppError::path_out_of_scope(path.to_string_lossy().as_ref()))
+    PathScope::new(config).ensure_source_scope(path)
 }
 
 fn validate_restore_destination_scope(parent: &Path, config: &AppConfig) -> Result<(), AppError> {
-    if config
-        .watch_targets
-        .iter()
-        .filter(|target| target.enabled)
-        .any(|target| root_contains(&target.path, parent))
-    {
-        return Ok(());
-    }
-
-    Err(AppError::path_out_of_scope(
-        parent.to_string_lossy().as_ref(),
-    ))
+    PathScope::new(config).ensure_restore_parent_scope(parent)
 }
 
 fn validate_move_source_for_undo(path: &Path, config: &AppConfig) -> Result<(), AppError> {
-    if path.exists() && destination_inside_watch_targets(path, config) {
+    if path.exists() && PathScope::new(config).is_in_enabled_watch_target(path) {
         return Err(AppError::path_out_of_scope(path.to_string_lossy().as_ref()));
     }
 
     Ok(())
-}
-
-pub fn validate_move_destination_folder(folder: &Path, config: &AppConfig) -> Result<(), AppError> {
-    if folder.as_os_str().is_empty() {
-        return Err(AppError::new(
-            "RULE_INVALID_DESTINATION",
-            "Move destination folder is required. No file was changed.",
-            true,
-        ));
-    }
-
-    if destination_inside_watch_targets(folder, config) {
-        return Err(AppError::with_details(
-            "RULE_INVALID_DESTINATION",
-            "Move destination folder must be outside all enabled watch targets.",
-            true,
-            folder.to_string_lossy().to_string(),
-        ));
-    }
-
-    Ok(())
-}
-
-fn destination_inside_watch_targets(path: &Path, config: &AppConfig) -> bool {
-    config
-        .watch_targets
-        .iter()
-        .filter(|target| target.enabled)
-        .any(|target| root_contains(&target.path, path))
 }
 
 fn validate_not_protected_for_filesystem_change(

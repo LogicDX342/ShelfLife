@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use redb::Database;
 
 use crate::engine::freshness::tracked_file_from_metadata;
+use crate::engine::paths::PathScope;
 use crate::models::{
     AppConfig, AppError, AutomationRule, DropzoneFile, DropzonePreview, DropzoneRejectedFile,
     DropzoneRuleGroup, OriginEvidence, RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
@@ -256,6 +257,7 @@ pub fn plan_rule_groups(
     let mut groups: HashMap<String, DropzoneRuleGroup> = HashMap::new();
     let mut preview_only = Vec::new();
     let mut unmatched_files = Vec::new();
+    let scope = PathScope::new(config);
 
     for file in files {
         if let Some(pattern) = protected_pattern_match(&file.file_name, &config.protected_patterns)?
@@ -287,7 +289,7 @@ pub fn plan_rule_groups(
             }
 
             if matches!(rule.action, RuleAction::Ignore)
-                && !file_inside_enabled_watch_target(config, Path::new(&file.path))
+                && !scope.is_in_enabled_watch_target(Path::new(&file.path))
             {
                 explanation.proposed_action = None;
                 explanation.message = String::from(
@@ -325,14 +327,6 @@ pub fn plan_rule_groups(
     rule_groups.sort_by(|left, right| left.rule_name.cmp(&right.rule_name));
 
     Ok((rule_groups, preview_only, unmatched_files))
-}
-
-pub fn file_inside_enabled_watch_target(config: &AppConfig, path: &Path) -> bool {
-    config
-        .watch_targets
-        .iter()
-        .filter(|target| target.enabled)
-        .any(|target| crate::engine::paths::root_contains(&target.path, path))
 }
 
 #[cfg(test)]

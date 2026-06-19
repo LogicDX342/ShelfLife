@@ -1,6 +1,7 @@
 use std::cmp::Reverse;
 use std::path::Path;
 
+use crate::engine::paths::PathScope;
 use crate::models::{AppConfig, AppError, AutomationRule, RuleMatchExplanation, TrackedFile};
 use crate::rules::conditions::evaluate_conditions;
 use crate::rules::explanation::{protected_explanation, rule_explanation};
@@ -24,8 +25,9 @@ pub fn explain_file_against_rules(
     enabled_rules.sort_by_key(|rule| Reverse(rule.priority));
 
     let mut explanations = Vec::new();
+    let scope = PathScope::new(config);
     for rule in enabled_rules {
-        if !path_is_inside(Path::new(&file.path), Path::new(&rule.watch_path)) {
+        if !scope.rule_watch_path_contains(&rule.watch_path, Path::new(&file.path)) {
             continue;
         }
 
@@ -88,31 +90,6 @@ pub fn protected_pattern_match(
         }
     }
     Ok(None)
-}
-
-fn path_is_inside(path: &Path, root: &Path) -> bool {
-    // Fast path: string prefix check
-    let path_str = path.to_string_lossy().to_lowercase().replace('/', "\\");
-    let root_str = root.to_string_lossy().to_lowercase().replace('/', "\\");
-
-    // Ensure root ends with a separator to avoid partial folder match (e.g., /foo matching /foobar)
-    let root_prefix = if root_str.ends_with('\\') {
-        root_str.clone()
-    } else {
-        format!("{}\\", root_str)
-    };
-
-    if !path_str.starts_with(&root_prefix) && path_str != root_str {
-        return false;
-    }
-
-    let Ok(path) = path.canonicalize() else {
-        return false;
-    };
-    let Ok(root) = root.canonicalize() else {
-        return false;
-    };
-    path.starts_with(root)
 }
 
 #[cfg(test)]

@@ -23,7 +23,7 @@ enum ChangeType {
 }
 
 use crate::engine::freshness::tracked_file_from_metadata;
-use crate::engine::paths::{root_contains, root_directly_contains};
+use crate::engine::paths::PathScope;
 use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
 use crate::models::{
     AppConfig, AppError, FileDecayState, ReconciliationReport, TrackedFile, WatchTarget,
@@ -37,6 +37,7 @@ pub fn reconcile_with_report_with_progress(
     progress_cb: Option<&(dyn Fn(&str, usize, usize) + Send + Sync)>,
 ) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
+    let scope = PathScope::new(&config);
     let rules = storage::rules::list_rules(db)?;
     let mut observed_paths: HashSet<String> = HashSet::new();
     let mut report = ReconciliationReport::default();
@@ -201,26 +202,7 @@ pub fn reconcile_with_report_with_progress(
         }
         let path = Path::new(path_string);
 
-        // Scope check using watch_target_id: find the owning target and
-        // respect its recursive flag. Non-recursive targets only keep
-        // direct children in scope.
-        let owning_target = config
-            .watch_targets
-            .iter()
-            .find(|t| t.id == file.watch_target_id);
-
-        let in_active_scope = match owning_target {
-            Some(target) if target.enabled => {
-                if target.recursive {
-                    root_contains(&target.path, path)
-                } else {
-                    root_directly_contains(&target.path, path)
-                }
-            }
-            _ => false,
-        } || root_contains(&config.safe_folder_path, path);
-
-        if !in_active_scope {
+        if !scope.is_tracked_path_active(path, &file.watch_target_id) {
             if !matches!(file.state, FileDecayState::Missing) {
                 report.removed.push(path_string.clone());
             }
@@ -260,6 +242,7 @@ pub fn reconcile_paths(
     paths: Vec<PathBuf>,
 ) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
+    let scope = PathScope::new(&config);
     let rules = storage::rules::list_rules(db)?;
     let mut report = ReconciliationReport::default();
     let mut to_upsert: Vec<TrackedFile> = Vec::new();
@@ -279,11 +262,7 @@ pub fn reconcile_paths(
         let path_string = path.to_string_lossy().to_string();
 
         // Find the matching watch target for scope validation.
-        let target = config
-            .watch_targets
-            .iter()
-            .filter(|t| t.enabled)
-            .find(|t| root_contains(&t.path, path));
+        let target = scope.watch_target_for_path(path);
 
         // File deleted (or outside scope) — mark Missing if we're tracking it.
         if !path.exists() {

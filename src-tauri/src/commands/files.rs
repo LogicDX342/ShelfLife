@@ -1,9 +1,9 @@
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use tauri::State;
 
-use crate::engine::paths::{normalize_configured_path, root_contains};
+use crate::engine::paths::PathScope;
 use crate::models::{
     AppError, FileDecayState, FilePreview, FilePreviewContent, RuleMatchExplanation, TrackedFile,
 };
@@ -253,23 +253,7 @@ fn open_location(_path: &Path) -> Result<(), AppError> {
 
 fn validate_path_scope(state: &State<'_, AppRuntime>, path: &str) -> Result<(), AppError> {
     let config = storage::get_config(&state.db)?;
-    let path = PathBuf::from(path);
-
-    let in_watch_target = config
-        .watch_targets
-        .iter()
-        .filter(|target| target.enabled)
-        .any(|target| root_contains(&target.path, &path));
-    let in_safe_folder = root_contains(&config.safe_folder_path, &path);
-
-    if in_watch_target || in_safe_folder {
-        Ok(())
-    } else {
-        let normalized = normalize_configured_path(&path).unwrap_or(path);
-        Err(AppError::path_out_of_scope(
-            normalized.to_string_lossy().as_ref(),
-        ))
-    }
+    PathScope::new(&config).ensure_source_scope(Path::new(path))
 }
 
 #[tauri::command]
