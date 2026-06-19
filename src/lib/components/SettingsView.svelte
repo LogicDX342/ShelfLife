@@ -24,9 +24,16 @@
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { AppConfig, CloseBehavior, WatchTarget } from '$lib/types';
   import { getErrorMessage } from '$lib/utils/format';
+  import {
+    createWatchTarget,
+    findOverlappingTargets,
+    hasDuplicateTarget,
+    pathsOverlap,
+  } from '$lib/utils/watch-target-config';
 
   import ConfirmDialog from './ConfirmDialog.svelte';
   import DecayTimelineSlider from './DecayTimelineSlider.svelte';
+  import WatchTargetCard from './WatchTargetCard.svelte';
 
   type PendingWatchTarget = {
     target: WatchTarget;
@@ -101,20 +108,12 @@
     closeBehavior = config.close_behavior;
   }
 
-  async function addTarget() {
-    await addTargetWithPath(targetPath);
-  }
-
   async function addTargetWithPath(pathToAdd: string) {
     if (!config || !pathToAdd.trim()) return;
 
     const trimmedPath = pathToAdd.trim();
 
-    // Prevent duplicate watch targets
-    const isDuplicate = config.watch_targets.some(
-      (target) => normalizeWatchPath(target.path) === normalizeWatchPath(trimmedPath),
-    );
-    if (isDuplicate) {
+    if (hasDuplicateTarget(trimmedPath, config.watch_targets)) {
       notifications.error(i18n.t('settings.errorDuplicate'));
       return;
     }
@@ -134,44 +133,6 @@
     await saveAddedTarget(target, config.watch_targets);
   }
 
-  function createWatchTarget(path: string): WatchTarget {
-    return {
-      id: crypto.randomUUID(),
-      path,
-      enabled: true,
-      recursive: false,
-      default_ttl_seconds: null,
-      ignore_patterns: [],
-      include_hidden_patterns: [],
-    };
-  }
-
-  function normalizeWatchPath(path: string): string {
-    const normalized = path.trim().replaceAll('/', '\\').replace(/\\+$/, '');
-    if (/^[a-z]:$/i.test(normalized)) {
-      return `${normalized}\\`.toLowerCase();
-    }
-    return normalized.toLowerCase();
-  }
-
-  function pathContains(parent: string, child: string): boolean {
-    const normalizedParent = normalizeWatchPath(parent);
-    const normalizedChild = normalizeWatchPath(child);
-    const parentPrefix = normalizedParent.endsWith('\\')
-      ? normalizedParent
-      : `${normalizedParent}\\`;
-
-    return normalizedParent !== normalizedChild && normalizedChild.startsWith(parentPrefix);
-  }
-
-  function pathsOverlap(left: string, right: string): boolean {
-    const normalizedLeft = normalizeWatchPath(left);
-    const normalizedRight = normalizeWatchPath(right);
-    return (
-      normalizedLeft === normalizedRight || pathContains(left, right) || pathContains(right, left)
-    );
-  }
-
   function pathOverlapsSafeFolder(pathToAdd: string): boolean {
     const safePath = safeFolderPath.trim() || config?.safe_folder_path || '';
     return !!safePath && pathsOverlap(pathToAdd, safePath);
@@ -183,12 +144,6 @@
       !!config?.watch_targets.some(
         (target) => target.enabled && pathsOverlap(safePath, target.path),
       )
-    );
-  }
-
-  function findOverlappingTargets(pathToAdd: string, targets: WatchTarget[]): WatchTarget[] {
-    return targets.filter(
-      (target) => pathContains(pathToAdd, target.path) || pathContains(target.path, pathToAdd),
     );
   }
 
@@ -279,6 +234,10 @@
     if (!config) return false;
     if (updated.enabled && pathOverlapsSafeFolder(updated.path)) {
       notifications.error(i18n.t('settings.errorSafeFolderOverlap'));
+      rejectedTargetId = updated.id;
+      window.setTimeout(() => {
+        rejectedTargetId = null;
+      }, 120);
       return false;
     }
 
@@ -292,19 +251,6 @@
       notifications.error(getErrorMessage(reason, i18n.t('settings.errorUpdateTarget')));
       return false;
     }
-  }
-
-  async function toggleTargetEnabled(target: WatchTarget, enabled: boolean) {
-    if (enabled && pathOverlapsSafeFolder(target.path)) {
-      notifications.error(i18n.t('settings.errorSafeFolderOverlap'));
-      rejectedTargetId = target.id;
-      window.setTimeout(() => {
-        rejectedTargetId = null;
-      }, 120);
-      return;
-    }
-
-    await replaceTarget({ ...target, enabled });
   }
 
   function initiateRemoveTarget(target: WatchTarget) {
@@ -609,7 +555,7 @@
                   </div>
                   <Button
                     variant="outline"
-                    onclick={addTarget}
+                    onclick={() => addTargetWithPath(targetPath)}
                     disabled={addingTarget || !targetPath.trim()}
                   >
                     {i18n.t('settings.addNewTarget')}
@@ -627,65 +573,13 @@
               {:else}
                 <div class="space-y-3">
                   {#each config.watch_targets as target (target.id)}
-                    <div
-                      class="p-3.5 bg-black/5 dark:bg-white/5 border border-fluent-border-light dark:border-fluent-border-dark rounded-md flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
-                    >
-                      <div class="min-w-0 flex-1 space-y-1">
-                        <p
-                          class="font-semibold text-neutral-800 dark:text-neutral-200 truncate"
-                          title={target.path}
-                        >
-                          {target.path}
-                        </p>
-                        <p
-                          class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark flex items-center gap-2"
-                        >
-                          <span class="inline-flex items-center gap-1">
-                            <span
-                              class="w-1.5 h-1.5 rounded-full {target.enabled
-                                ? 'bg-green-500'
-                                : 'bg-neutral-400'}"
-                            ></span>
-                            {target.enabled
-                              ? i18n.t('settings.enabled')
-                              : i18n.t('settings.disabled')}
-                          </span>
-                          <span>•</span>
-                          <span
-                            >{target.recursive
-                              ? i18n.t('settings.recursiveLabel')
-                              : i18n.t('settings.topLevel')}</span
-                          >
-                        </p>
-                      </div>
-
-                      <!-- Switch & Button actions -->
-                      <div class="flex items-center gap-3.5 flex-shrink-0">
-                        <div
-                          class={rejectedTargetId === target.id ? 'switch-rejected' : ''}
-                          title="Toggle active status"
-                        >
-                          <Switch
-                            checked={target.enabled}
-                            onCheckedChange={() => toggleTargetEnabled(target, !target.enabled)}
-                            aria-label="Toggle active status"
-                          />
-                        </div>
-
-                        <Button
-                          variant="outline"
-                          onclick={() => replaceTarget({ ...target, recursive: !target.recursive })}
-                        >
-                          {target.recursive
-                            ? i18n.t('settings.topLevel')
-                            : i18n.t('settings.recursiveLabel')}
-                        </Button>
-
-                        <Button variant="destructive" onclick={() => initiateRemoveTarget(target)}>
-                          {i18n.t('settings.remove')}
-                        </Button>
-                      </div>
-                    </div>
+                    <WatchTargetCard
+                      {target}
+                      globalTtlSeconds={config.default_ttl_seconds}
+                      rejected={rejectedTargetId === target.id}
+                      onUpdate={replaceTarget}
+                      onRemove={initiateRemoveTarget}
+                    />
                   {/each}
                 </div>
               {/if}

@@ -17,6 +17,7 @@
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { AppConfig, TrackedFile, UserTriageAction } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
+  import { pathWithinWatchRoot, watchTargetDisplayName } from '$lib/utils/watch-target-config';
 
   import ConfirmDialog from './ConfirmDialog.svelte';
   import FileCard from './FileCard.svelte';
@@ -94,12 +95,8 @@
       // Root level: show enabled watch targets as folders
       return {
         folders: watchTargets.map((target) => {
-          const targetLower = target.replace(/\\/g, '/').toLowerCase();
-          const targetLowerWithSlash = targetLower.endsWith('/') ? targetLower : targetLower + '/';
-
           const childFiles = filesState.files.filter((f) => {
-            const pathNorm = f.path.replace(/\\/g, '/').toLowerCase();
-            return pathNorm.startsWith(targetLowerWithSlash) || pathNorm === targetLower;
+            return pathWithinWatchRoot(target, f.path);
           });
 
           let worstState = 'Fresh';
@@ -108,7 +105,7 @@
           }
 
           return {
-            name: target.split(/[\\/]/).filter(Boolean).pop() || target,
+            name: watchTargetDisplayName(target),
             path: target,
             isWatchTarget: true,
             filesCount: childFiles.length,
