@@ -24,25 +24,13 @@
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { AppConfig, CloseBehavior, WatchTarget } from '$lib/types';
   import { getErrorMessage } from '$lib/utils/format';
-  import {
-    createWatchTarget,
-    findOverlappingTargets,
-    hasDuplicateTarget,
-    pathsOverlap,
-  } from '$lib/utils/watch-target-config';
 
   import ConfirmDialog from './ConfirmDialog.svelte';
   import DecayTimelineSlider from './DecayTimelineSlider.svelte';
   import WatchTargetCard from './WatchTargetCard.svelte';
 
-  type PendingWatchTarget = {
-    target: WatchTarget;
-    overlappingTargets: WatchTarget[];
-  };
-
   let config = $state<AppConfig | null>(null);
   let targetToRemove = $state<WatchTarget | null>(null);
-  let pendingWatchTarget = $state<PendingWatchTarget | null>(null);
   let targetPath = $state('');
   let safeFolderPath = $state('');
   let sliderValue = $state([5, 29, 30]);
@@ -51,9 +39,20 @@
   let dropzoneEnabled = $state(false);
   let closeBehavior = $state<CloseBehavior>('Ask');
   let addingTarget = $state(false);
-  let rejectedTargetId = $state<string | null>(null);
   let showSavedIndicator = $state(false);
   let savedTimeoutId: number | null = null;
+
+  function createWatchTarget(path: string): WatchTarget {
+    return {
+      id: crypto.randomUUID(),
+      path,
+      enabled: true,
+      recursive: false,
+      default_ttl_seconds: null,
+      ignore_patterns: [],
+      include_hidden_patterns: [],
+    };
+  }
 
   async function browseSafeFolder() {
     try {
@@ -112,39 +111,9 @@
     if (!config || !pathToAdd.trim()) return;
 
     const trimmedPath = pathToAdd.trim();
-
-    if (hasDuplicateTarget(trimmedPath, config.watch_targets)) {
-      notifications.error(i18n.t('settings.errorDuplicate'));
-      return;
-    }
-
-    if (pathOverlapsSafeFolder(trimmedPath)) {
-      notifications.error(i18n.t('settings.errorSafeFolderOverlap'));
-      return;
-    }
-
     const target = createWatchTarget(trimmedPath);
-    const overlappingTargets = findOverlappingTargets(trimmedPath, config.watch_targets);
-    if (overlappingTargets.length > 0) {
-      pendingWatchTarget = { target, overlappingTargets };
-      return;
-    }
 
     await saveAddedTarget(target, config.watch_targets);
-  }
-
-  function pathOverlapsSafeFolder(pathToAdd: string): boolean {
-    const safePath = safeFolderPath.trim() || config?.safe_folder_path || '';
-    return !!safePath && pathsOverlap(pathToAdd, safePath);
-  }
-
-  function safeFolderOverlapsEnabledTarget(safePath: string): boolean {
-    return (
-      !!safePath &&
-      !!config?.watch_targets.some(
-        (target) => target.enabled && pathsOverlap(safePath, target.path),
-      )
-    );
   }
 
   async function saveAddedTarget(target: WatchTarget, existingTargets: WatchTarget[]) {
@@ -160,27 +129,6 @@
     }
   }
 
-  async function confirmOverlappingTarget() {
-    if (!config || !pendingWatchTarget) return;
-
-    const pending = pendingWatchTarget;
-    pendingWatchTarget = null;
-    const overlappingIds = new Set(pending.overlappingTargets.map((target) => target.id));
-    await saveAddedTarget(
-      pending.target,
-      config.watch_targets.filter((target) => !overlappingIds.has(target.id)),
-    );
-  }
-
-  function overlappingTargetMessage() {
-    if (!pendingWatchTarget) return '';
-
-    return i18n.t('settings.overlapConfirmText', {
-      path: pendingWatchTarget.target.path,
-      paths: pendingWatchTarget.overlappingTargets.map((target) => `- ${target.path}`).join('\n'),
-    });
-  }
-
   async function savePreferences(): Promise<boolean> {
     if (!config) return false;
 
@@ -192,11 +140,6 @@
 
     try {
       const trimmedSafeFolderPath = safeFolderPath.trim();
-      if (safeFolderOverlapsEnabledTarget(trimmedSafeFolderPath)) {
-        notifications.error(i18n.t('settings.errorSafeFolderOverlap'));
-        return false;
-      }
-
       await saveConfig({
         ...config,
         safe_folder_path: trimmedSafeFolderPath,
@@ -232,14 +175,6 @@
 
   async function replaceTarget(updated: WatchTarget): Promise<boolean> {
     if (!config) return false;
-    if (updated.enabled && pathOverlapsSafeFolder(updated.path)) {
-      notifications.error(i18n.t('settings.errorSafeFolderOverlap'));
-      rejectedTargetId = updated.id;
-      window.setTimeout(() => {
-        rejectedTargetId = null;
-      }, 120);
-      return false;
-    }
 
     try {
       await updateWatchTargets(
@@ -576,7 +511,6 @@
                     <WatchTargetCard
                       {target}
                       globalTtlSeconds={config.default_ttl_seconds}
-                      rejected={rejectedTargetId === target.id}
                       onUpdate={replaceTarget}
                       onRemove={initiateRemoveTarget}
                     />
@@ -600,14 +534,4 @@
   confirmLabel={i18n.t('settings.remove')}
   onCancel={() => (targetToRemove = null)}
   onConfirm={confirmRemoveTarget}
-/>
-
-<ConfirmDialog
-  open={!!pendingWatchTarget}
-  title={i18n.t('settings.overlapConfirmTitle')}
-  message={overlappingTargetMessage()}
-  confirmLabel={i18n.t('settings.overlapUseNew')}
-  cancelLabel={i18n.t('settings.overlapKeepExisting')}
-  onCancel={() => (pendingWatchTarget = null)}
-  onConfirm={confirmOverlappingTarget}
 />

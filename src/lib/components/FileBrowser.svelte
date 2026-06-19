@@ -17,7 +17,6 @@
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { AppConfig, TrackedFile, UserTriageAction } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
-  import { pathWithinWatchRoot, watchTargetDisplayName } from '$lib/utils/watch-target-config';
 
   import ConfirmDialog from './ConfirmDialog.svelte';
   import FileCard from './FileCard.svelte';
@@ -73,9 +72,11 @@
     };
   });
 
-  let watchTargets = $derived(
-    config ? config.watch_targets.filter((t) => t.enabled).map((t) => t.path) : [],
-  );
+  let watchTargets = $derived(config ? config.watch_targets.filter((t) => t.enabled) : []);
+
+  function watchTargetDisplayName(path: string): string {
+    return path.split(/[\\/]/).filter(Boolean).pop() || path;
+  }
 
   function getWorstState(state1: string, state2: string): string {
     const priority: Record<string, number> = {
@@ -96,7 +97,7 @@
       return {
         folders: watchTargets.map((target) => {
           const childFiles = filesState.files.filter((f) => {
-            return pathWithinWatchRoot(target, f.path);
+            return f.watch_target_id === target.id;
           });
 
           let worstState = 'Fresh';
@@ -105,8 +106,8 @@
           }
 
           return {
-            name: watchTargetDisplayName(target),
-            path: target,
+            name: watchTargetDisplayName(target.path),
+            path: target.path,
             isWatchTarget: true,
             filesCount: childFiles.length,
             worstState,

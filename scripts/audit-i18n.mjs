@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -180,6 +180,64 @@ printList('Keys missing from en', missingInEn);
 console.log('');
 printList('Dynamic prefixes protected from unused checks', sorted(usage.dynamicPrefixes));
 
-if (unused.length > 0 || missing.length > 0 || missingInZh.length > 0 || missingInEn.length > 0) {
+if (unused.length > 0) {
+  console.log('Delete unused keys?(y/n)');
+  const answer = await new Promise((resolve) => {
+    const listener = (data) => {
+      const value = data.toString().trim().toLowerCase();
+      if (value === 'y' || value === 'n') {
+        process.stdin.removeListener('data', listener);
+        process.stdin.pause();
+        resolve(value);
+      }
+    };
+    process.stdin.on('data', listener);
+  });
+
+  if (answer === 'y') {
+    let updatedSource = i18nSource;
+    const unusedSet = new Set(unused);
+
+    for (const lang of ['en', 'zh']) {
+      const languageMatch = new RegExp(`\\b${escapeRegex(lang)}\\s*:\\s*\\{`).exec(updatedSource);
+      if (!languageMatch) {
+        throw new Error(`Could not find translation block for "${lang}"`);
+      }
+
+      const openBraceIndex = updatedSource.indexOf('{', languageMatch.index);
+      const closeBraceIndex = findMatchingBrace(updatedSource, openBraceIndex);
+      const block = updatedSource.slice(openBraceIndex + 1, closeBraceIndex);
+
+      const lines = block.split('\n');
+      const newLines = [];
+      let skipping = false;
+      const keyRegex = /^\s*'([^']+)'\s*:/;
+
+      for (const line of lines) {
+        const match = line.match(keyRegex);
+        if (match) {
+          const key = match[1];
+          skipping = unusedSet.has(key);
+        }
+        if (!skipping) {
+          newLines.push(line);
+        }
+      }
+
+      const newBlock = newLines.join('\n');
+      updatedSource =
+        updatedSource.slice(0, openBraceIndex + 1) +
+        newBlock +
+        updatedSource.slice(closeBraceIndex);
+    }
+
+    await writeFile(i18nPath, updatedSource, 'utf8');
+    console.log('Unused keys deleted');
+  } else {
+    process.exitCode = 1;
+  }
+}
+
+if (missing.length > 0 || missingInZh.length > 0 || missingInEn.length > 0) {
   process.exitCode = 1;
 }

@@ -8,18 +8,12 @@
   import { Switch } from '$lib/components/ui/switch';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { WatchTarget } from '$lib/types';
-  import { ttlDaysInputFromSeconds, ttlSecondsFromDaysInput } from '$lib/utils/watch-target-config';
 
-  let {
-    target,
-    globalTtlSeconds,
-    rejected = false,
-    onUpdate,
-    onRemove,
-  } = $props<{
+  const SECONDS_PER_DAY = 24 * 60 * 60;
+
+  let { target, globalTtlSeconds, onUpdate, onRemove } = $props<{
     target: WatchTarget;
     globalTtlSeconds: number;
-    rejected?: boolean;
     onUpdate: (target: WatchTarget) => Promise<boolean>;
     onRemove: (target: WatchTarget) => void;
   }>();
@@ -30,6 +24,19 @@
 
   let inheritedTtlDays = $derived(Math.max(1, Math.round(globalTtlSeconds / 86400)));
   let targetTtlKey = $derived(`${target.id}:${target.default_ttl_seconds ?? 'inherit'}`);
+
+  function ttlDaysInputFromSeconds(ttlSeconds: number | null): string {
+    return ttlSeconds === null ? '' : String(Math.max(1, Math.round(ttlSeconds / SECONDS_PER_DAY)));
+  }
+
+  function ttlSecondsFromDaysInput(value: string): number | null {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const days = Number(trimmed);
+    if (!Number.isFinite(days)) return null;
+    return Math.max(1, Math.round(days)) * SECONDS_PER_DAY;
+  }
 
   $effect(() => {
     if (syncedTtlKey === targetTtlKey) return;
@@ -73,7 +80,7 @@
     </div>
 
     <div class="flex items-center gap-3.5 flex-shrink-0">
-      <div class={rejected ? 'switch-rejected' : ''} title={i18n.t('settings.toggleTarget')}>
+      <div title={i18n.t('settings.toggleTarget')}>
         <Switch
           checked={target.enabled}
           onCheckedChange={(enabled) => onUpdate({ ...target, enabled })}
