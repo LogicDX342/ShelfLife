@@ -83,14 +83,10 @@ impl ShakeDetector {
         self.moves.clear();
     }
 
-    #[cfg(test)]
-    fn movement_count(&self) -> usize {
-        self.moves.len()
-    }
-
     fn push_move(&mut self, movement: PointerMove) {
         if let Some(last) = self.moves.back_mut() {
-            if same_direction(*last, movement) {
+            let dot_product = last.dx * movement.dx + last.dy * movement.dy;
+            if dot_product > 0 {
                 last.dx += movement.dx;
                 last.dy += movement.dy;
                 last.time_ms = movement.time_ms;
@@ -141,11 +137,6 @@ impl ShakeDetector {
 
         total_distance >= diagonal * SHAKE_FACTOR
     }
-}
-
-fn same_direction(left: PointerMove, right: PointerMove) -> bool {
-    let dot_product = left.dx * right.dx + left.dy * right.dy;
-    dot_product > 0
 }
 
 fn distance(dx: i32, dy: i32) -> f64 {
@@ -368,7 +359,7 @@ mod tests {
         detector.update(true, 10, 0, 10);
         detector.update(true, 20, 0, 20);
 
-        assert_eq!(detector.movement_count(), 1);
+        assert_eq!(detector.moves.len(), 1);
     }
 
     #[test]

@@ -74,10 +74,6 @@
 
   let watchTargets = $derived(config ? config.watch_targets.filter((t) => t.enabled) : []);
 
-  function watchTargetDisplayName(path: string): string {
-    return path.split(/[\\/]/).filter(Boolean).pop() || path;
-  }
-
   function getWorstState(state1: string, state2: string): string {
     const priority: Record<string, number> = {
       Decaying: 5,
@@ -105,8 +101,11 @@
             worstState = getWorstState(worstState, f.state);
           }
 
+          let watchTargetDisplayName =
+            target.path.split(/[\\/]/).filter(Boolean).pop() || target.path;
+
           return {
-            name: watchTargetDisplayName(target.path),
+            name: watchTargetDisplayName,
             path: target.path,
             isWatchTarget: true,
             filesCount: childFiles.length,
@@ -238,19 +237,14 @@
       : selectedPaths.filter((item) => item !== path);
   }
 
-  function selectedBulkAction(): UserTriageAction {
-    if (bulkAction === 'Snooze') return { Snooze: { seconds: bulkSnoozeDays * 24 * 60 * 60 } };
-    return bulkAction;
-  }
-
-  function bulkActionLabel(value: typeof bulkAction) {
-    return value;
-  }
-
   async function runBulkAction() {
     confirmBulk = false;
     try {
-      const result = await executeBulkTriageAction(selectedPaths, selectedBulkAction());
+      const action: UserTriageAction =
+        bulkAction === 'Snooze'
+          ? { Snooze: { seconds: bulkSnoozeDays * 24 * 60 * 60 } }
+          : bulkAction;
+      const result = await executeBulkTriageAction(selectedPaths, action);
       const summary = i18n.t('browser.bulkSummary', {
         action: bulkAction,
         succeeded: result.entries.length,
@@ -494,7 +488,7 @@
 
         <Select.Root type="single" bind:value={bulkAction}>
           <Select.Trigger>
-            <span data-slot="select-value">{bulkActionLabel(bulkAction)}</span>
+            <span data-slot="select-value">{bulkAction}</span>
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="MoveToSafeFolder" label="MoveToSafeFolder" />

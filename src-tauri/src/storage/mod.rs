@@ -57,7 +57,7 @@ pub fn get_config(db: &Database) -> Result<AppConfig, AppError> {
         return Ok(AppConfig::default());
     };
 
-    deserialize_config(value.value())
+    Ok(bincode::deserialize::<AppConfig>(value.value())?)
 }
 
 pub fn save_config(db: &Database, config: &AppConfig) -> Result<(), AppError> {
@@ -69,8 +69,4 @@ pub fn save_config(db: &Database, config: &AppConfig) -> Result<(), AppError> {
     }
     write_txn.commit()?;
     Ok(())
-}
-
-fn deserialize_config(bytes: &[u8]) -> Result<AppConfig, AppError> {
-    Ok(bincode::deserialize::<AppConfig>(bytes)?)
 }

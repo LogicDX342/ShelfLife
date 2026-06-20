@@ -83,7 +83,7 @@ pub fn execute_triage_action(
     if !source.exists() {
         return Err(AppError::path_not_found(path));
     }
-    validate_source_scope(&source, &config)?;
+    PathScope::new(&config).ensure_source_scope(&source)?;
 
     let mut tracked = load_or_create_tracked(db, &source, &config)?;
     let original_tracked_path = tracked.path.clone();
@@ -147,7 +147,7 @@ pub fn execute_automation_rule_action(
     if !source.exists() {
         return Err(AppError::path_not_found(path));
     }
-    validate_source_scope(&source, &config)?;
+    PathScope::new(&config).ensure_source_scope(&source)?;
 
     let mut tracked = load_or_create_tracked(db, &source, &config)?;
     let original_tracked_path = tracked.path.clone();
@@ -216,7 +216,7 @@ pub fn execute_dropzone_rule_action(
     let original_tracked_path = tracked.path.clone();
     let timestamp = now_seconds();
     if matches!(rule.action, RuleAction::Ignore) {
-        validate_source_scope(&source, &config)?;
+        PathScope::new(&config).ensure_source_scope(&source)?;
     }
     let applied = apply_file_action(
         &source,
@@ -503,7 +503,7 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
         )
     })?;
     if !from_dropzone {
-        validate_restore_destination_scope(to_parent, &config)?;
+        PathScope::new(&config).ensure_restore_parent_scope(to_parent)?;
     }
 
     if !from.exists() {
@@ -655,14 +655,6 @@ fn load_or_create_tracked(
         config.default_ttl_seconds,
         "",
     ))
-}
-
-fn validate_source_scope(path: &Path, config: &AppConfig) -> Result<(), AppError> {
-    PathScope::new(config).ensure_source_scope(path)
-}
-
-fn validate_restore_destination_scope(parent: &Path, config: &AppConfig) -> Result<(), AppError> {
-    PathScope::new(config).ensure_restore_parent_scope(parent)
 }
 
 fn validate_move_source_for_undo(path: &Path, config: &AppConfig) -> Result<(), AppError> {

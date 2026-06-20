@@ -58,8 +58,8 @@ pub fn reconcile_with_report_with_progress(
         }
 
         // Hoist pattern set construction outside the file loop.
-        let ignore_set = build_ignore_set(target)?;
-        let hidden_whitelist = build_hidden_whitelist(target)?;
+        let ignore_set = build_glob_set(&target.ignore_patterns)?;
+        let hidden_whitelist = build_glob_set(&target.include_hidden_patterns)?;
         // Canonicalize root once — reused inside target_ignores_path.
         let canonical_root = root.canonicalize().ok();
         let effective_ttl_seconds = effective_ttl_seconds(&config, target);
@@ -281,7 +281,7 @@ pub fn reconcile_paths(
             continue;
         };
 
-        let ignore_set = build_ignore_set(target)?;
+        let ignore_set = build_glob_set(&target.ignore_patterns)?;
         let canonical_root = PathBuf::from(&target.path).canonicalize().ok();
 
         if target_ignores_path(path, ignore_set.as_ref(), canonical_root.as_deref()) {
@@ -435,14 +435,6 @@ fn effective_ttl_seconds(config: &AppConfig, target: &WatchTarget) -> u64 {
     target
         .default_ttl_seconds
         .unwrap_or(config.default_ttl_seconds)
-}
-
-fn build_ignore_set(target: &WatchTarget) -> Result<Option<GlobSet>, AppError> {
-    build_glob_set(&target.ignore_patterns)
-}
-
-fn build_hidden_whitelist(target: &WatchTarget) -> Result<Option<GlobSet>, AppError> {
-    build_glob_set(&target.include_hidden_patterns)
 }
 
 fn build_glob_set(patterns: &[String]) -> Result<Option<GlobSet>, AppError> {

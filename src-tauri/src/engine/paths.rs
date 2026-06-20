@@ -32,7 +32,10 @@ impl<'a> PathScope<'a> {
         }
 
         Err(AppError::path_out_of_scope(
-            self.path_for_error(path).to_string_lossy().as_ref(),
+            normalize_configured_path(path)
+                .unwrap_or_else(|| path.to_path_buf())
+                .to_string_lossy()
+                .as_ref(),
         ))
     }
 
@@ -83,10 +86,6 @@ impl<'a> PathScope<'a> {
 
     pub fn rule_watch_path_contains(&self, rule_watch_path: &str, path: &Path) -> bool {
         root_contains(rule_watch_path, path)
-    }
-
-    fn path_for_error(&self, path: &Path) -> PathBuf {
-        normalize_configured_path(path).unwrap_or_else(|| path.to_path_buf())
     }
 
     fn is_inside_enabled_watch_root(&self, path: &Path) -> bool {
