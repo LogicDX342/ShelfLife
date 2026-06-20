@@ -2,7 +2,10 @@ use std::fs::Metadata;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{AppConfig, Expiry, FileDecayState, OriginEvidence, TrackedFile};
+use crate::models::{
+    AppConfig, Expiry, FileDecayState, OriginEvidence, RuleAction, RuleMode, TrackedFile,
+};
+use crate::rules::{RuleDecision, RuleVerdict};
 
 pub fn now_seconds() -> u64 {
     SystemTime::now()
@@ -61,11 +64,11 @@ pub fn classify_decay_state(
     }
 }
 
-pub fn apply_rules_to_tracked_file(
+pub fn apply_rule_decision_to_tracked_file(
     tracked: &mut TrackedFile,
-    rules: &[crate::models::AutomationRule],
+    decision: &RuleDecision,
     config: &AppConfig,
-    effective_ttl_seconds: u64,
+    default_ttl_seconds: u64,
     now: u64,
 ) {
     let is_pinned_or_snoozed = match &tracked.expiry {
@@ -74,27 +77,24 @@ pub fn apply_rules_to_tracked_file(
         _ => false,
     };
 
-    let mut matched_rule_ttl = None;
-    let mut matched_rule_is_ignore = false;
-
-    if !tracked.matched_rule_ids.is_empty() {
-        let first_rule_id = &tracked.matched_rule_ids[0];
-        if let Some(rule) = rules.iter().find(|r| &r.id == first_rule_id) {
-            if !matches!(rule.mode, crate::models::RuleMode::PreviewOnly) {
-                if matches!(rule.action, crate::models::RuleAction::Ignore) {
-                    matched_rule_is_ignore = true;
-                } else {
-                    matched_rule_ttl = Some(rule.ttl_seconds);
-                }
-            }
-        }
-    }
+    let (matched_rule_ttl, matched_rule_is_ignore) = match &decision.verdict {
+        RuleVerdict::Matched {
+            effective_rule,
+            rule_ttl_seconds,
+            ..
+        } => (
+            *rule_ttl_seconds,
+            !matches!(effective_rule.mode, RuleMode::PreviewOnly)
+                && matches!(effective_rule.action, RuleAction::Ignore),
+        ),
+        RuleVerdict::Unmatched => (None, false),
+    };
 
     if !is_pinned_or_snoozed {
         if let Some(ttl) = matched_rule_ttl {
             tracked.expiry = Expiry::At(tracked.freshness_at + ttl);
         } else {
-            tracked.expiry = Expiry::At(tracked.freshness_at + effective_ttl_seconds);
+            tracked.expiry = Expiry::At(tracked.freshness_at + default_ttl_seconds);
         }
     }
 

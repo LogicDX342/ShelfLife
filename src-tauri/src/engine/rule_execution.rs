@@ -5,9 +5,9 @@ use uuid::Uuid;
 
 use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
-    RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus,
+    RuleAction, RuleMatchExplanation, TrackedFile, UndoStatus,
 };
-use crate::rules::explain_file_against_rules;
+use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
 use crate::storage;
 
 #[derive(Debug, Clone)]
@@ -172,28 +172,19 @@ fn automatic_rule_match_for_file(
     config: &AppConfig,
     rules: &[AutomationRule],
 ) -> Result<Option<(AutomationRule, RuleMatchExplanation)>, AppError> {
-    for explanation in explain_file_against_rules(file, config, rules)? {
-        let Some(rule_id) = &explanation.rule_id else {
-            continue;
-        };
-        if explanation.proposed_action.is_none() {
-            continue;
+    let decision = decide_file_against_rules(file, config, rules, RuleDecisionScope::WatchedFile)?;
+    match decision.verdict {
+        RuleVerdict::Matched {
+            effective_rule,
+            effective_explanation,
+            ..
+        } if matches!(effective_rule.mode, crate::models::RuleMode::Automatic)
+            && !matches!(effective_rule.action, RuleAction::Ignore) =>
+        {
+            Ok(Some((*effective_rule, *effective_explanation)))
         }
-        if matches!(explanation.proposed_action, Some(RuleAction::Ignore)) {
-            return Ok(None);
-        }
-
-        let Some(rule) = rules.iter().find(|rule| &rule.id == rule_id) else {
-            return Ok(None);
-        };
-        return if matches!(rule.mode, RuleMode::Automatic) {
-            Ok(Some((rule.clone(), explanation)))
-        } else {
-            Ok(None)
-        };
+        RuleVerdict::Matched { .. } | RuleVerdict::Unmatched => Ok(None),
     }
-
-    Ok(None)
 }
 
 #[cfg(test)]
@@ -296,6 +287,46 @@ mod tests {
 
         assert!(report.entries.is_empty());
         assert!(report.failures.is_empty());
+        assert!(file.exists());
+    }
+
+    #[test]
+    fn higher_priority_preview_rule_blocks_lower_priority_automatic_rule() {
+        let fixture = Fixture::new("shelflife-rule-execution");
+        fixture.save_config();
+        let file = fixture.write_watch_file("download.zip", "body");
+        fixture.track_file(&file);
+        expire_tracked_file(&fixture, &file);
+
+        let mut preview_rule = fixture.rule();
+        preview_rule.id = String::from("preview-zip-rule");
+        preview_rule.name = String::from("Preview zip downloads");
+        preview_rule.priority = 20;
+        preview_rule.mode = RuleMode::PreviewOnly;
+        storage::rules::save_rule(&fixture.db, &preview_rule).expect("rule should save");
+
+        let mut automatic_rule = fixture.rule();
+        automatic_rule.id = String::from("auto-zip-rule");
+        automatic_rule.name = String::from("Archive zip downloads");
+        automatic_rule.priority = 10;
+        automatic_rule.mode = RuleMode::Automatic;
+        automatic_rule.action = RuleAction::Move {
+            destination_folder: path_string(&fixture.outside),
+            rename_template: None,
+        };
+        storage::rules::save_rule(&fixture.db, &automatic_rule).expect("rule should save");
+
+        let report =
+            execute_expired_automatic_rules(&fixture.db).expect("rule execution should run");
+        let delay = super::next_automatic_rule_execution_delay(
+            &fixture.db,
+            std::time::Duration::from_secs(5),
+        )
+        .expect("delay should calculate");
+
+        assert!(report.entries.is_empty());
+        assert!(report.failures.is_empty());
+        assert!(delay.is_none());
         assert!(file.exists());
     }
 

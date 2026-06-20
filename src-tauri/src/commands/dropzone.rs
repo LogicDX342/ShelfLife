@@ -1,11 +1,13 @@
+use std::path::Path;
+
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::engine;
+use crate::engine::paths::PathScope;
 use crate::models::{
-    AppError, DropzoneActionFailure, DropzoneActionResult, DropzonePreview, RuleMode,
+    AppError, DropzoneActionFailure, DropzoneActionResult, DropzonePreview, RuleAction, RuleMode,
 };
-use crate::rules::conditions::evaluate_conditions;
-use crate::rules::explanation::rule_explanation;
+use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
 use crate::runtime::AppRuntime;
 use crate::storage;
 
@@ -63,7 +65,7 @@ pub async fn execute_dropzone_rule_group(
     rule_id: String,
     paths: Vec<String>,
 ) -> Result<DropzoneActionResult, AppError> {
-    let rule = storage::rules::get_rule(&state.db, &rule_id)?.ok_or_else(|| {
+    let selected_rule = storage::rules::get_rule(&state.db, &rule_id)?.ok_or_else(|| {
         AppError::new(
             "RULE_NOT_FOUND",
             "Selected rule is no longer available. No file was changed.",
@@ -71,7 +73,7 @@ pub async fn execute_dropzone_rule_group(
         )
     })?;
 
-    if matches!(rule.mode, RuleMode::PreviewOnly) {
+    if matches!(selected_rule.mode, RuleMode::PreviewOnly) {
         return Err(AppError::new(
             "RULE_NOT_EXECUTABLE",
             "PreviewOnly rules cannot change files from the dropzone.",
@@ -80,6 +82,8 @@ pub async fn execute_dropzone_rule_group(
     }
 
     let config = storage::get_config(&state.db)?;
+    let rules = storage::rules::list_rules(&state.db)?;
+    let scope = PathScope::new(&config);
     let mut result = DropzoneActionResult {
         entries: Vec::new(),
         failures: Vec::new(),
@@ -88,24 +92,47 @@ pub async fn execute_dropzone_rule_group(
     for path in paths {
         let execution = (|| {
             let (_, tracked) = engine::dropzone::build_dropzone_file(&path, &config)?;
-            let condition_match = evaluate_conditions(
-                &tracked.file_name,
-                tracked.size_bytes,
-                &tracked.origin,
-                &rule.conditions,
-            )?;
-            if !condition_match.matched {
+            let decision =
+                decide_file_against_rules(&tracked, &config, &rules, RuleDecisionScope::Dropzone)?;
+            let RuleVerdict::Matched {
+                effective_rule,
+                effective_explanation,
+                ..
+            } = decision.verdict
+            else {
                 return Err(AppError::new(
-                    "RULE_NOT_MATCHED",
-                    "The selected rule no longer matches this file. No file was changed.",
+                        "RULE_NOT_MATCHED",
+                        "The selected rule is no longer the effective match for this file. No file was changed.",
+                        true,
+                    ));
+            };
+            if effective_rule.id != rule_id {
+                return Err(AppError::new(
+                        "RULE_NOT_MATCHED",
+                        "The selected rule is no longer the effective match for this file. No file was changed.",
+                        true,
+                    ));
+            }
+            if matches!(effective_rule.mode, RuleMode::PreviewOnly) {
+                return Err(AppError::new(
+                    "RULE_NOT_EXECUTABLE",
+                    "PreviewOnly rules cannot change files from the dropzone.",
+                    true,
+                ));
+            }
+            if matches!(effective_rule.action, RuleAction::Ignore)
+                && !scope.is_in_enabled_watch_target(Path::new(&path))
+            {
+                return Err(AppError::new(
+                    "RULE_NOT_EXECUTABLE",
+                    "Ignore rules can only change files inside watch targets from the dropzone.",
                     true,
                 ));
             }
 
-            let mut explanation =
-                rule_explanation(&tracked.path, tracked.size_bytes, &rule, condition_match);
+            let mut explanation = *effective_explanation;
             explanation.message = format!("Dropzone: {}", explanation.message);
-            engine::execute_dropzone_rule_action(&state.db, &path, &rule, explanation)
+            engine::execute_dropzone_rule_action(&state.db, &path, &effective_rule, explanation)
         })();
 
         match execution {

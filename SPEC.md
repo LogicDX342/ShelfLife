@@ -323,8 +323,10 @@ freshness_at = max(
 ### 6.3 Expiry formula
 
 ```text
-expires_at = freshness_at + rule.ttl_seconds
+expires_at = freshness_at + effective_ttl_seconds
 ```
+
+`effective_ttl_seconds` comes from the first matching enabled rule only when that effective rule can change the file and is not `PreviewOnly` or `Ignore`. `PreviewOnly`, `Ignore`, and unmatched files use the watch target default TTL, falling back to the app default TTL.
 
 Pinned files use `Expiry::Permanent`.
 
@@ -500,8 +502,30 @@ Rules are evaluated in this order:
 1. Validate path is inside an allowed watch target.
 2. Apply explicit per-file pins and ignores.
 3. Evaluate enabled rules by priority.
-4. Produce explanation records.
-5. Queue proposed action based on mode.
+4. Produce explanation records and matched rule ids.
+5. Select the first matching enabled rule as the effective verdict.
+6. Queue proposed action based on the effective rule mode.
+```
+
+`matched_rule_ids` is informational and preserves all matching rule ids in priority order. Effective behavior comes from the rule verdict, not from reinterpreting the first stored id. A higher-priority `PreviewOnly` rule blocks lower-priority executable rules. `Ignore` takes effect immediately as `FileDecayState::Ignored` and does not apply a rule TTL.
+
+Internal rule evaluation returns a decision:
+
+```rust
+pub enum RuleVerdict {
+    Matched {
+        effective_rule: AutomationRule,
+        effective_explanation: RuleMatchExplanation,
+        rule_ttl_seconds: Option<u64>,
+    },
+    Unmatched,
+}
+
+pub struct RuleDecision {
+    pub verdict: RuleVerdict,
+    pub explanations: Vec<RuleMatchExplanation>,
+    pub matched_rule_ids: Vec<String>,
+}
 ```
 
 Automatic rule execution records failed attempts as audit entries with `UndoStatus::Failed`. A stored failed attempt for the same path and rule prevents future automatic scheduling for that pair. There is no in-memory retry/backoff state.
@@ -1164,7 +1188,7 @@ pub struct WatchTarget {
     pub recursive: bool,
     pub default_ttl_seconds: Option<u64>,
     pub ignore_patterns: Vec<String>,
-    pub rule_ids: Vec<String>,
+    pub include_hidden_patterns: Vec<String>,
 }
 ```
 
@@ -1215,6 +1239,9 @@ move to safe folder
 trash action mock or platform-gated test
 undo move (including with rename)
 missing file reconciliation
+PreviewOnly blocks lower-priority Automatic rules
+Ignore rules apply immediately without rule TTL
+effective rule TTL versus watch-target default TTL
 ```
 
 ### 20.3 Platform tests

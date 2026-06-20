@@ -28,7 +28,7 @@ use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_tra
 use crate::models::{
     AppConfig, AppError, FileDecayState, ReconciliationReport, TrackedFile, WatchTarget,
 };
-use crate::rules::matching_rule_ids;
+use crate::rules::{decide_file_against_rules, RuleDecisionScope};
 use crate::storage;
 
 #[allow(clippy::type_complexity)]
@@ -134,13 +134,19 @@ pub fn reconcile_with_report_with_progress(
                     &target.id,
                 );
 
-                // Always run rule matching to ensure we match new/deleted/modified rules
-                tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
-
-                // Apply rules to adjust expiry & state
-                crate::engine::freshness::apply_rules_to_tracked_file(
-                    &mut tracked,
+                // Always run rule matching to ensure we match new/deleted/modified rules.
+                let decision = decide_file_against_rules(
+                    &tracked,
+                    &config,
                     &rules,
+                    RuleDecisionScope::WatchedFile,
+                )?;
+                tracked.matched_rule_ids = decision.matched_rule_ids.clone();
+
+                // Apply rules to adjust expiry & state.
+                crate::engine::freshness::apply_rule_decision_to_tracked_file(
+                    &mut tracked,
+                    &decision,
                     &config,
                     effective_ttl_seconds,
                     crate::engine::freshness::now_seconds(),
@@ -307,13 +313,15 @@ pub fn reconcile_paths(
             &target.id,
         );
 
-        // Always run rule matching to ensure we match new/deleted/modified rules
-        tracked.matched_rule_ids = matching_rule_ids(&tracked, &config, &rules)?;
+        // Always run rule matching to ensure we match new/deleted/modified rules.
+        let decision =
+            decide_file_against_rules(&tracked, &config, &rules, RuleDecisionScope::WatchedFile)?;
+        tracked.matched_rule_ids = decision.matched_rule_ids.clone();
 
-        // Apply rules to adjust expiry & state
-        crate::engine::freshness::apply_rules_to_tracked_file(
+        // Apply rules to adjust expiry & state.
+        crate::engine::freshness::apply_rule_decision_to_tracked_file(
             &mut tracked,
-            &rules,
+            &decision,
             &config,
             effective_ttl_seconds,
             crate::engine::freshness::now_seconds(),

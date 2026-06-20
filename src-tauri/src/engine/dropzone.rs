@@ -1,4 +1,3 @@
-use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,8 +10,7 @@ use crate::models::{
     AppConfig, AppError, AutomationRule, DropzoneFile, DropzonePreview, DropzoneRejectedFile,
     DropzoneRuleGroup, OriginEvidence, RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
 };
-use crate::rules::conditions::evaluate_conditions;
-use crate::rules::explanation::rule_explanation;
+use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
 use crate::storage;
 
 pub const SHAKE_INTERVAL_MS: u64 = 1_000;
@@ -240,70 +238,54 @@ pub fn plan_rule_groups(
     ),
     AppError,
 > {
-    let mut enabled_rules: Vec<&AutomationRule> =
-        rules.iter().filter(|rule| rule.enabled).collect();
-    enabled_rules.sort_by_key(|rule| Reverse(rule.priority));
-
     let mut groups: HashMap<String, DropzoneRuleGroup> = HashMap::new();
     let mut preview_only = Vec::new();
     let mut unmatched_files = Vec::new();
     let scope = PathScope::new(config);
 
     for file in files {
-        let mut selected_rule = None;
-        let mut saw_preview_only = false;
-        for rule in &enabled_rules {
-            let condition_match = evaluate_conditions(
-                &file.file_name,
-                file.size_bytes,
-                &file.origin,
-                &rule.conditions,
-            )?;
-            if !condition_match.matched {
-                continue;
-            }
-
-            let mut explanation =
-                rule_explanation(&file.path, file.size_bytes, rule, condition_match);
-            if matches!(rule.mode, RuleMode::PreviewOnly) {
-                saw_preview_only = true;
-                preview_only.push(explanation);
-                continue;
-            }
-
-            if matches!(rule.action, RuleAction::Ignore)
-                && !scope.is_in_enabled_watch_target(Path::new(&file.path))
-            {
-                explanation.proposed_action = None;
-                explanation.message = String::from(
-                    "Dropzone skipped Ignore because this file is outside watch targets.",
-                );
-                preview_only.push(explanation);
-                continue;
-            }
-
-            selected_rule = Some(rule);
-            break;
-        }
-
-        if let Some(rule) = selected_rule {
-            let group = groups
-                .entry(rule.id.clone())
-                .or_insert_with(|| DropzoneRuleGroup {
-                    rule_id: rule.id.clone(),
-                    rule_name: rule.name.clone(),
-                    mode: rule.mode.clone(),
-                    action: rule.action.clone(),
-                    file_paths: Vec::new(),
-                    file_count: 0,
-                    total_size_bytes: 0,
-                });
-            group.file_paths.push(file.path.clone());
-            group.file_count += 1;
-            group.total_size_bytes += file.size_bytes;
-        } else if !saw_preview_only {
+        let decision = decide_file_against_rules(file, config, rules, RuleDecisionScope::Dropzone)?;
+        let RuleVerdict::Matched {
+            effective_rule: rule,
+            effective_explanation,
+            ..
+        } = decision.verdict
+        else {
             unmatched_files.push(file.path.clone());
+            continue;
+        };
+
+        if matches!(rule.mode, RuleMode::PreviewOnly) {
+            preview_only.push(*effective_explanation);
+            continue;
         }
+
+        let mut effective_explanation = *effective_explanation;
+        if matches!(rule.action, RuleAction::Ignore)
+            && !scope.is_in_enabled_watch_target(Path::new(&file.path))
+        {
+            effective_explanation.proposed_action = None;
+            effective_explanation.message =
+                String::from("Dropzone skipped Ignore because this file is outside watch targets.");
+            preview_only.push(effective_explanation);
+            unmatched_files.push(file.path.clone());
+            continue;
+        }
+
+        let group = groups
+            .entry(rule.id.clone())
+            .or_insert_with(|| DropzoneRuleGroup {
+                rule_id: rule.id.clone(),
+                rule_name: rule.name.clone(),
+                mode: rule.mode.clone(),
+                action: rule.action.clone(),
+                file_paths: Vec::new(),
+                file_count: 0,
+                total_size_bytes: 0,
+            });
+        group.file_paths.push(file.path.clone());
+        group.file_count += 1;
+        group.total_size_bytes += file.size_bytes;
     }
 
     let mut rule_groups: Vec<DropzoneRuleGroup> = groups.into_values().collect();
@@ -375,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_groups_highest_priority_executable_rule_globally() {
+    fn preview_blocks_lower_priority_executable_rule_globally() {
         let fixture = Fixture::new("shelflife-dropzone-preview");
         let file = fixture.write_outside_file("download.zip", "body");
         fixture.save_config();
@@ -393,9 +375,9 @@ mod tests {
         let result = preview_dropzone_files(&fixture.db, &[path_string(&file)])
             .expect("preview should work");
 
-        assert_eq!(result.rule_groups.len(), 1);
-        assert_eq!(result.rule_groups[0].rule_id, "ask");
+        assert!(result.rule_groups.is_empty());
         assert_eq!(result.preview_only.len(), 1);
+        assert!(result.unmatched_files.is_empty());
     }
 
     #[test]
@@ -413,6 +395,7 @@ mod tests {
 
         assert!(result.rule_groups.is_empty());
         assert_eq!(result.preview_only.len(), 1);
+        assert_eq!(result.unmatched_files, vec![path_string(&file)]);
     }
 
     #[test]

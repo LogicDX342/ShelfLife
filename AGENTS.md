@@ -166,4 +166,4 @@ ShelfLife/
 
 ## PR & Commit Instructions
 
-- **Commit Style:** Strictly use conventional commits (e.g., `feat:`, `fix:`, `chore:`).
+- **Commit Style:** Strictly use conventional commits with scope(e.g., `feat:`, `fix:`, `chore:`).
