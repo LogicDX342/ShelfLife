@@ -15,14 +15,13 @@
   import type { AuditEntry } from '$lib/types';
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
 
-  let { entry, onRefresh } = $props<{ entry: AuditEntry; onRefresh: () => Promise<void> }>();
+  let { entry } = $props<{ entry: AuditEntry }>();
   let busy = $state(false);
 
   async function undo() {
     busy = true;
     try {
       await undoAuditEntry(entry.id);
-      await onRefresh();
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('audit.errorUndo')));
     } finally {

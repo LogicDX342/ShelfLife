@@ -1,16 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
 
   import DashboardStatCard from './DashboardStatCard.svelte';
   import StatusBar from './StatusBar.svelte';
-
-  onMount(() => {
-    filesState.refresh();
-  });
 </script>
 
 <PageHeader title={i18n.t('nav.dashboard')} subtitle={i18n.t('dashboard.welcome')} />

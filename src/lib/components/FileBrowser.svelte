@@ -1,7 +1,6 @@
 <script lang="ts">
   import IconFolder from '@lucide/svelte/icons/folder';
   import IconFolderOpen from '@lucide/svelte/icons/folder-open';
-  import { listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
 
   import { getConfig } from '$lib/api/config';
@@ -45,32 +44,8 @@
   onMount(() => {
     async function init() {
       config = await getConfig();
-      filesState.refresh();
     }
     init();
-
-    const refresh = () => filesState.refresh();
-    window.addEventListener('focus', refresh);
-
-    let active = true;
-    let unlistenReconciliation: (() => void) | null = null;
-    let unlistenAction: (() => void) | null = null;
-
-    listen('reconciliation_completed', refresh).then((unlisten) => {
-      if (active) unlistenReconciliation = unlisten;
-      else unlisten();
-    });
-    listen('action_completed', refresh).then((unlisten) => {
-      if (active) unlistenAction = unlisten;
-      else unlisten();
-    });
-
-    return () => {
-      active = false;
-      window.removeEventListener('focus', refresh);
-      unlistenReconciliation?.();
-      unlistenAction?.();
-    };
   });
 
   let watchTargets = $derived(config ? config.watch_targets.filter((t) => t.enabled) : []);
@@ -253,7 +228,6 @@
       });
       notifications.success(summary);
       selectedPaths = [];
-      await filesState.refresh();
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('browser.errorBulkAction')));
     }
@@ -418,7 +392,6 @@
         {#each directoryContents.files.slice(0, visibleFilesCount) as file (file.path)}
           <FileCard
             {file}
-            onRefresh={() => filesState.refresh()}
             selectable
             selected={selectedPaths.includes(file.path)}
             onSelectedChange={setSelected}

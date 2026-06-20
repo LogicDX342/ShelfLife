@@ -24,13 +24,11 @@
 
   let {
     file,
-    onRefresh,
     selectable = false,
     selected = false,
     onSelectedChange = () => {},
   } = $props<{
     file: TrackedFile;
-    onRefresh: () => Promise<void>;
     selectable?: boolean;
     selected?: boolean;
     onSelectedChange?: (path: string, selected: boolean) => void;
@@ -67,7 +65,6 @@
     busy = true;
     try {
       await executeTriageAction(file.path, action);
-      await onRefresh();
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('file.errorAction')));
     } finally {

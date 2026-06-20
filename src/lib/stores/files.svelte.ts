@@ -8,6 +8,7 @@ class FilesState {
   error = $state<string | null>(null);
   syncing = $state(false);
   filesScanned = $state(0);
+  filesTotal = $state(0);
   currentPath = $state('');
   syncDuration = $state(0);
 
@@ -15,54 +16,6 @@ class FilesState {
   private loadingTimeout: ReturnType<typeof setTimeout> | null = null;
   private timerInterval: ReturnType<typeof setInterval> | null = null;
   private syncStartTime = 0;
-
-  constructor() {
-    if (typeof window !== 'undefined') {
-      this.setupListeners();
-    }
-  }
-
-  private async setupListeners() {
-    try {
-      const { listen } = await import('@tauri-apps/api/event');
-      const { isReconciliationActive } = await import('$lib/api/config');
-
-      // Check initial active state
-      isReconciliationActive().then((active) => {
-        this.syncing = active;
-        if (active) {
-          this.startTimer();
-        }
-      });
-
-      listen('reconciliation_started', () => {
-        this.syncing = true;
-        this.filesScanned = 0;
-        this.currentPath = '';
-        this.startTimer();
-      });
-
-      listen('reconciliation_progress', (event: { payload: [string, number, number] }) => {
-        this.syncing = true;
-        const [path, current] = event.payload;
-        this.currentPath = path;
-        this.filesScanned = current;
-        if (!this.timerInterval) {
-          this.startTimer();
-        }
-      });
-
-      listen('reconciliation_completed', () => {
-        this.syncing = false;
-        this.filesScanned = 0;
-        this.currentPath = '';
-        this.stopTimer();
-        this.refresh();
-      });
-    } catch (e) {
-      console.error('Failed to set up sync listeners:', e);
-    }
-  }
 
   private startTimer() {
     this.stopTimer();
@@ -78,6 +31,32 @@ class FilesState {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
     }
+  }
+
+  beginSync() {
+    this.syncing = true;
+    this.filesScanned = 0;
+    this.filesTotal = 0;
+    this.currentPath = '';
+    this.startTimer();
+  }
+
+  updateSyncProgress(path: string, current: number, total: number) {
+    this.syncing = true;
+    this.currentPath = path;
+    this.filesScanned = current;
+    this.filesTotal = total;
+    if (!this.timerInterval) {
+      this.startTimer();
+    }
+  }
+
+  completeSync() {
+    this.syncing = false;
+    this.filesScanned = 0;
+    this.filesTotal = 0;
+    this.currentPath = '';
+    this.stopTimer();
   }
 
   counts = $derived.by(() => {

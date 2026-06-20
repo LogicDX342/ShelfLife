@@ -14,6 +14,7 @@
   import { Toaster } from '$lib/components/ui/sonner';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { i18n } from '$lib/i18n/i18n.svelte';
+  import { startLiveSnapshots } from '$lib/live/liveSnapshots';
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { CloseBehavior } from '$lib/types';
   import { getErrorMessage } from '$lib/utils/format';
@@ -28,6 +29,7 @@
   let isDropzoneRoute = $derived(page.url.pathname === '/dropzone');
 
   onMount(() => {
+    const stopLiveSnapshots = startLiveSnapshots();
     const unlisten = listen('close_behavior_requested', () => {
       closePromptOpen = true;
       rememberCloseBehavior = true;
@@ -35,6 +37,7 @@
     });
 
     return () => {
+      stopLiveSnapshots();
       void unlisten.then((cleanup) => cleanup());
     };
   });

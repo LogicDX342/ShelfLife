@@ -1,8 +1,6 @@
 <script lang="ts">
   import IconDocument from '@lucide/svelte/icons/file';
   import IconSearch from '@lucide/svelte/icons/search';
-  import { listen } from '@tauri-apps/api/event';
-  import { onMount } from 'svelte';
 
   import EmptyState from '$lib/components/common/EmptyState.svelte';
   import LoadingState from '$lib/components/common/LoadingState.svelte';
@@ -57,32 +55,6 @@
       return file.file_name.toLowerCase().includes(q) || file.path.toLowerCase().includes(q);
     }),
   );
-
-  onMount(() => {
-    filesState.refresh();
-    const refresh = () => filesState.refresh();
-    window.addEventListener('focus', refresh);
-
-    let active = true;
-    let unlistenReconciliation: (() => void) | null = null;
-    let unlistenAction: (() => void) | null = null;
-
-    listen('reconciliation_completed', refresh).then((unlisten) => {
-      if (active) unlistenReconciliation = unlisten;
-      else unlisten();
-    });
-    listen('action_completed', refresh).then((unlisten) => {
-      if (active) unlistenAction = unlisten;
-      else unlisten();
-    });
-
-    return () => {
-      active = false;
-      window.removeEventListener('focus', refresh);
-      unlistenReconciliation?.();
-      unlistenAction?.();
-    };
-  });
 </script>
 
 <PageHeader title={i18n.t('nav.queue')} subtitle={i18n.t('dashboard.subtitle')}>
@@ -124,7 +96,7 @@
   {:else}
     <div class="space-y-4">
       {#each filteredFiles.slice(0, visibleLimit) as file (file.path)}
-        <FileCard {file} onRefresh={() => filesState.refresh()} selectable={false} />
+        <FileCard {file} selectable={false} />
       {/each}
 
       {#if filteredFiles.length > visibleLimit}

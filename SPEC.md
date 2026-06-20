@@ -126,8 +126,8 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 - OS-adaptive Fluent Design guidelines (Mica material styling, custom scrollbars, toggle switches).
 - Centralized reactive internationalization (i18n) translation registry (supporting English and Simplified Chinese).
 - Dynamic theme switching (supporting Manual Light/Dark and System Sync settings).
-- Memory-safe component lifecycle event handling (properly cleaning up Tauri IPC event listener promises on component unmount).
-- Low-frequency UI refresh pulses on window focus.
+- Central live snapshot adapter for Tauri IPC events, startup snapshots, focus refresh, and listener cleanup.
+- Coalesced UI refresh pulses on backend events and window focus.
 - No high-frequency ticking timers.
 
 ### 3.2 Backend
@@ -925,7 +925,7 @@ Ignored Card:
 
 ### 13.3 Svelte 5 state model
 
-Frontend state should be derived from backend snapshots and events.
+Frontend state should be derived from backend snapshots and events through a central live snapshot adapter.
 
 Guidelines:
 
@@ -933,10 +933,22 @@ Guidelines:
 Use $state for local UI state.
 Use $derived for visual decay labels.
 Use command invocations for authoritative data.
-Use events for incremental updates.
+Use the live snapshot adapter as the only owner of backend file/audit event names.
+Use events to trigger coalesced full snapshot refreshes.
 Avoid interval timers faster than 15 minutes for background refresh.
-Refresh on window focus.
+Refresh on window focus through the live snapshot adapter.
 Preview panel triggers use on-demand command calls, not timers.
+```
+
+Views must not register live backend listeners directly for file, audit, or reconciliation freshness. The adapter owns:
+
+```text
+initial file and audit snapshot loading
+reconciliation progress state
+action_completed / audit_updated / file path event handling
+window focus refresh fallback
+coalescing so only one refresh per snapshot kind runs at a time
+listener cleanup on layout teardown
 ```
 
 ### 13.4 Preview panel
@@ -1483,6 +1495,7 @@ App can index files without polling aggressively.
 Watcher emits stable file paths without opening storage directly.
 App can recover missed events through reconciliation.
 Runtime owns reconciliation and automatic rule scheduling lifecycle.
+Frontend centralizes live file and audit snapshots behind one adapter.
 App can classify files into ambient decay states.
 App can explain every proposed action.
 App can perform user-confirmed move (with optional rename), pin, ignore, snooze, and trash actions.
