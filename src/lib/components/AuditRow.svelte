@@ -33,15 +33,19 @@
   let undoAvailable = $derived(entry.undo_status === 'Available');
 
   // Derive undo status explanation
-  let statusText = $derived(
-    typeof entry.undo_status === 'string'
-      ? entry.undo_status
-      : 'Unavailable' in entry.undo_status
-        ? entry.undo_status.Unavailable.reason
-        : 'Failed' in entry.undo_status
-          ? entry.undo_status.Failed.reason
-          : 'Unknown',
-  );
+  let statusText = $derived.by(() => {
+    const status = entry.undo_status;
+    if (typeof status === 'string') {
+      return status;
+    }
+    if ('Unavailable' in status) {
+      return status.Unavailable.reason;
+    }
+    if ('Failed' in status) {
+      return status.Failed.reason;
+    }
+    return 'Unknown';
+  });
 
   function getActionColors(kind: string) {
     switch (kind) {

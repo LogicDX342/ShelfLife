@@ -9,84 +9,91 @@
   let { explanation } = $props<{ explanation: RuleMatchExplanation }>();
 
   // Determine action type and details
-  let actionType = $derived(
-    !explanation.proposed_action
-      ? 'None'
-      : explanation.proposed_action === 'Trash'
-        ? 'Trash'
-        : explanation.proposed_action === 'Ignore'
-          ? 'Ignore'
-          : typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action
-            ? 'Move'
-            : 'Other',
-  );
+  let actionType = $derived.by(() => {
+    const action = explanation.proposed_action;
+    if (!action) return 'None';
+    if (action === 'Trash') return 'Trash';
+    if (action === 'Ignore') return 'Ignore';
+    if (typeof action === 'object' && 'Move' in action) return 'Move';
+    return 'Other';
+  });
 
-  let actionLabel = $derived(
-    explanation.proposed_action === 'Trash'
-      ? i18n.t('file.trash')
-      : explanation.proposed_action === 'Ignore'
-        ? i18n.t('file.ignore')
-        : typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action
-          ? i18n.t('file.actionMove')
-          : i18n.t('file.actionLabel'),
-  );
+  let actionLabel = $derived.by(() => {
+    switch (actionType) {
+      case 'Trash':
+        return i18n.t('file.trash');
+      case 'Ignore':
+        return i18n.t('file.ignore');
+      case 'Move':
+        return i18n.t('file.actionMove');
+      default:
+        return i18n.t('file.actionLabel');
+    }
+  });
 
-  let styleClasses = $derived(
-    actionType === 'Trash'
-      ? {
+  let styleClasses = $derived.by(() => {
+    switch (actionType) {
+      case 'Trash':
+        return {
           container:
             'border-rose-200 bg-rose-50/20 dark:border-rose-950/40 dark:bg-rose-950/10 text-neutral-800 dark:text-neutral-200 hover:bg-rose-50/30 dark:hover:bg-rose-950/20',
           leftSide:
             'border-rose-200 dark:border-rose-950/40 bg-rose-100/20 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400',
-        }
-      : actionType === 'Move'
-        ? {
-            container:
-              'border-violet-200 bg-violet-50/20 dark:border-violet-950/40 dark:bg-violet-950/10 text-neutral-800 dark:text-neutral-200 hover:bg-violet-50/30 dark:hover:bg-violet-950/20',
-            leftSide:
-              'border-violet-200 dark:border-violet-950/40 bg-violet-100/20 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400',
-          }
-        : actionType === 'Ignore'
-          ? {
-              container:
-                'border-neutral-200 bg-neutral-50/30 dark:border-neutral-800 dark:bg-neutral-900/10 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/40 dark:hover:bg-neutral-900/20',
-              leftSide:
-                'border-neutral-200 dark:border-neutral-800 bg-neutral-100/30 dark:bg-neutral-800/30 text-neutral-600 dark:text-neutral-400',
-            }
-          : {
-              container:
-                'border-neutral-200 bg-neutral-50/30 dark:border-fluent-border-dark dark:bg-white/5 text-fluent-text-light dark:text-fluent-text-dark',
-              leftSide:
-                'border-neutral-200 dark:border-fluent-border-dark bg-black/5 dark:bg-white/5 text-fluent-muted-light dark:text-fluent-muted-dark',
-            },
-  );
+        };
+      case 'Move':
+        return {
+          container:
+            'border-violet-200 bg-violet-50/20 dark:border-violet-950/40 dark:bg-violet-950/10 text-neutral-800 dark:text-neutral-200 hover:bg-violet-50/30 dark:hover:bg-violet-950/20',
+          leftSide:
+            'border-violet-200 dark:border-violet-950/40 bg-violet-100/20 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400',
+        };
+      case 'Ignore':
+        return {
+          container:
+            'border-neutral-200 bg-neutral-50/30 dark:border-neutral-800 dark:bg-neutral-900/10 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/40 dark:hover:bg-neutral-900/20',
+          leftSide:
+            'border-neutral-200 dark:border-neutral-800 bg-neutral-100/30 dark:bg-neutral-800/30 text-neutral-600 dark:text-neutral-400',
+        };
+      default:
+        return {
+          container:
+            'border-neutral-200 bg-neutral-50/30 dark:border-fluent-border-dark dark:bg-white/5 text-fluent-text-light dark:text-fluent-text-dark',
+          leftSide:
+            'border-neutral-200 dark:border-fluent-border-dark bg-black/5 dark:bg-white/5 text-fluent-muted-light dark:text-fluent-muted-dark',
+        };
+    }
+  });
 
-  let modeLabel = $derived(
-    explanation.mode === 'Automatic'
-      ? (i18n.t('rules.modeAutomatic') ?? 'Auto')
-      : explanation.mode === 'AskFirst'
-        ? (i18n.t('rules.modeAskFirst') ?? 'Ask First')
-        : explanation.mode === 'PreviewOnly'
-          ? (i18n.t('rules.modePreviewOnly') ?? 'Preview')
-          : '',
-  );
+  let modeLabel = $derived.by(() => {
+    switch (explanation.mode) {
+      case 'Automatic':
+        return i18n.t('rules.modeAutomatic') ?? 'Auto';
+      case 'AskFirst':
+        return i18n.t('rules.modeAskFirst') ?? 'Ask First';
+      case 'PreviewOnly':
+        return i18n.t('rules.modePreviewOnly') ?? 'Preview';
+      default:
+        return '';
+    }
+  });
 
-  let modeBadgeClasses = $derived(
-    explanation.mode === 'Automatic'
-      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-900/50'
-      : explanation.mode === 'AskFirst'
-        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/50 dark:border-blue-900/50'
-        : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400 border border-neutral-200/50 dark:border-neutral-700/50',
-  );
+  let modeBadgeClasses = $derived.by(() => {
+    switch (explanation.mode) {
+      case 'Automatic':
+        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-900/50';
+      case 'AskFirst':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/50 dark:border-blue-900/50';
+      default:
+        return 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400 border border-neutral-200/50 dark:border-neutral-700/50';
+    }
+  });
 </script>
 
 <div
   class="inline-flex items-stretch self-start rounded-md border text-[10px] shadow-sm transition-all select-none {styleClasses.container}"
 >
   <!-- Left Side: Action / Status Block -->
-  <div
-    class="flex items-center gap-1.5 px-2 py-0.5 border-r font-semibold {styleClasses.leftSide}"
-  >
+  <div class="flex items-center gap-1.5 px-2 py-0.5 border-r font-semibold {styleClasses.leftSide}">
     {#if actionType === 'Trash'}
       <!-- Clean outline trash bin icon (no internal vertical lines) -->
       <IconDelete class="w-3.5 h-3.5" />
