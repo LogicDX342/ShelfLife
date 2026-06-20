@@ -12,7 +12,6 @@ use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
     RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus, UserTriageAction,
 };
-use crate::rules::protected_pattern_match;
 use crate::storage;
 use std::sync::OnceLock;
 
@@ -318,7 +317,6 @@ fn apply_file_action(
             destination_folder,
             rename_template,
         } => {
-            validate_not_protected_for_filesystem_change(source, config)?;
             PathScope::new(config).validate_move_destination(&destination_folder)?;
             fs::create_dir_all(&destination_folder)?;
             let destination = move_destination(source, &destination_folder, rename_template)?;
@@ -329,7 +327,6 @@ fn apply_file_action(
             undo_status = UndoStatus::Available;
         }
         FileAction::Trash => {
-            validate_not_protected_for_filesystem_change(source, config)?;
             trash::delete(source).map_err(|error| {
                 AppError::with_details(
                     "ACTION_FAILED",
@@ -660,26 +657,6 @@ fn load_or_create_tracked(
 fn validate_move_source_for_undo(path: &Path, config: &AppConfig) -> Result<(), AppError> {
     if path.exists() && PathScope::new(config).is_in_enabled_watch_target(path) {
         return Err(AppError::path_out_of_scope(path.to_string_lossy().as_ref()));
-    }
-
-    Ok(())
-}
-
-fn validate_not_protected_for_filesystem_change(
-    path: &Path,
-    config: &AppConfig,
-) -> Result<(), AppError> {
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    if let Some(pattern) = protected_pattern_match(file_name, &config.protected_patterns)? {
-        return Err(AppError::with_details(
-            "ACTION_FAILED",
-            "Protected file was not changed. Adjust protected patterns before moving, renaming, or trashing this file.",
-            true,
-            pattern,
-        ));
     }
 
     Ok(())
@@ -1057,26 +1034,6 @@ mod tests {
     }
 
     #[test]
-    fn protected_pattern_blocks_filesystem_changing_action() {
-        let fixture = Fixture::new("shelflife-test");
-        let source = fixture.write_watch_file("tax_receipt.txt", "download");
-        fixture.save_config_with_protected_patterns(vec![String::from("(?i)(tax|receipt)")]);
-
-        let error = execute_triage_action(
-            &fixture.db,
-            &path_string(&source),
-            UserTriageAction::Move {
-                destination_folder: path_string(&fixture.outside),
-            },
-        )
-        .expect_err("protected file should not be moved");
-
-        assert_eq!(error.code, "ACTION_FAILED");
-        assert!(source.exists());
-        assert!(!fixture.outside.join("tax_receipt.txt").exists());
-    }
-
-    #[test]
     fn rename_template_drops_empty_extension_trailing_dot() {
         let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("README", "download");
@@ -1096,20 +1053,6 @@ mod tests {
             .expect_err("unknown placeholder should fail");
 
         assert_eq!(error.code, "RULE_INVALID_RENAME_TEMPLATE");
-    }
-
-    #[test]
-    fn protected_pattern_still_allows_pin() {
-        let fixture = Fixture::new("shelflife-test");
-        let source = fixture.write_watch_file("tax_receipt.txt", "download");
-        fixture.save_config_with_protected_patterns(vec![String::from("(?i)(tax|receipt)")]);
-
-        let entry =
-            execute_triage_action(&fixture.db, &path_string(&source), UserTriageAction::Pin)
-                .expect("pin should remain available for protected files");
-
-        assert_eq!(entry.action_kind, AuditActionKind::Pin);
-        assert!(source.exists());
     }
 
     #[test]

@@ -85,26 +85,14 @@ impl Fixture {
         storage::save_config(&self.db, &self.config()).expect("config should save");
     }
 
-    pub fn save_config_with_protected_patterns(&self, protected_patterns: Vec<String>) {
-        self.save_config_with_targets_and_patterns(
-            vec![self.watch_target(false)],
-            protected_patterns,
-        );
-    }
-
     pub fn save_config_without_watch_targets(&self) {
-        self.save_config_with_targets_and_patterns(Vec::new(), Vec::new());
+        self.save_config_with_targets(Vec::new());
     }
 
-    pub fn save_config_with_targets_and_patterns(
-        &self,
-        watch_targets: Vec<WatchTarget>,
-        protected_patterns: Vec<String>,
-    ) {
+    pub fn save_config_with_targets(&self, watch_targets: Vec<WatchTarget>) {
         let config = AppConfig {
             watch_targets,
             safe_folder_path: path_string(&self.safe),
-            protected_patterns,
             ..AppConfig::default()
         };
         storage::save_config(&self.db, &config).expect("config should save");

@@ -88,19 +88,6 @@ pub async fn execute_dropzone_rule_group(
     for path in paths {
         let execution = (|| {
             let (_, tracked) = engine::dropzone::build_dropzone_file(&path, &config)?;
-            if crate::rules::protected_pattern_match(
-                &tracked.file_name,
-                &config.protected_patterns,
-            )?
-            .is_some()
-            {
-                return Err(AppError::new(
-                    "ACTION_FAILED",
-                    "Protected file was not changed. No file was changed.",
-                    true,
-                ));
-            }
-
             let condition_match = evaluate_conditions(
                 &tracked.file_name,
                 tracked.size_bytes,

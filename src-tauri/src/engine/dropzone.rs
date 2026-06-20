@@ -12,8 +12,7 @@ use crate::models::{
     DropzoneRuleGroup, OriginEvidence, RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
 };
 use crate::rules::conditions::evaluate_conditions;
-use crate::rules::explanation::{protected_explanation, rule_explanation};
-use crate::rules::protected_pattern_match;
+use crate::rules::explanation::rule_explanation;
 use crate::storage;
 
 pub const SHAKE_INTERVAL_MS: u64 = 1_000;
@@ -251,13 +250,6 @@ pub fn plan_rule_groups(
     let scope = PathScope::new(config);
 
     for file in files {
-        if let Some(pattern) = protected_pattern_match(&file.file_name, &config.protected_patterns)?
-        {
-            preview_only.push(protected_explanation(&file.path, file.size_bytes, pattern));
-            unmatched_files.push(file.path.clone());
-            continue;
-        }
-
         let mut selected_rule = None;
         let mut saw_preview_only = false;
         for rule in &enabled_rules {

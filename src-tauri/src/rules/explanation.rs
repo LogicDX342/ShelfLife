@@ -1,27 +1,6 @@
 use crate::models::{AutomationRule, RuleMatchExplanation, SizeCondition};
 use crate::rules::conditions::ConditionMatch;
 
-pub fn protected_explanation(
-    file_path: &str,
-    size_bytes: u64,
-    protected_pattern: String,
-) -> RuleMatchExplanation {
-    RuleMatchExplanation {
-        file_path: file_path.to_string(),
-        size_bytes: Some(size_bytes),
-        rule_id: None,
-        rule_name: None,
-        matched_extension: false,
-        matched_size: false,
-        matched_origin: None,
-        matched_filename_pattern: None,
-        blocked_by_protected_pattern: Some(protected_pattern.clone()),
-        proposed_action: None,
-        mode: None,
-        message: format!("Protected: {protected_pattern}"),
-    }
-}
-
 fn format_size_brief(bytes: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * 1024;
@@ -113,7 +92,6 @@ pub fn rule_explanation(
         matched_size: condition_match.matched_size,
         matched_origin: condition_match.matched_origin,
         matched_filename_pattern: condition_match.matched_filename_pattern,
-        blocked_by_protected_pattern: None,
         proposed_action: condition_match.matched.then(|| rule.action.clone()),
         mode: condition_match.matched.then(|| rule.mode.clone()),
         message,

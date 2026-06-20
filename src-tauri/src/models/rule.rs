@@ -71,7 +71,6 @@ pub struct RuleMatchExplanation {
     pub matched_size: bool,
     pub matched_origin: Option<String>,
     pub matched_filename_pattern: Option<String>,
-    pub blocked_by_protected_pattern: Option<String>,
     pub proposed_action: Option<RuleAction>,
     pub mode: Option<RuleMode>,
     pub message: String,

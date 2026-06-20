@@ -32,7 +32,7 @@ src-tauri/src/
 │   └── executor.rs          # Safe action execution (move, rename, trash)
 ├── rules/                   # Rule engine (no Tauri dependency)
 │   ├── mod.rs               # Re-exports
-│   ├── evaluator.rs         # Rule matching, priority ordering, protected patterns
+│   ├── evaluator.rs         # Rule matching and priority ordering
 │   ├── conditions.rs        # Extension, glob, regex, size, origin matching
 │   └── explanation.rs       # RuleMatchExplanation generation
 ├── storage/                 # redb persistence layer

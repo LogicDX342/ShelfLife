@@ -24,7 +24,6 @@ pub struct WatchTarget {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub watch_targets: Vec<WatchTarget>,
-    pub protected_patterns: Vec<String>,
     pub default_ttl_seconds: u64,
     pub stale_threshold_seconds: u64,
     pub decaying_threshold_seconds: u64,
@@ -39,9 +38,6 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             watch_targets: Vec::new(),
-            protected_patterns: vec![String::from(
-                "(?i)(tax|invoice|receipt|passport|lease|contract|project_alpha)",
-            )],
             default_ttl_seconds: 30 * 24 * 60 * 60,
             stale_threshold_seconds: 5 * 24 * 60 * 60,
             decaying_threshold_seconds: 24 * 60 * 60,

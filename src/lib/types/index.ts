@@ -73,7 +73,6 @@ export type RuleMatchExplanation = {
   matched_size: boolean;
   matched_origin: string | null;
   matched_filename_pattern: string | null;
-  blocked_by_protected_pattern: string | null;
   proposed_action: RuleAction | null;
   mode: RuleMode | null;
   message: string;
@@ -174,7 +173,6 @@ export type CloseBehavior = 'Ask' | 'HideToTray' | 'Quit';
 
 export type AppConfig = {
   watch_targets: WatchTarget[];
-  protected_patterns: string[];
   default_ttl_seconds: number;
   stale_threshold_seconds: number;
   decaying_threshold_seconds: number;

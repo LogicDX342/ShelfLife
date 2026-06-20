@@ -498,32 +498,15 @@ Rules are evaluated in this order:
 
 ```text
 1. Validate path is inside an allowed watch target.
-2. Apply global protected patterns.
-3. Apply explicit per-file pins and ignores.
-4. Evaluate enabled rules by priority.
-5. Produce explanation records.
-6. Queue proposed action based on mode.
+2. Apply explicit per-file pins and ignores.
+3. Evaluate enabled rules by priority.
+4. Produce explanation records.
+5. Queue proposed action based on mode.
 ```
 
 Automatic rule execution records failed attempts as audit entries with `UndoStatus::Failed`. A stored failed attempt for the same path and rule prevents future automatic scheduling for that pair. There is no in-memory retry/backoff state.
 
-### 8.6 Global protected patterns
-
-A master protection list runs before normal rules.
-
-Default examples:
-
-```text
-(?i)(tax|invoice|receipt|passport|lease|contract|project_alpha)
-```
-
-If a file matches a protected pattern:
-
-- It is bypass-protected.
-- It is not automatically moved (including renamed) or trashed.
-- The UI may display it as Protected if the user enables protected-file visibility.
-
-### 8.7 Rule explanations
+### 8.6 Rule explanations
 
 Each rule evaluation emits an explanation object.
 
@@ -537,7 +520,6 @@ pub struct RuleMatchExplanation {
     pub matched_size: bool,
     pub matched_origin: Option<String>,
     pub matched_filename_pattern: Option<String>,
-    pub blocked_by_protected_pattern: Option<String>,
     pub proposed_action: Option<RuleAction>,
     pub mode: Option<RuleMode>,
     pub message: String,
@@ -909,7 +891,7 @@ Decaying Card:
   expiry within configured warning window
 
 Pinned Card:
-  protected indicator
+  pinned indicator
   no automatic action
 
 Ignored Card:
@@ -962,7 +944,6 @@ Each proposed action must show:
 ```text
 Rule name
 Matched conditions
-Protected-pattern status
 Proposed action
 Mode: PreviewOnly, AskFirst, or Automatic
 Undo availability
@@ -1065,7 +1046,6 @@ cloud sync roots unless approved
 source code repositories unless approved
 external drives unless approved
 hidden files unless approved
-files matching protected patterns
 ```
 
 ### 16.5 Symlink and canonicalization rules
@@ -1168,7 +1148,6 @@ Background aggregation can update summary rows in `META_TABLE` or a future `STAT
 pub struct AppConfig {
     pub version: u32,
     pub watch_targets: Vec<WatchTarget>,
-    pub protected_patterns: Vec<String>,
     pub default_ttl_seconds: u64,
     pub stale_threshold_seconds: u64,
     pub decaying_threshold_seconds: u64,
@@ -1210,7 +1189,6 @@ Test:
 
 ```text
 rule matching
-protected pattern precedence
 freshness calculation
 expiry calculation
 path scope validation
@@ -1417,7 +1395,6 @@ PreviewOnly mode
 rule test command
 preview queue
 notification for reviewable previews
-protected-pattern precedence
 ```
 
 Exit criteria:
@@ -1449,7 +1426,6 @@ Exit criteria:
 Automatic rules are opt-in.
 User can pause automation immediately.
 All automated actions are auditable.
-Protected files are never modified automatically.
 ```
 
 ### Phase 5: v2 Features (Dropzone, ZIP Archiving, and Resource Limits)
@@ -1482,7 +1458,6 @@ App can recover missed events through reconciliation.
 Runtime owns reconciliation and automatic rule scheduling lifecycle.
 App can classify files into ambient decay states.
 App can explain every proposed action.
-App can protect files matching global protected patterns.
 App can perform user-confirmed move (with optional rename), pin, ignore, snooze, and trash actions.
 App logs every file-changing action.
 App exposes undo status for every logged action.
@@ -1566,7 +1541,6 @@ Move to Safe Folder
 Pin
 Snooze
 Ignore
-Protected
 PreviewOnly
 AskFirst
 Automatic

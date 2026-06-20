@@ -176,9 +176,7 @@ fn automatic_rule_match_for_file(
         let Some(rule_id) = &explanation.rule_id else {
             continue;
         };
-        if explanation.proposed_action.is_none()
-            || explanation.blocked_by_protected_pattern.is_some()
-        {
+        if explanation.proposed_action.is_none() {
             continue;
         }
         if matches!(explanation.proposed_action, Some(RuleAction::Ignore)) {
