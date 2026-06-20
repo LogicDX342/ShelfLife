@@ -1,138 +1,175 @@
 ## Workspace rules
 
-- Default to `rtk` for every shell command except powershell command, and reference `.agents/rules/RTK.md`.
+- Default to `rtk` for shell commands that execute external tools, and reference `.agents/rules/RTK.md`.
+- Plain PowerShell built-ins such as `Get-Content`, `Set-Location`, and `Select-String` are acceptable without `rtk`.
+- Treat the checked-in codebase as the source of truth for implementation work. `SPEC.md` is the product/technical target; when it disagrees with code, verify the code first and update docs or implementation deliberately.
 
 ## Project layout
 
-**File creation policy:** You are expected to create new files as needed to follow this structure. The directory skeleton exists with stub `mod.rs` and `index.ts` files. When implementing a feature, create the appropriate file in the correct module — do not append unrelated code to an existing file just because it already exists.
+**File creation policy:** Create new files in the module that owns the behavior. Do not append unrelated code to an existing file just because it already exists. If a feature crosses seams, keep Tauri/window code in command/runtime/dropzone modules, pure engine behavior in `engine/` or `rules/`, persistence in `storage/`, and shared structs in `models/`.
 
 ### Backend (Rust) — `src-tauri/src/`
 
 ```text
 src-tauri/src/
 ├── main.rs                  # Windows entry point only — do not add logic here
-├── lib.rs                   # Tauri builder setup, plugin init, mod declarations
-│                            #   ONLY contains: mod statements, run() with Builder
+├── lib.rs                   # Tauri builder setup, plugin init, command registration, mod declarations
+├── dropzone.rs              # Tauri/window-specific desktop dropzone monitor and positioning
+├── tray.rs                  # System tray menu setup and window lifecycle handling
 ├── commands/                # Tauri IPC command handlers (one file per domain)
 │   ├── mod.rs               # Re-exports all command functions
-│   ├── files.rs             # get_active_files, explain_file, preview_file
-│   ├── triage.rs            # execute_triage_action, undo_audit_entry
-│   ├── rules.rs             # list_rules, save_rule, test_rule, delete_rule
-│   └── config.rs            # update_watch_targets, get_config, save_config
+│   ├── config.rs            # config, close behavior, watch pause/resume, reconciliation scan
+│   ├── dropzone.rs          # dropzone preview/ingest/rule-group/hide commands
+│   ├── files.rs             # active files, rule explanations, previews, file location, directory picker
+│   ├── rules.rs             # list/save/test/delete automation rules
+│   └── triage.rs            # single/bulk triage, undo, audit listing, notifications
 ├── runtime/                 # Tauri lifecycle orchestration and background workers
-│   ├── mod.rs               # AppRuntime, setup(), sync_after_config_change()
-│   ├── reconciliation.rs    # Async/manual/periodic reconciliation orchestration
-│   └── rule_scheduler.rs    # Async/periodic automatic rule execution scheduling
+│   ├── mod.rs               # AppRuntime, setup(), watcher/dropzone sync, pause/resume
+│   ├── reconciliation.rs    # Async/manual/periodic reconciliation orchestration and events
+│   └── rule_scheduler.rs    # Async/periodic automatic rule execution scheduling and events
 ├── engine/                  # File hygiene engine (no Tauri dependency)
 │   ├── mod.rs               # Re-exports
-│   ├── watcher.rs           # notify watcher setup, debounced stable-path emission
-│   ├── quiescence.rs        # File stability checks (size + mtime confirmation)
-│   ├── reconciliation.rs    # Startup and periodic full-directory scans
-│   ├── freshness.rs         # freshness_at calculation, decay state transitions
-│   └── executor.rs          # Safe action execution (move, rename, trash)
+│   ├── dropzone.rs          # Dropzone preview planning and shake detection logic
+│   ├── executor.rs          # Safe action execution, dropzone ingest/action, undo, rename/collision handling
+│   ├── freshness.rs         # freshness_at calculation, decay state transitions, origin evidence
+│   ├── paths.rs             # PathScope, config path validation, watch/safe-folder scope checks
+│   ├── quiescence.rs        # Transient/system/hidden path checks and file stability checks
+│   ├── reconciliation.rs    # Full and incremental watched-path reconciliation
+│   ├── rule_execution.rs    # Expired automatic rule execution and failure audit entries
+│   ├── rule_refresh.rs      # Recompute tracked files after rule changes
+│   └── watcher.rs           # notify watcher setup, debounced stable-path emission
 ├── rules/                   # Rule engine (no Tauri dependency)
 │   ├── mod.rs               # Re-exports
-│   ├── evaluator.rs         # Rule matching and priority ordering
 │   ├── conditions.rs        # Extension, glob, regex, size, origin matching
-│   └── explanation.rs       # RuleMatchExplanation generation
+│   ├── evaluator.rs         # Rule decisions, effective verdicts, scope-specific evaluation
+│   ├── explanation.rs       # RuleMatchExplanation generation
+│   └── regex_cache.rs       # Shared compiled-regex cache
 ├── storage/                 # redb persistence layer
-│   ├── mod.rs               # Re-exports, Database init, table definitions
-│   ├── tracked.rs           # CRUD for TrackedFile records
-│   ├── rules.rs             # CRUD for AutomationRule records
-│   └── audit.rs             # CRUD for AuditEntry records, sequence management
-├── models/                  # Shared data types (no logic, just structs/enums)
-│   ├── mod.rs               # Re-exports all types
-│   ├── tracked_file.rs      # TrackedFile, FileDecayState, Expiry
-│   ├── rule.rs              # AutomationRule, RuleMode, RuleAction, RuleConditions
-│   ├── audit.rs             # AuditEntry, AuditActionKind, UndoStatus
-│   ├── origin.rs            # OriginEvidence
-│   ├── config.rs            # AppConfig, WatchTarget
-│   ├── preview.rs           # FilePreview, FilePreviewContent
-│   └── error.rs             # AppError, error codes
-└── tray.rs                  # System tray menu setup and event handling
+│   ├── mod.rs               # Database init, table definitions, config persistence
+│   ├── audit.rs             # AuditEntry CRUD and sequence management
+│   ├── rules.rs             # AutomationRule CRUD
+│   ├── test_util.rs         # Rust test fixtures
+│   └── tracked.rs           # TrackedFile CRUD and tracked secondary indexes
+└── models/                  # Shared data types (serde structs/enums; no business logic)
+    ├── mod.rs               # Re-exports all model types
+    ├── audit.rs             # AuditEntry, AuditActionKind, UndoStatus, bulk triage models
+    ├── config.rs            # AppConfig, WatchTarget, CloseBehavior
+    ├── dropzone.rs          # Dropzone preview/action result models
+    ├── error.rs             # AppError and redb/io/bincode conversions
+    ├── origin.rs            # OriginEvidence
+    ├── preview.rs           # FilePreview, FilePreviewContent
+    ├── rule.rs              # AutomationRule, RuleMode, RuleAction, RuleConditions
+    ├── runtime.rs           # ReconciliationReport
+    └── tracked_file.rs      # TrackedFile, FileDecayState, Expiry
 ```
 
 **Rules:**
 
-- `lib.rs` only contains `mod` declarations and the `run()` function that builds the Tauri app. No business logic.
-- `main.rs` only calls `shelflife_lib::run()`. Never modify it.
-- `commands/` files are thin wrappers — they validate input, call into `engine/`, `storage/`, or `runtime/`, and return results.
-- `runtime/` owns lifecycle state and orchestration: watcher restart/pause/resume, dropzone monitor sync, reconciliation scheduling, automatic rule execution scheduling, and runtime event emission.
-- `runtime/mod.rs` should stay small: `AppRuntime`, `setup()`, and `sync_after_config_change()`. Put reconciliation orchestration in `runtime/reconciliation.rs` and rule scheduling in `runtime/rule_scheduler.rs`.
-- `engine/` and `rules/` must NOT depend on Tauri types. They are pure Rust libraries testable without Tauri.
+- `main.rs` only calls `shelflife_lib::run()`. Never modify it unless the binary entry point itself changes.
+- `lib.rs` stays limited to module declarations, Tauri plugin setup, window event hooks, command registration, and `run()`. Do not add business logic there.
+- `commands/` files are thin Tauri seams: validate input, call `engine/`, `rules/`, `storage/`, or `runtime/`, emit events/notifications, and return results.
+- `runtime/` owns lifecycle state and orchestration: watcher restart/pause/resume, dropzone monitor sync, reconciliation scheduling, automatic rule scheduling, and runtime event emission.
+- `dropzone.rs` at the backend root is Tauri/window-specific. Pure dropzone behavior belongs in `engine/dropzone.rs`; file-changing dropzone actions belong in `engine/executor.rs`.
+- `engine/` and `rules/` must not depend on Tauri types. They may depend on storage models and redb where the current engine interface already does, but do not introduce Tauri handles or window/event concerns there.
 - `engine::watcher` must not open storage or hold database handles. It debounces events, waits for stable paths, and emits paths for `runtime/` to reconcile.
-- `models/` contains only data structures with `serde` derives. No methods beyond basic constructors.
-- `storage/` owns all redb access. Other modules never open database transactions directly, and runtime lifecycle state must not live in `storage/`.
-- Automatic rule failures are stored as audit entries. Do not reintroduce in-memory retry/backoff state unless the product spec is updated first.
+- `storage/` owns all redb transactions and table definitions. Other modules must not open redb transactions directly.
+- Keep tracked-file secondary index invariants inside `storage/`. Do not add new callers that manually coordinate `*_no_reindex` plus `rebuild_tracked_indexes` unless storage exposes that as one coherent operation.
+- `models/` contains data structures with serde derives plus basic defaults/conversions only. No workflow logic.
+- Automatic rule failures are stored as audit entries. Do not reintroduce in-memory retry/backoff state unless `SPEC.md` is updated first.
+- Archive/resource-limit v2 work is not currently implemented in the Rust model. Do not refer to `RuleAction::Archive` or `sysinfo` unless you are implementing that feature and updating `SPEC.md`.
 
 ### Frontend (Svelte 5) — `src/`
 
 ```text
 src/
 ├── app.html                      # HTML shell — do not modify unless changing <head>
-├── app.css                       # Global styles, CSS custom properties, reset
+├── app.css                       # Global styles, CSS custom properties, reset, route body variants
 ├── routes/                       # SvelteKit file-based routing
-│   ├── +layout.svelte            # Root layout: sidebar/nav, global providers
+│   ├── +layout.svelte            # Root layout, title bar/sidebar/providers, close behavior dialog
 │   ├── +layout.ts                # SSR disabled (SPA mode)
-│   ├── +page.svelte              # Dashboard (main landing page only)
-│   ├── rules/
-│   │   └── +page.svelte          # Rule editor / rule list page
-│   ├── audit/
-│   │   └── +page.svelte          # Audit log / undo page
-│   └── settings/
-│       └── +page.svelte          # Watch targets, preferences, config
-└── lib/                          # Shared code (NOT route pages)
-    ├── components/               # Reusable Svelte 5 components
-    │   ├── FileCard.svelte       # Single file card (decay state, actions)
-    │   ├── FileList.svelte       # Grouped file list with filters
-    │   ├── RuleEditor.svelte     # Single rule create/edit form
-    │   ├── AuditRow.svelte       # Single audit entry with undo button
-    │   ├── PreviewPanel.svelte   # Lazy file preview (text/image/pdf/unknown)
-    │   ├── ExplanationBadge.svelte  # Rule match explanation tooltip/card
-    │   ├── ConfirmDialog.svelte  # Action confirmation modal
-    │   └── StatusBar.svelte      # Watch status, file counts summary
-    ├── stores/                   # Svelte 5 reactive state ($state wrappers)
-    │   ├── files.svelte.ts       # Tracked file list state, refresh logic
-    │   ├── rules.svelte.ts       # Rule list state
-    │   └── audit.svelte.ts       # Audit entries state
-    ├── api/                      # Tauri IPC call wrappers (typed invoke calls)
-    │   ├── files.ts              # invoke("get_active_files"), invoke("explain_file"), etc.
-    │   ├── triage.ts             # invoke("execute_triage_action"), invoke("undo_audit_entry")
-    │   ├── rules.ts              # invoke("list_rules"), invoke("save_rule"), etc.
-    │   └── config.ts             # invoke("update_watch_targets"), invoke("get_config")
-    ├── types/                    # TypeScript type definitions mirroring Rust models
-    │   └── index.ts              # TrackedFile, AutomationRule, AuditEntry, etc.
-    └── utils/                    # Pure helper functions
-        ├── format.ts             # File size formatting, date display
-        └── decay.ts              # Decay state label/color derivation
+│   ├── +page.svelte              # Dashboard route
+│   ├── audit/+page.svelte        # Audit log route
+│   ├── browser/+page.svelte      # File browser route
+│   ├── dropzone/+page.svelte     # Dropzone window route
+│   ├── queue/+page.svelte        # Review queue route
+│   ├── rules/+page.svelte        # Rule editor/list route
+│   └── settings/+page.svelte     # Watch targets, preferences, config route
+└── lib/
+    ├── api/                      # Typed Tauri invoke wrappers only
+    │   ├── config.ts
+    │   ├── dropzone.ts
+    │   ├── files.ts
+    │   ├── rules.ts
+    │   └── triage.ts
+    ├── components/               # Product UI modules
+    │   ├── common/               # Shared shell states: PageHeader, EmptyState, LoadingState, HelpTooltip
+    │   ├── ui/                   # shadcn-svelte primitives; keep product logic out of these files
+    │   ├── AuditRow.svelte
+    │   ├── AuditView.svelte
+    │   ├── ConfirmDialog.svelte
+    │   ├── DashboardStatCard.svelte
+    │   ├── DashboardView.svelte
+    │   ├── DecayTimelineSlider.svelte
+    │   ├── DropzoneView.svelte
+    │   ├── ExplanationBadge.svelte
+    │   ├── FileBrowser.svelte
+    │   ├── FileCard.svelte
+    │   ├── PriorityStack.svelte
+    │   ├── RuleCard.svelte
+    │   ├── RuleEditor.svelte
+    │   ├── RuleList.svelte
+    │   ├── RuleTestResults.svelte
+    │   ├── RulesView.svelte
+    │   ├── SettingsView.svelte
+    │   ├── Sidebar.svelte
+    │   ├── StatusBar.svelte
+    │   ├── TitleBar.svelte
+    │   └── WatchTargetCard.svelte
+    ├── i18n/i18n.svelte.ts       # Central translation registry and language/theme state
+    ├── live/liveSnapshots.ts     # Owner of backend event names, coalesced refresh, focus refresh
+    ├── stores/                   # Svelte 5 rune state classes
+    │   ├── audit.svelte.ts
+    │   ├── files.svelte.ts
+    │   ├── notifications.svelte.ts
+    │   └── rules.svelte.ts
+    ├── types/index.ts            # TypeScript mirrors of Rust IPC models
+    ├── utils.ts                  # shadcn/classname helpers
+    └── utils/format.ts           # File size/date/error formatting
 ```
 
 **Rules:**
 
-- Route `+page.svelte` files are page-level composition only — they import components and wire up data. Keep them under ~100 lines.
-- All reusable UI goes in `src/lib/components/`. If a piece of UI appears in more than one page, extract it.
-- All Tauri IPC calls go through `src/lib/api/`. Components never call `invoke()` directly.
-- All TypeScript types mirroring Rust structs go in `src/lib/types/`.
-- Use Svelte 5 runes exclusively: `$state`, `$derived`, `$effect`. Do NOT use Svelte 4 `$:` reactive statements or `$` store subscriptions.
+- Route `+page.svelte` files are page-level composition only. They should import view components and stay small.
+- Reusable/product UI belongs in `src/lib/components/`. Shared primitives generated from shadcn-svelte live under `src/lib/components/ui/`; avoid product-specific state or commands there.
+- All Tauri IPC calls go through `src/lib/api/`. Components and stores must not call `invoke()` directly.
+- `src/lib/live/liveSnapshots.ts` owns live backend event names for files, audit entries, and reconciliation progress. Views should not register duplicate file/audit/reconciliation listeners directly.
+- All TypeScript types mirroring Rust structs go in `src/lib/types/index.ts`.
+- Use Svelte 5 runes exclusively: `$state`, `$derived`, `$effect`. Do not use Svelte 4 `$:` reactive statements or `$` store subscriptions.
 - Stores use `.svelte.ts` extension for rune support.
+- User-facing strings belong in `src/lib/i18n/i18n.svelte.ts`.
 
 ### Config files (root)
 
 ```text
 ShelfLife/
-├── package.json              # Frontend deps (pnpm)
+├── package.json              # Frontend deps/scripts (pnpm)
 ├── pnpm-lock.yaml            # Lockfile
+├── pnpm-workspace.yaml       # Workspace definition
+├── components.json           # shadcn-svelte registry/config
+├── eslint.config.js          # ESLint config
 ├── svelte.config.js          # SvelteKit adapter-static (SPA mode for Tauri)
 ├── vite.config.js            # Vite dev server (port 1420, ignores src-tauri/)
 ├── tsconfig.json             # TypeScript config
-├── static/                   # Static assets served at /
+├── static/
 │   └── favicon.png
 └── src-tauri/
     ├── Cargo.toml            # Rust dependencies
-    ├── tauri.conf.json       # Tauri app config (window, tray, bundle)
+    ├── Cargo.lock            # Rust lockfile
+    ├── tauri.conf.json       # Tauri app config, main/dropzone windows, bundle
     ├── build.rs              # Tauri build script
     ├── capabilities/
-    │   └── default.json      # IPC permissions for main window
+    │   ├── default.json      # IPC permissions for main window
+    │   └── dropzone.json     # Minimal IPC permissions for dropzone window
     └── icons/                # App icons (all sizes + .ico)
 ```
 
@@ -141,29 +178,32 @@ ShelfLife/
 ## Dev environment tips
 
 - Run `cargo tauri dev` from the root directory to spin up the Rust backend daemon and the Svelte 5 HMR frontend simultaneously.
-- Run `cargo add <crate_name> --manifest-path src-tauri/Cargo.toml` to add pure-Rust dependencies (like `redb` or `notify`) directly to the backend layer.
+- Run `cargo add <crate_name> --manifest-path src-tauri/Cargo.toml` to add pure-Rust dependencies directly to the backend layer.
 - Use `pnpm add -D <package_name>` at the root to add frontend utilities, Tailwind extensions, or UI plugins so Vite and Svelte can index them.
-- Check `src-tauri/Cargo.toml` to manage backend feature flags and `src/` for Svelte 5 application views.
+- Check `src-tauri/Cargo.toml` for backend feature flags and `src/` for Svelte 5 application views.
 - When working in Svelte components, exclusively use Svelte 5 runes (`$state`, `$derived`, `$effect`). Do not use legacy Svelte 4 `$` stores or `$` reactive assignments.
-- Do not add `#[allow(dead_code)]` annotations to code to bypass compiler warnings or lints. Fix the code instead.
-- Do not run any lint or check commands such as `pnpm verify`, as husky will run them automatically.
+- Do not add `#[allow(dead_code)]` annotations to bypass compiler warnings or lints. Fix the code instead.
+- Do not run lint or check commands such as `pnpm verify`; husky will run them automatically.
+- Do not stage changes; the user will review and commit them.
 
 ### Windows-specific notes
 
-- The target platform for v1 is **Windows only**. Do not add macOS- or Linux-specific code paths unless gated behind `#[cfg(target_os)]`.
-- Long paths (> 260 chars) may fail on older Windows configurations — use `\\?\` prefix or `std::fs::canonicalize` when handling user paths.
-- Zone.Identifier alternate data streams are read via `<filepath>:Zone.Identifier:$DATA`. Test with files downloaded through Edge/Chrome.
+- The target platform for v1/v2 work in this repo is **Windows only**. Do not add macOS- or Linux-specific behavior unless gated behind `#[cfg(target_os)]`.
+- Long paths (> 260 chars) may fail on older Windows configurations — use canonicalization carefully and preserve user-facing original paths where audit/debug output needs them.
+- Zone.Identifier alternate data streams are read via `<filepath>:Zone.Identifier:$DATA`. Test with files downloaded through Edge/Chrome when changing origin evidence.
+- Dropzone cursor monitoring uses Windows APIs through `windows-sys`; keep platform-specific code gated.
 
 ---
 
-## Testing & Validation Instructions
+## Testing & validation instructions
 
-- **Test Coverage:** Only write tests for critical business logic. Do not test boilerplate.
-- **Strict Validation:** Fix all compiler warnings, clippy lints, and frontend type mismatches until the relevant validation commands are green.
-- **Backend Commands (Tauri):** When modifying Rust code, run `cargo test --manifest-path src-tauri/Cargo.toml`
+- **Test coverage:** Only write tests for critical business logic. Do not test boilerplate.
+- **Strict validation:** Fix compiler warnings, clippy lints, and frontend type mismatches relevant to the files you changed.
+- **Backend commands (Tauri):** When modifying Rust code, run `cargo test --manifest-path src-tauri/Cargo.toml`.
+- Respect the repo instruction not to run broad frontend lint/check commands unless explicitly requested.
 
 ---
 
-## PR & Commit Instructions
+## PR & commit instructions
 
-- **Commit Style:** Strictly use conventional commits with scope(e.g., `feat:`, `fix:`, `chore:`).
+- **Commit style:** Strictly use conventional commits with a scope when applicable, e.g. `feat(dropzone):`, `fix(storage):`, `chore(docs):`.

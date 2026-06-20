@@ -26,6 +26,12 @@ Version 2 introduces:
 - **Interactive Desktop Overlay (Dropzone)**: Transparent always-on-top desktop dropzone for immediate file ingestion and triage.
 - **Resource Limit Safety**: Automated CPU and battery checking to throttle background scans.
 
+Current codebase status:
+
+- Dropzone windowing, shake-to-dropzone monitoring, preview grouping, ingest, and rule-group execution are implemented.
+- ZIP archiving is not yet represented in `RuleAction`, `AuditActionKind`, or the executor.
+- Resource limit safety is not yet implemented; `sysinfo` or an equivalent resource adapter is not currently a backend dependency.
+
 ### Non-goals for v2
 
 The second release does not include:
@@ -296,6 +302,7 @@ Each tracked file stores app-level metadata:
 pub struct TrackedFile {
     pub path: String,
     pub file_name: String,
+    pub watch_target_id: String,
     pub size_bytes: u64,
     pub first_seen_at: u64,
     pub last_observed_mtime: Option<u64>,
@@ -426,6 +433,8 @@ Default mode for every new rule: `PreviewOnly`.
 
 ### 8.2 Actions
 
+Current codebase:
+
 ```rust
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum RuleAction {
@@ -435,6 +444,13 @@ pub enum RuleAction {
         rename_template: Option<String>,
     },
     Ignore,
+}
+```
+
+Planned v2 extension:
+
+```rust
+pub enum PlannedRuleAction {
     Archive {
         archive_root: String,
         compress_level: i32,
@@ -538,6 +554,7 @@ Each rule evaluation emits an explanation object.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct RuleMatchExplanation {
     pub file_path: String,
+    pub size_bytes: Option<u64>,
     pub rule_id: Option<String>,
     pub rule_name: Option<String>,
     pub matched_extension: bool,
@@ -563,11 +580,12 @@ The UI must show this explanation before user-confirmed actions.
 - Ignore.
 - Move to Safe Folder.
 - Trash Now.
-- Archive.
 - Open file location.
 - Undo recent action where possible.
 
 Snooze resets the file's `freshness_at` to the current time plus the chosen snooze duration, temporarily suppressing decay progression. When the snooze period expires, the file resumes normal decay evaluation.
+
+Archive is planned for v2 and is not implemented in the current Rust action model.
 
 ### 9.2 Removed terminology
 
@@ -611,7 +629,7 @@ Staging means files are copied or moved only after explicit approval.
 
 ### 9.7 Archive behavior
 
-Archive processes files by packaging them into a monthly ZIP file under the user-defined archive folder (e.g., `shelflife_archive_2026-06.zip`). The original file is then safely removed, and an audit ledger entry is created allowing undo (restoring the file from the ZIP archive).
+Archive is planned v2 behavior. It will process files by packaging them into a monthly ZIP file under the user-defined archive folder (e.g., `shelflife_archive_2026-06.zip`). The original file is then safely removed, and an audit ledger entry is created allowing undo (restoring the file from the ZIP archive).
 
 Automatic movement to an internal staging directory is not considered dry run and is not enabled by default.
 
@@ -807,7 +825,7 @@ The frontend does not receive broad filesystem permissions. Rust owns all file o
 
 ```rust
 #[tauri::command]
-async fn get_active_files() -> Result<Vec<TrackedFileView>, AppError>;
+async fn get_active_files() -> Result<Vec<TrackedFile>, AppError>;
 
 #[tauri::command]
 async fn explain_file(path: String) -> Result<Vec<RuleMatchExplanation>, AppError>;
@@ -815,24 +833,8 @@ async fn explain_file(path: String) -> Result<Vec<RuleMatchExplanation>, AppErro
 #[tauri::command]
 async fn preview_file(path: String) -> Result<FilePreview, AppError>;
 
-// FilePreview is defined as:
-//
-// #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-// pub enum FilePreviewContent {
-//     Text { snippet: String, truncated: bool },
-//     Image { width: u32, height: u32, format: String, thumbnail_path: Option<String> },
-//     Pdf { page_count: Option<u32>, title: Option<String> },
-//     Unknown,
-// }
-//
-// #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-// pub struct FilePreview {
-//     pub path: String,
-//     pub file_name: String,
-//     pub size_bytes: u64,
-//     pub mime_type: Option<String>,
-//     pub content: FilePreviewContent,
-// }
+#[tauri::command]
+async fn open_file_location(path: String) -> Result<(), AppError>;
 
 #[tauri::command]
 async fn execute_triage_action(
@@ -841,7 +843,34 @@ async fn execute_triage_action(
 ) -> Result<AuditEntry, AppError>;
 
 #[tauri::command]
+async fn execute_bulk_triage_action(
+    paths: Vec<String>,
+    action: UserTriageAction,
+) -> Result<BulkTriageResult, AppError>;
+
+#[tauri::command]
 async fn undo_audit_entry(audit_id: String) -> Result<AuditEntry, AppError>;
+
+#[tauri::command]
+async fn list_audit_entries() -> Result<Vec<AuditEntry>, AppError>;
+
+#[tauri::command]
+async fn preview_dropzone_files(paths: Vec<String>) -> Result<DropzonePreview, AppError>;
+
+#[tauri::command]
+async fn execute_dropzone_ingest(
+    paths: Vec<String>,
+    watch_target_id: String,
+) -> Result<DropzoneActionResult, AppError>;
+
+#[tauri::command]
+async fn execute_dropzone_rule_group(
+    rule_id: String,
+    paths: Vec<String>,
+) -> Result<DropzoneActionResult, AppError>;
+
+#[tauri::command]
+async fn hide_dropzone() -> Result<(), AppError>;
 
 #[tauri::command]
 async fn list_rules() -> Result<Vec<AutomationRule>, AppError>;
@@ -853,7 +882,37 @@ async fn save_rule(rule: AutomationRule) -> Result<AutomationRule, AppError>;
 async fn test_rule(rule: AutomationRule) -> Result<Vec<RuleMatchExplanation>, AppError>;
 
 #[tauri::command]
+async fn delete_rule(id: String) -> Result<(), AppError>;
+
+#[tauri::command]
+async fn get_config() -> Result<AppConfig, AppError>;
+
+#[tauri::command]
+async fn save_config(config: AppConfig) -> Result<AppConfig, AppError>;
+
+#[tauri::command]
+async fn resolve_close_request(behavior: CloseBehavior, remember: bool) -> Result<(), AppError>;
+
+#[tauri::command]
 async fn update_watch_targets(targets: Vec<WatchTarget>) -> Result<(), AppError>;
+
+#[tauri::command]
+async fn run_reconciliation_scan() -> Result<(), AppError>;
+
+#[tauri::command]
+async fn is_reconciliation_active() -> Result<bool, AppError>;
+
+#[tauri::command]
+async fn pause_watching() -> Result<(), AppError>;
+
+#[tauri::command]
+async fn resume_watching() -> Result<(), AppError>;
+
+#[tauri::command]
+async fn select_directory(
+    title: Option<String>,
+    default_path: Option<String>,
+) -> Result<Option<String>, AppError>;
 ```
 
 ### 12.2 Events
@@ -862,11 +921,13 @@ async fn update_watch_targets(targets: Vec<WatchTarget>) -> Result<(), AppError>
 file_indexed
 file_updated
 file_removed
-rule_preview_generated
 action_completed
 action_failed
 audit_updated
+reconciliation_started
+reconciliation_progress
 reconciliation_completed
+close_behavior_requested
 ```
 
 Events are for background updates. Commands are for user-initiated requests and operations that need responses.
@@ -1011,9 +1072,10 @@ The dashboard window is the primary UI. It may be hidden instead of destroyed, b
 
 The dropzone is an optional, transparent desktop overlay:
 
-- Rendered as a small circular UI element anchored to the screen corner.
-- Dragging a file over the dropzone runs rule evaluation and shows immediate actions.
-- Right-clicking opens settings and scanning options.
+- Rendered in its own transparent always-on-top Tauri window at `/dropzone`.
+- When enabled, dragging files and shaking the cursor shows the dropzone near the cursor.
+- Dropped files are previewed, grouped by effective rule, and can be moved into a watch target or processed through executable rule groups.
+- PreviewOnly rule groups are shown for explanation but cannot change files.
 - Technical implementation requires:
   ```text
   transparent: true
@@ -1181,8 +1243,14 @@ Background aggregation can update summary rows in `META_TABLE` or a future `STAT
 
 ```rust
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub enum CloseBehavior {
+    Ask,
+    HideToTray,
+    Quit,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct AppConfig {
-    pub version: u32,
     pub watch_targets: Vec<WatchTarget>,
     pub default_ttl_seconds: u64,
     pub stale_threshold_seconds: u64,
@@ -1190,6 +1258,8 @@ pub struct AppConfig {
     pub safe_folder_path: String,
     pub notifications_enabled: bool,
     pub start_at_login: bool,
+    pub close_behavior: CloseBehavior,
+    pub dropzone_enabled: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -1212,6 +1282,8 @@ stale_threshold_seconds: 5 days
 decaying_threshold_seconds: 24 hours
 notifications_enabled: true
 start_at_login: false
+close_behavior: Ask
+dropzone_enabled: false
 recursive: false for Desktop, true or false user-selected for Downloads
 ```
 
@@ -1525,6 +1597,14 @@ Code builds and tests successfully on Windows 11.
 
 Status: in progress.
 
+Current codebase:
+
+```text
+Implemented: dropzone window, shake monitor, preview grouping, watch-target ingest, rule-group execution.
+Not implemented: ZIP archive RuleAction/AuditActionKind/executor behavior.
+Not implemented: CPU/battery resource throttling or sysinfo dependency.
+```
+
 Validation commands:
 
 ```text
@@ -1605,4 +1685,4 @@ The product should sound calm, precise, and reversible.
 
 ## 26. Summary
 
-shelflife is a local-first desktop file hygiene assistant. The v2 specification prioritizes user trust, clear explanations, recoverable actions, and conservative automation. The revised product supports drag-and-drop workspace interaction via a desktop dropzone overlay, safe compression optimizations via monthly ZIP archiving, and strict background resource throttling to ensure minimal host system footprint.
+shelflife is a local-first desktop file hygiene assistant. The v2 specification prioritizes user trust, clear explanations, recoverable actions, and conservative automation. The revised product targets drag-and-drop workspace interaction via a desktop dropzone overlay, safe compression optimizations via monthly ZIP archiving, and strict background resource throttling to ensure minimal host system footprint.
