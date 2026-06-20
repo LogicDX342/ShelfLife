@@ -324,19 +324,3 @@
     onConfirm={confirmPendingAction}
   />
 </Card.Root>
-
-<style>
-  @keyframes expand {
-    from {
-      opacity: 0;
-      transform: translateY(-5px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  .animate-expand {
-    animation: expand 0.2s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
-  }
-</style>

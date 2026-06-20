@@ -1,6 +1,7 @@
 <script lang="ts">
   import IconChevronDown from '@lucide/svelte/icons/chevron-down';
 
+  import HelpTooltip from '$lib/components/common/HelpTooltip.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
@@ -109,15 +110,20 @@
 
   {#if expanded}
     <div
-      class="grid grid-cols-1 md:grid-cols-[minmax(0,12rem)_1fr] gap-3 md:items-end border-t border-fluent-border-light dark:border-fluent-border-dark pt-3 animate-expand"
+      class="grid grid-cols-1 md:grid-cols-[minmax(0,14rem)_1fr] gap-3 md:items-end border-t border-fluent-border-light dark:border-fluent-border-dark pt-3 animate-expand"
     >
       <div class="flex flex-col gap-1.5">
-        <Label for="target-ttl-{target.id}">{i18n.t('settings.targetTtlDays')}</Label>
+        <div class="flex items-center gap-1.5">
+          <Label class="text-xs" for="target-ttl-{target.id}"
+            >{i18n.t('settings.folderDefaultTtlDays')}</Label
+          >
+          <HelpTooltip content={i18n.t('settings.folderDefaultTtlHelp')} />
+        </div>
         <Input
           id="target-ttl-{target.id}"
           type="number"
           min="1"
-          placeholder={inheritedTtlDays.toString()}
+          placeholder={i18n.t('settings.folderDefaultTtlPlaceholder')}
           bind:value={ttlDays}
           onchange={commitTtl}
         />
@@ -125,19 +131,3 @@
     </div>
   {/if}
 </Card.Root>
-
-<style>
-  @keyframes expand {
-    from {
-      opacity: 0;
-      transform: translateY(-5px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  .animate-expand {
-    animation: expand 0.2s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
-  }
-</style>

@@ -280,9 +280,11 @@
             </Select.Trigger>
             <Select.Content>
               <Select.Item value="PreviewOnly" label={i18n.t('rules.modePreviewOnly')} />
-              {#if actionKind !== 'Ignore'}
-                <Select.Item value="AskFirst" label={i18n.t('rules.modeAskFirst')} />
-              {/if}
+              <Select.Item
+                value="AskFirst"
+                label={i18n.t('rules.modeAskFirst')}
+                disabled={actionKind === 'Ignore'}
+              />
               <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
             </Select.Content>
           </Select.Root>

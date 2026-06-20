@@ -4,10 +4,11 @@
   import { listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
 
+  import EmptyState from '$lib/components/common/EmptyState.svelte';
+  import LoadingState from '$lib/components/common/LoadingState.svelte';
+  import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
-  import * as Empty from '$lib/components/ui/empty';
   import * as InputGroup from '$lib/components/ui/input-group';
-  import { Spinner } from '$lib/components/ui/spinner';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
 
@@ -86,18 +87,9 @@
 
 <div class="h-full flex flex-col min-h-0 relative gap-6">
   <!-- Header -->
-  <header
-    class="flex flex-col md:flex-row md:items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0 gap-4"
-  >
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">{i18n.t('nav.queue')}</h1>
-      <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-        {i18n.t('dashboard.subtitle')}
-      </p>
-    </div>
-
-    <!-- Search Input -->
-    <div>
+  <PageHeader title={i18n.t('nav.queue')} subtitle={i18n.t('dashboard.subtitle')}>
+    {#snippet actions()}
+      <!-- Search Input -->
       <InputGroup.Root>
         <InputGroup.Input
           type="text"
@@ -108,8 +100,8 @@
           <IconSearch />
         </InputGroup.Addon>
       </InputGroup.Root>
-    </div>
-  </header>
+    {/snippet}
+  </PageHeader>
 
   <!-- Status Summary Band -->
   <div class="flex-shrink-0">
@@ -124,24 +116,13 @@
         <p class="text-sm mt-1">{filesState.error}</p>
       </div>
     {:else if filesState.loading && filesState.files.length === 0}
-      <div class="py-12 flex flex-col items-center justify-center gap-3">
-        <Spinner class="h-8 w-8 text-primary" />
-        <span class="text-sm text-muted-foreground">{i18n.t('dashboard.loadingQueue')}</span>
-      </div>
+      <LoadingState label={i18n.t('dashboard.loadingQueue')} />
     {:else if filteredFiles.length === 0}
-      <Empty.Root class="border bg-muted/30">
-        <Empty.Header>
-          <Empty.Media>
-            <IconDocument
-              class="h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50"
-            />
-          </Empty.Media>
-          <Empty.Title>{i18n.t('dashboard.noFiles')}</Empty.Title>
-          <Empty.Description>
-            {i18n.t('dashboard.noFilesDesc')}
-          </Empty.Description>
-        </Empty.Header>
-      </Empty.Root>
+      <EmptyState
+        icon={IconDocument}
+        title={i18n.t('dashboard.noFiles')}
+        description={i18n.t('dashboard.noFilesDesc')}
+      />
     {:else}
       <div class="space-y-4">
         {#each filteredFiles.slice(0, visibleLimit) as file (file.path)}

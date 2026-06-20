@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
 
   import { deleteRule, saveRule, testRule } from '$lib/api/rules';
+  import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
@@ -84,16 +85,8 @@
 </script>
 
 <div class="h-full flex flex-col min-h-0 relative">
-  <header
-    class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0"
-  >
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">{i18n.t('rules.title')}</h1>
-      <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-        {i18n.t('rules.subtitle')}
-      </p>
-    </div>
-    <div class="flex items-center gap-2">
+  <PageHeader title={i18n.t('rules.title')} subtitle={i18n.t('rules.subtitle')}>
+    {#snippet actions()}
       <Button variant="outline" onclick={() => rulesState.refresh()}>
         {i18n.t('rules.refresh')}
       </Button>
@@ -105,8 +98,8 @@
       >
         + {i18n.t('rules.newRule')}
       </Button>
-    </div>
-  </header>
+    {/snippet}
+  </PageHeader>
 
   <div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
     {#if showNewEditor || editingRule}

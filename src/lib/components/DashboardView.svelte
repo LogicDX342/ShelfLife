@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
+  import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
 
@@ -13,14 +14,7 @@
 </script>
 
 <div class="h-full flex flex-col gap-6">
-  <header
-    class="border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0"
-  >
-    <h1 class="text-2xl font-bold tracking-tight">{i18n.t('nav.dashboard')}</h1>
-    <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-      {i18n.t('dashboard.welcome')}
-    </p>
-  </header>
+  <PageHeader title={i18n.t('nav.dashboard')} subtitle={i18n.t('dashboard.welcome')} />
 
   <div class="space-y-6">
     <StatusBar files={filesState.files} />

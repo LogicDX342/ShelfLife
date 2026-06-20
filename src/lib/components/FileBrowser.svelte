@@ -6,10 +6,11 @@
 
   import { getConfig } from '$lib/api/config';
   import { executeBulkTriageAction } from '$lib/api/triage';
+  import EmptyState from '$lib/components/common/EmptyState.svelte';
+  import PageHeader from '$lib/components/common/PageHeader.svelte';
   import * as Breadcrumb from '$lib/components/ui/breadcrumb';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
-  import * as Empty from '$lib/components/ui/empty';
   import { Input } from '$lib/components/ui/input';
   import * as Select from '$lib/components/ui/select';
   import { i18n } from '$lib/i18n/i18n.svelte';
@@ -278,40 +279,38 @@
 
 <div class="h-full flex flex-col min-h-0 relative gap-6">
   <!-- Header & Breadcrumbs -->
-  <header
-    class="border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0"
-  >
-    <h1 class="text-2xl font-bold tracking-tight">{i18n.t('nav.browser')}</h1>
-
-    <!-- Breadcrumbs Navigation -->
-    <Breadcrumb.Root class="mt-2">
-      <Breadcrumb.List>
-        {#each breadcrumbs as crumb, index (crumb.path)}
-          {#if index > 0}
-            <Breadcrumb.Separator />
-          {/if}
-          <Breadcrumb.Item>
-            {#if index === breadcrumbs.length - 1}
-              <Breadcrumb.Page class="font-semibold text-foreground">
-                {crumb.name}
-              </Breadcrumb.Page>
-            {:else}
-              <Breadcrumb.Link
-                href=""
-                onclick={(e) => {
-                  e.preventDefault();
-                  currentDirectory = crumb.path;
-                }}
-                class="cursor-pointer"
-              >
-                {crumb.name}
-              </Breadcrumb.Link>
+  <PageHeader title={i18n.t('nav.browser')}>
+    {#snippet extra()}
+      <!-- Breadcrumbs Navigation -->
+      <Breadcrumb.Root class="mt-2">
+        <Breadcrumb.List>
+          {#each breadcrumbs as crumb, index (crumb.path)}
+            {#if index > 0}
+              <Breadcrumb.Separator />
             {/if}
-          </Breadcrumb.Item>
-        {/each}
-      </Breadcrumb.List>
-    </Breadcrumb.Root>
-  </header>
+            <Breadcrumb.Item>
+              {#if index === breadcrumbs.length - 1}
+                <Breadcrumb.Page class="font-semibold text-foreground">
+                  {crumb.name}
+                </Breadcrumb.Page>
+              {:else}
+                <Breadcrumb.Link
+                  href=""
+                  onclick={(e) => {
+                    e.preventDefault();
+                    currentDirectory = crumb.path;
+                  }}
+                  class="cursor-pointer"
+                >
+                  {crumb.name}
+                </Breadcrumb.Link>
+              {/if}
+            </Breadcrumb.Item>
+          {/each}
+        </Breadcrumb.List>
+      </Breadcrumb.Root>
+    {/snippet}
+  </PageHeader>
 
   <!-- Contents List -->
   <div class="flex-1 overflow-y-auto space-y-6 pb-24 pr-1">
@@ -450,19 +449,11 @@
 
     <!-- Empty Folder Screen -->
     {#if directoryContents.folders.length === 0 && directoryContents.files.length === 0}
-      <Empty.Root class="border bg-muted/30">
-        <Empty.Header>
-          <Empty.Media>
-            <IconFolderOpen
-              class="h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50"
-            />
-          </Empty.Media>
-          <Empty.Title>{i18n.t('browser.emptyFolder')}</Empty.Title>
-          <Empty.Description>
-            {i18n.t('browser.emptyFolderDesc')}
-          </Empty.Description>
-        </Empty.Header>
-      </Empty.Root>
+      <EmptyState
+        icon={IconFolderOpen}
+        title={i18n.t('browser.emptyFolder')}
+        description={i18n.t('browser.emptyFolderDesc')}
+      />
     {/if}
   </div>
 
@@ -522,19 +513,3 @@
   onCancel={() => (confirmBulk = false)}
   onConfirm={runBulkAction}
 />
-
-<style>
-  @keyframes slide-up {
-    from {
-      transform: translateY(20px);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-  .animate-slide-up {
-    animation: slide-up 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
-  }
-</style>

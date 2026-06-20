@@ -1,8 +1,8 @@
 <script lang="ts">
   import IconDocumentBulletList from '@lucide/svelte/icons/list-checks';
 
-  import * as Empty from '$lib/components/ui/empty';
-  import { Spinner } from '$lib/components/ui/spinner';
+  import EmptyState from '$lib/components/common/EmptyState.svelte';
+  import LoadingState from '$lib/components/common/LoadingState.svelte';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { AutomationRule } from '$lib/types';
 
@@ -28,26 +28,13 @@
 </script>
 
 {#if loading && rules.length === 0}
-  <div class="py-12 flex flex-col items-center justify-center gap-3">
-    <Spinner class="h-8 w-8 text-primary" />
-    <span class="text-sm text-muted-foreground">
-      {i18n.t('rules.loading')}
-    </span>
-  </div>
+  <LoadingState label={i18n.t('rules.loading')} />
 {:else if rules.length === 0}
-  <Empty.Root class="border bg-muted/30">
-    <Empty.Header>
-      <Empty.Media>
-        <IconDocumentBulletList
-          class="h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50"
-        />
-      </Empty.Media>
-      <Empty.Title>{i18n.t('rules.noRules')}</Empty.Title>
-      <Empty.Description>
-        {i18n.t('rules.noRulesDesc')}
-      </Empty.Description>
-    </Empty.Header>
-  </Empty.Root>
+  <EmptyState
+    icon={IconDocumentBulletList}
+    title={i18n.t('rules.noRules')}
+    description={i18n.t('rules.noRulesDesc')}
+  />
 {:else}
   <section class="space-y-3">
     {#each rules as rule (rule.id)}

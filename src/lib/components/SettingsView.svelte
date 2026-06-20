@@ -11,6 +11,8 @@
     updateWatchTargets,
   } from '$lib/api/config';
   import { selectDirectory } from '$lib/api/files';
+  import HelpTooltip from '$lib/components/common/HelpTooltip.svelte';
+  import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Input } from '$lib/components/ui/input';
@@ -221,14 +223,7 @@
 
 <div class="h-full flex flex-col min-h-0 relative">
   <!-- Header -->
-  <header
-    class="border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0"
-  >
-    <h1 class="text-2xl font-bold tracking-tight">{i18n.t('settings.title')}</h1>
-    <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-      {i18n.t('settings.subtitle')}
-    </p>
-  </header>
+  <PageHeader title={i18n.t('settings.title')} subtitle={i18n.t('settings.subtitle')} />
 
   <!-- Scrollable content -->
   <div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
@@ -349,15 +344,10 @@
                 >
                   <Item.Content class="flex flex-col gap-0.5">
                     <Item.Title
-                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200"
+                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex"
                     >
                       {i18n.t('settings.notifications')}
                     </Item.Title>
-                    <Item.Description
-                      class="text-[11px] text-fluent-muted-light dark:text-fluent-muted-dark leading-normal line-clamp-none"
-                    >
-                      {i18n.t('settings.notificationsDesc')}
-                    </Item.Description>
                   </Item.Content>
                   <Item.Actions class="flex-shrink-0 ml-4">
                     <Switch
@@ -376,15 +366,10 @@
                 >
                   <Item.Content class="flex flex-col gap-0.5">
                     <Item.Title
-                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200"
+                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex"
                     >
                       {i18n.t('settings.startAtLogin')}
                     </Item.Title>
-                    <Item.Description
-                      class="text-[11px] text-fluent-muted-light dark:text-fluent-muted-dark leading-normal line-clamp-none"
-                    >
-                      {i18n.t('settings.startAtLoginDesc')}
-                    </Item.Description>
                   </Item.Content>
                   <Item.Actions class="flex-shrink-0 ml-4">
                     <Switch
@@ -406,12 +391,8 @@
                       class="text-xs font-semibold text-neutral-800 dark:text-neutral-200"
                     >
                       {i18n.t('settings.dropzone')}
+                      <HelpTooltip content={i18n.t('settings.dropzoneDesc')} />
                     </Item.Title>
-                    <Item.Description
-                      class="text-[11px] text-fluent-muted-light dark:text-fluent-muted-dark leading-normal line-clamp-none"
-                    >
-                      {i18n.t('settings.dropzoneDesc')}
-                    </Item.Description>
                   </Item.Content>
                   <Item.Actions class="flex-shrink-0 ml-4">
                     <Switch

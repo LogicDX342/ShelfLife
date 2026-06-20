@@ -12,6 +12,7 @@
   import TitleBar from '$lib/components/TitleBar.svelte';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Toaster } from '$lib/components/ui/sonner';
+  import * as Tooltip from '$lib/components/ui/tooltip';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { CloseBehavior } from '$lib/types';
@@ -59,42 +60,44 @@
 {#if isDropzoneRoute}
   {@render children()}
 {:else}
-  <div
-    class="app-container h-screen overflow-hidden flex flex-col bg-fluent-bg-light dark:bg-fluent-bg-dark text-fluent-text-light dark:text-fluent-text-dark transition-colors duration-200 relative"
-  >
-    <!-- Custom Title Bar -->
-    <TitleBar />
-
-    <div class="app-shell flex-1 overflow-hidden flex flex-row">
-      <!-- Sidebar -->
-      <Sidebar />
-
-      <!-- Page Content -->
-      <main
-        class="flex-1 overflow-hidden px-6 pb-6 pt-12 md:px-10 md:pb-8 md:pt-14 flex justify-center"
-      >
-        <div class="max-w-6xl w-full h-full flex flex-col min-h-0">
-          {@render children()}
-        </div>
-      </main>
-    </div>
-
-    <!-- Toast Notification System -->
-    <Toaster richColors position="bottom-right" />
-    <ConfirmDialog
-      open={closePromptOpen}
-      title={i18n.t('closeDialog.title')}
-      message={i18n.t('closeDialog.message')}
-      cancelLabel={i18n.t('closeDialog.quit')}
-      confirmLabel={i18n.t('closeDialog.keepRunning')}
-      disabled={resolvingCloseBehavior}
-      onCancel={() => chooseCloseBehavior('Quit')}
-      onConfirm={() => chooseCloseBehavior('HideToTray')}
+  <Tooltip.Provider delayDuration={150}>
+    <div
+      class="app-container h-screen overflow-hidden flex flex-col bg-fluent-bg-light dark:bg-fluent-bg-dark text-fluent-text-light dark:text-fluent-text-dark transition-colors duration-200 relative"
     >
-      <label class="inline-flex items-center gap-2 text-sm select-none">
-        <Checkbox bind:checked={rememberCloseBehavior} disabled={resolvingCloseBehavior} />
-        <span>{i18n.t('closeDialog.remember')}</span>
-      </label>
-    </ConfirmDialog>
-  </div>
+      <!-- Custom Title Bar -->
+      <TitleBar />
+
+      <div class="app-shell flex-1 overflow-hidden flex flex-row">
+        <!-- Sidebar -->
+        <Sidebar />
+
+        <!-- Page Content -->
+        <main
+          class="flex-1 overflow-hidden px-6 pb-6 pt-12 md:px-10 md:pb-8 md:pt-14 flex justify-center"
+        >
+          <div class="max-w-6xl w-full h-full flex flex-col min-h-0">
+            {@render children()}
+          </div>
+        </main>
+      </div>
+
+      <!-- Toast Notification System -->
+      <Toaster richColors position="bottom-right" />
+      <ConfirmDialog
+        open={closePromptOpen}
+        title={i18n.t('closeDialog.title')}
+        message={i18n.t('closeDialog.message')}
+        cancelLabel={i18n.t('closeDialog.quit')}
+        confirmLabel={i18n.t('closeDialog.keepRunning')}
+        disabled={resolvingCloseBehavior}
+        onCancel={() => chooseCloseBehavior('Quit')}
+        onConfirm={() => chooseCloseBehavior('HideToTray')}
+      >
+        <label class="inline-flex items-center gap-2 text-sm select-none">
+          <Checkbox bind:checked={rememberCloseBehavior} disabled={resolvingCloseBehavior} />
+          <span>{i18n.t('closeDialog.remember')}</span>
+        </label>
+      </ConfirmDialog>
+    </div>
+  </Tooltip.Provider>
 {/if}

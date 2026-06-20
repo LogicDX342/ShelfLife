@@ -4,9 +4,10 @@
   import { onMount } from 'svelte';
 
   import AuditRow from '$lib/components/AuditRow.svelte';
+  import EmptyState from '$lib/components/common/EmptyState.svelte';
+  import LoadingState from '$lib/components/common/LoadingState.svelte';
+  import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
-  import * as Empty from '$lib/components/ui/empty';
-  import { Spinner } from '$lib/components/ui/spinner';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { auditState } from '$lib/stores/audit.svelte';
 
@@ -30,19 +31,13 @@
 
 <div class="h-full flex flex-col min-h-0 relative">
   <!-- Header -->
-  <header
-    class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0"
-  >
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">{i18n.t('audit.title')}</h1>
-      <p class="text-sm text-fluent-muted-light dark:text-fluent-muted-dark mt-1">
-        {i18n.t('audit.subtitle')}
-      </p>
-    </div>
-    <Button variant="outline" onclick={() => auditState.refresh()}>
-      {i18n.t('rules.refresh')}
-    </Button>
-  </header>
+  <PageHeader title={i18n.t('audit.title')} subtitle={i18n.t('audit.subtitle')}>
+    {#snippet actions()}
+      <Button variant="outline" onclick={() => auditState.refresh()}>
+        {i18n.t('rules.refresh')}
+      </Button>
+    {/snippet}
+  </PageHeader>
 
   <!-- Scrollable content -->
   <div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
@@ -52,24 +47,13 @@
         {auditState.error}
       </div>
     {:else if auditState.loading && auditState.entries.length === 0}
-      <div class="py-12 flex flex-col items-center justify-center gap-3">
-        <Spinner class="h-8 w-8 text-primary" />
-        <span class="text-sm text-muted-foreground">{i18n.t('audit.loading')}</span>
-      </div>
+      <LoadingState label={i18n.t('audit.loading')} />
     {:else if auditState.entries.length === 0}
-      <Empty.Root class="border bg-muted/30">
-        <Empty.Header>
-          <Empty.Media>
-            <IconHistory
-              class="h-12 w-12 text-fluent-muted-light dark:text-fluent-muted-dark opacity-50"
-            />
-          </Empty.Media>
-          <Empty.Title>{i18n.t('audit.noLogs')}</Empty.Title>
-          <Empty.Description>
-            {i18n.t('audit.noLogsDesc')}
-          </Empty.Description>
-        </Empty.Header>
-      </Empty.Root>
+      <EmptyState
+        icon={IconHistory}
+        title={i18n.t('audit.noLogs')}
+        description={i18n.t('audit.noLogsDesc')}
+      />
     {:else}
       <!-- Timeline Container -->
       <div
