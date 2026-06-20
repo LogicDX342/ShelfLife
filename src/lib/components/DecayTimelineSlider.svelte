@@ -131,7 +131,7 @@
       min={1}
       {max}
       step={1}
-      class="relative flex w-full touch-none items-center select-none data-disabled:opacity-50 h-5"
+      class="relative flex w-full touch-none items-center select-none data-disabled:opacity-50 h-0"
       onValueChange={handleValueChange}
       onValueCommit={onCommit}
     >

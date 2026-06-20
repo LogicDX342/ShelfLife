@@ -277,229 +277,224 @@
   }
 </script>
 
-<div class="h-full flex flex-col min-h-0 relative gap-6">
-  <!-- Header & Breadcrumbs -->
-  <PageHeader title={i18n.t('nav.browser')}>
-    {#snippet extra()}
-      <!-- Breadcrumbs Navigation -->
-      <Breadcrumb.Root class="mt-2">
-        <Breadcrumb.List>
-          {#each breadcrumbs as crumb, index (crumb.path)}
-            {#if index > 0}
-              <Breadcrumb.Separator />
+<PageHeader title={i18n.t('nav.browser')}>
+  {#snippet extra()}
+    <!-- Breadcrumbs Navigation -->
+    <Breadcrumb.Root class="mt-2">
+      <Breadcrumb.List>
+        {#each breadcrumbs as crumb, index (crumb.path)}
+          {#if index > 0}
+            <Breadcrumb.Separator />
+          {/if}
+          <Breadcrumb.Item>
+            {#if index === breadcrumbs.length - 1}
+              <Breadcrumb.Page class="font-semibold text-foreground">
+                {crumb.name}
+              </Breadcrumb.Page>
+            {:else}
+              <Breadcrumb.Link
+                href=""
+                onclick={(e) => {
+                  e.preventDefault();
+                  currentDirectory = crumb.path;
+                }}
+                class="cursor-pointer"
+              >
+                {crumb.name}
+              </Breadcrumb.Link>
             {/if}
-            <Breadcrumb.Item>
-              {#if index === breadcrumbs.length - 1}
-                <Breadcrumb.Page class="font-semibold text-foreground">
-                  {crumb.name}
-                </Breadcrumb.Page>
-              {:else}
-                <Breadcrumb.Link
-                  href=""
-                  onclick={(e) => {
-                    e.preventDefault();
-                    currentDirectory = crumb.path;
-                  }}
-                  class="cursor-pointer"
+          </Breadcrumb.Item>
+        {/each}
+      </Breadcrumb.List>
+    </Breadcrumb.Root>
+  {/snippet}
+</PageHeader>
+
+<!-- Contents List -->
+<div class="flex-1 overflow-y-auto space-y-6 pb-24 pr-1 mt-6">
+  <!-- Folders Section -->
+  {#if directoryContents.folders.length > 0}
+    <div>
+      <h2
+        class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark mb-3"
+      >
+        {i18n.t('browser.folders')}
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {#each directoryContents.folders.slice(0, visibleFoldersCount) as folder (folder.path)}
+          <Button
+            onclick={() => (currentDirectory = folder.path)}
+            variant="outline"
+            class="group h-auto justify-between p-4 text-left"
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <!-- Folder Icon -->
+              <IconFolder
+                class="w-8 h-8 text-primary/80 group-hover:scale-105 transition-transform flex-shrink-0"
+              />
+              <div class="min-w-0">
+                <h3
+                  class="text-sm font-semibold truncate text-fluent-text-light dark:text-fluent-text-dark"
+                  title={folder.name}
                 >
-                  {crumb.name}
-                </Breadcrumb.Link>
-              {/if}
-            </Breadcrumb.Item>
-          {/each}
-        </Breadcrumb.List>
-      </Breadcrumb.Root>
-    {/snippet}
-  </PageHeader>
-
-  <!-- Contents List -->
-  <div class="flex-1 overflow-y-auto space-y-6 pb-24 pr-1">
-    <!-- Folders Section -->
-    {#if directoryContents.folders.length > 0}
-      <div>
-        <h2
-          class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark mb-3"
-        >
-          {i18n.t('browser.folders')}
-        </h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {#each directoryContents.folders.slice(0, visibleFoldersCount) as folder (folder.path)}
-            <Button
-              onclick={() => (currentDirectory = folder.path)}
-              variant="outline"
-              class="group h-auto justify-between p-4 text-left"
-            >
-              <div class="flex items-center gap-3 min-w-0">
-                <!-- Folder Icon -->
-                <IconFolder
-                  class="w-8 h-8 text-primary/80 group-hover:scale-105 transition-transform flex-shrink-0"
-                />
-                <div class="min-w-0">
-                  <h3
-                    class="text-sm font-semibold truncate text-fluent-text-light dark:text-fluent-text-dark"
-                    title={folder.name}
-                  >
-                    {folder.name}
-                  </h3>
-                  <p
-                    class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark truncate mt-0.5"
-                    title={folder.path}
-                  >
-                    {folder.filesCount === 1
-                      ? i18n.t('browser.fileCountSingular', { count: folder.filesCount })
-                      : i18n.t('browser.fileCountPlural', { count: folder.filesCount })}
-                  </p>
-                </div>
+                  {folder.name}
+                </h3>
+                <p
+                  class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark truncate mt-0.5"
+                  title={folder.path}
+                >
+                  {folder.filesCount === 1
+                    ? i18n.t('browser.fileCountSingular', { count: folder.filesCount })
+                    : i18n.t('browser.fileCountPlural', { count: folder.filesCount })}
+                </p>
               </div>
+            </div>
 
-              <!-- Worst state indicator dot -->
-              <span class="flex h-2 w-2 relative flex-shrink-0">
-                {#if folder.worstState === 'Decaying' || folder.worstState === 'Stale'}
-                  <span
-                    class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 {getWorstStateColors(
-                      folder.worstState,
-                    ).split(' ')[0]}"
-                  ></span>
-                {/if}
+            <!-- Worst state indicator dot -->
+            <span class="flex h-2 w-2 relative flex-shrink-0">
+              {#if folder.worstState === 'Decaying' || folder.worstState === 'Stale'}
                 <span
-                  class="relative inline-flex rounded-full h-2 w-2 {getWorstStateColors(
+                  class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 {getWorstStateColors(
                     folder.worstState,
                   ).split(' ')[0]}"
                 ></span>
-              </span>
-            </Button>
-          {/each}
-        </div>
-
-        {#if directoryContents.folders.length > visibleFoldersCount}
-          <div class="pt-4 flex justify-center">
-            <Button
-              type="button"
-              variant="outline"
-              class="w-full"
-              onclick={() => (visibleFoldersCount += 50)}
-            >
-              {i18n.t('browser.loadMoreFolders', {
-                count: directoryContents.folders.length - visibleFoldersCount,
-              })}
-            </Button>
-          </div>
-        {/if}
+              {/if}
+              <span
+                class="relative inline-flex rounded-full h-2 w-2 {getWorstStateColors(
+                  folder.worstState,
+                ).split(' ')[0]}"
+              ></span>
+            </span>
+          </Button>
+        {/each}
       </div>
-    {/if}
 
-    <!-- Files Section -->
-    {#if directoryContents.files.length > 0}
-      <div>
-        <div class="flex items-center justify-between mb-3">
-          <h2
-            class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark"
+      {#if directoryContents.folders.length > visibleFoldersCount}
+        <div class="pt-4 flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            class="w-full"
+            onclick={() => (visibleFoldersCount += 50)}
           >
-            {i18n.t('browser.files')}
-          </h2>
-
-          <!-- Bulk Select Operations -->
-          <div class="flex items-center gap-3">
-            <Button
-              type="button"
-              variant="link"
-              class="h-auto p-0"
-              onclick={selectReviewableInFolder}
-            >
-              {i18n.t('browser.selectReviewable')}
-            </Button>
-            <span class="text-fluent-border-light dark:text-fluent-border-dark">|</span>
-            <label
-              class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none"
-            >
-              <Checkbox checked={allSelected} onclick={() => toggleSelectAll(!allSelected)} />
-              {i18n.t('browser.selectAll')}
-            </label>
-          </div>
+            {i18n.t('browser.loadMoreFolders', {
+              count: directoryContents.folders.length - visibleFoldersCount,
+            })}
+          </Button>
         </div>
-
-        <div class="space-y-4">
-          {#each directoryContents.files.slice(0, visibleFilesCount) as file (file.path)}
-            <FileCard
-              {file}
-              onRefresh={() => filesState.refresh()}
-              selectable
-              selected={selectedPaths.includes(file.path)}
-              onSelectedChange={setSelected}
-            />
-          {/each}
-        </div>
-
-        {#if directoryContents.files.length > visibleFilesCount}
-          <div class="pt-4 flex justify-center">
-            <Button
-              type="button"
-              variant="outline"
-              class="w-full"
-              onclick={() => (visibleFilesCount += 50)}
-            >
-              {i18n.t('browser.loadMoreFiles', {
-                count: directoryContents.files.length - visibleFilesCount,
-              })}
-            </Button>
-          </div>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Empty Folder Screen -->
-    {#if directoryContents.folders.length === 0 && directoryContents.files.length === 0}
-      <EmptyState
-        icon={IconFolderOpen}
-        title={i18n.t('browser.emptyFolder')}
-        description={i18n.t('browser.emptyFolderDesc')}
-      />
-    {/if}
-  </div>
-
-  <!-- Sticky Bulk Action Bar at Bottom -->
-  {#if selectedPaths.length > 0}
-    <div
-      class="fixed bottom-6 left-[88px] right-6 md:left-[264px] border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl flex items-center justify-between z-10 animate-slide-up"
-    >
-      <div class="flex items-center gap-4">
-        <div class="flex flex-col">
-          <span class="text-sm font-semibold text-primary">
-            {i18n.t('dashboard.selected', { count: selectedPaths.length })}
-          </span>
-          <span class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark">
-            {formatBytes(selectedSize)}
-          </span>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <Button variant="outline" onclick={() => (selectedPaths = [])}>
-          {i18n.t('dashboard.clearSelection')}
-        </Button>
-
-        <Select.Root type="single" bind:value={bulkAction}>
-          <Select.Trigger>
-            <span data-slot="select-value">{bulkAction}</span>
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="MoveToSafeFolder" label="MoveToSafeFolder" />
-            <Select.Item value="Pin" label="Pin" />
-            <Select.Item value="Ignore" label="Ignore" />
-            <Select.Item value="Snooze" label="Snooze" />
-            <Select.Item value="TrashNow" label="TrashNow" />
-          </Select.Content>
-        </Select.Root>
-        {#if bulkAction === 'Snooze'}
-          <Input min="1" type="number" bind:value={bulkSnoozeDays} class="w-16 text-xs" />
-        {/if}
-
-        <Button onclick={() => (confirmBulk = true)}>
-          {i18n.t('browser.applyAction')}
-        </Button>
-      </div>
+      {/if}
     </div>
   {/if}
+
+  <!-- Files Section -->
+  {#if directoryContents.files.length > 0}
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h2
+          class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark"
+        >
+          {i18n.t('browser.files')}
+        </h2>
+
+        <!-- Bulk Select Operations -->
+        <div class="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="link"
+            class="h-auto p-0"
+            onclick={selectReviewableInFolder}
+          >
+            {i18n.t('browser.selectReviewable')}
+          </Button>
+          <span class="text-fluent-border-light dark:text-fluent-border-dark">|</span>
+          <label class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
+            <Checkbox checked={allSelected} onclick={() => toggleSelectAll(!allSelected)} />
+            {i18n.t('browser.selectAll')}
+          </label>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        {#each directoryContents.files.slice(0, visibleFilesCount) as file (file.path)}
+          <FileCard
+            {file}
+            onRefresh={() => filesState.refresh()}
+            selectable
+            selected={selectedPaths.includes(file.path)}
+            onSelectedChange={setSelected}
+          />
+        {/each}
+      </div>
+
+      {#if directoryContents.files.length > visibleFilesCount}
+        <div class="pt-4 flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            class="w-full"
+            onclick={() => (visibleFilesCount += 50)}
+          >
+            {i18n.t('browser.loadMoreFiles', {
+              count: directoryContents.files.length - visibleFilesCount,
+            })}
+          </Button>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- Empty Folder Screen -->
+  {#if directoryContents.folders.length === 0 && directoryContents.files.length === 0}
+    <EmptyState
+      icon={IconFolderOpen}
+      title={i18n.t('browser.emptyFolder')}
+      description={i18n.t('browser.emptyFolderDesc')}
+    />
+  {/if}
 </div>
+
+<!-- Sticky Bulk Action Bar at Bottom -->
+{#if selectedPaths.length > 0}
+  <div
+    class="fixed bottom-6 left-[88px] right-6 md:left-[264px] border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl flex items-center justify-between z-10 animate-slide-up"
+  >
+    <div class="flex items-center gap-4">
+      <div class="flex flex-col">
+        <span class="text-sm font-semibold text-primary">
+          {i18n.t('dashboard.selected', { count: selectedPaths.length })}
+        </span>
+        <span class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark">
+          {formatBytes(selectedSize)}
+        </span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <Button variant="outline" onclick={() => (selectedPaths = [])}>
+        {i18n.t('dashboard.clearSelection')}
+      </Button>
+
+      <Select.Root type="single" bind:value={bulkAction}>
+        <Select.Trigger>
+          <span data-slot="select-value">{bulkAction}</span>
+        </Select.Trigger>
+        <Select.Content>
+          <Select.Item value="MoveToSafeFolder" label="MoveToSafeFolder" />
+          <Select.Item value="Pin" label="Pin" />
+          <Select.Item value="Ignore" label="Ignore" />
+          <Select.Item value="Snooze" label="Snooze" />
+          <Select.Item value="TrashNow" label="TrashNow" />
+        </Select.Content>
+      </Select.Root>
+      {#if bulkAction === 'Snooze'}
+        <Input min="1" type="number" bind:value={bulkSnoozeDays} class="w-16 text-xs" />
+      {/if}
+
+      <Button onclick={() => (confirmBulk = true)}>
+        {i18n.t('browser.applyAction')}
+      </Button>
+    </div>
+  </div>
+{/if}
 
 <ConfirmDialog
   open={confirmBulk}

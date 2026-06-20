@@ -85,63 +85,60 @@
   });
 </script>
 
-<div class="h-full flex flex-col min-h-0 relative gap-6">
-  <!-- Header -->
-  <PageHeader title={i18n.t('nav.queue')} subtitle={i18n.t('dashboard.subtitle')}>
-    {#snippet actions()}
-      <!-- Search Input -->
-      <InputGroup.Root>
-        <InputGroup.Input
-          type="text"
-          placeholder={i18n.t('dashboard.search')}
-          bind:value={searchInputValue}
-        />
-        <InputGroup.Addon>
-          <IconSearch />
-        </InputGroup.Addon>
-      </InputGroup.Root>
-    {/snippet}
-  </PageHeader>
-
-  <!-- Status Summary Band -->
-  <div class="flex-shrink-0">
-    <StatusBar files={filesState.files} />
-  </div>
-
-  <!-- Scrollable content -->
-  <div class="flex-1 overflow-y-auto space-y-4 pb-16 pr-1">
-    {#if filesState.error}
-      <div class="p-6 text-center text-red-500">
-        <p class="font-semibold">{i18n.t('dashboard.errorLoading')}</p>
-        <p class="text-sm mt-1">{filesState.error}</p>
-      </div>
-    {:else if filesState.loading && filesState.files.length === 0}
-      <LoadingState label={i18n.t('dashboard.loadingQueue')} />
-    {:else if filteredFiles.length === 0}
-      <EmptyState
-        icon={IconDocument}
-        title={i18n.t('dashboard.noFiles')}
-        description={i18n.t('dashboard.noFilesDesc')}
+<PageHeader title={i18n.t('nav.queue')} subtitle={i18n.t('dashboard.subtitle')}>
+  {#snippet actions()}
+    <!-- Search Input -->
+    <InputGroup.Root>
+      <InputGroup.Input
+        type="text"
+        placeholder={i18n.t('dashboard.search')}
+        bind:value={searchInputValue}
       />
-    {:else}
-      <div class="space-y-4">
-        {#each filteredFiles.slice(0, visibleLimit) as file (file.path)}
-          <FileCard {file} onRefresh={() => filesState.refresh()} selectable={false} />
-        {/each}
+      <InputGroup.Addon>
+        <IconSearch />
+      </InputGroup.Addon>
+    </InputGroup.Root>
+  {/snippet}
+</PageHeader>
 
-        {#if filteredFiles.length > visibleLimit}
-          <div class="pt-4 flex justify-center">
-            <Button
-              type="button"
-              variant="outline"
-              class="w-full"
-              onclick={() => (visibleLimit += 100)}
-            >
-              {i18n.t('dashboard.loadMore', { count: filteredFiles.length - visibleLimit })}
-            </Button>
-          </div>
-        {/if}
-      </div>
-    {/if}
-  </div>
+<!-- Status Summary Band -->
+<div class="flex-shrink-0 mt-6">
+  <StatusBar files={filesState.files} />
+</div>
+
+<!-- Scrollable content -->
+<div class="flex-1 overflow-y-auto space-y-4 pb-16 pr-1 mt-6">
+  {#if filesState.error}
+    <div class="p-6 text-center text-red-500">
+      <p class="font-semibold">{i18n.t('dashboard.errorLoading')}</p>
+      <p class="text-sm mt-1">{filesState.error}</p>
+    </div>
+  {:else if filesState.loading && filesState.files.length === 0}
+    <LoadingState label={i18n.t('dashboard.loadingQueue')} />
+  {:else if filteredFiles.length === 0}
+    <EmptyState
+      icon={IconDocument}
+      title={i18n.t('dashboard.noFiles')}
+      description={i18n.t('dashboard.noFilesDesc')}
+    />
+  {:else}
+    <div class="space-y-4">
+      {#each filteredFiles.slice(0, visibleLimit) as file (file.path)}
+        <FileCard {file} onRefresh={() => filesState.refresh()} selectable={false} />
+      {/each}
+
+      {#if filteredFiles.length > visibleLimit}
+        <div class="pt-4 flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            class="w-full"
+            onclick={() => (visibleLimit += 100)}
+          >
+            {i18n.t('dashboard.loadMore', { count: filteredFiles.length - visibleLimit })}
+          </Button>
+        </div>
+      {/if}
+    </div>
+  {/if}
 </div>

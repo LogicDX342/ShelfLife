@@ -15,7 +15,7 @@
 </script>
 
 <header
-  class="flex flex-col md:flex-row md:items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-4 flex-shrink-0 gap-4"
+  class="flex flex-col md:flex-row md:items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2 flex-shrink-0 gap-4"
 >
   <div>
     <h1 class="text-2xl font-bold tracking-tight">{title}</h1>

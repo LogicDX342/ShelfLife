@@ -84,51 +84,49 @@
   }
 </script>
 
-<div class="h-full flex flex-col min-h-0 relative">
-  <PageHeader title={i18n.t('rules.title')} subtitle={i18n.t('rules.subtitle')}>
-    {#snippet actions()}
-      <Button variant="outline" onclick={() => rulesState.refresh()}>
-        {i18n.t('rules.refresh')}
-      </Button>
-      <Button
-        onclick={() => {
-          showNewEditor = true;
-          editingRule = null;
-        }}
-      >
-        + {i18n.t('rules.newRule')}
-      </Button>
-    {/snippet}
-  </PageHeader>
+<PageHeader title={i18n.t('rules.title')} subtitle={i18n.t('rules.subtitle')}>
+  {#snippet actions()}
+    <Button variant="outline" onclick={() => rulesState.refresh()}>
+      {i18n.t('rules.refresh')}
+    </Button>
+    <Button
+      onclick={() => {
+        showNewEditor = true;
+        editingRule = null;
+      }}
+    >
+      + {i18n.t('rules.newRule')}
+    </Button>
+  {/snippet}
+</PageHeader>
 
-  <div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
-    {#if showNewEditor || editingRule}
-      <div class="space-y-4">
-        <h2 class="text-lg font-semibold text-primary">
-          {editingRule
-            ? i18n.t('rules.editRule', { name: editingRule.name })
-            : i18n.t('rules.newRule')}
-        </h2>
-        <RuleEditor rule={editingRule} onSaved={refreshAfterSave} onCancel={handleCancel} />
-      </div>
-    {/if}
+<div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
+  {#if showNewEditor || editingRule}
+    <div class="space-y-4">
+      <h2 class="text-lg font-semibold text-primary">
+        {editingRule
+          ? i18n.t('rules.editRule', { name: editingRule.name })
+          : i18n.t('rules.newRule')}
+      </h2>
+      <RuleEditor rule={editingRule} onSaved={refreshAfterSave} onCancel={handleCancel} />
+    </div>
+  {/if}
 
-    <RuleList
-      rules={rulesState.rules}
-      loading={rulesState.loading}
-      {testingRuleId}
-      onEdit={editRule}
-      onTest={previewRule}
-      onDelete={initiateRemoveRule}
-      onToggleEnabled={toggleRuleEnabled}
-    />
+  <RuleList
+    rules={rulesState.rules}
+    loading={rulesState.loading}
+    {testingRuleId}
+    onEdit={editRule}
+    onTest={previewRule}
+    onDelete={initiateRemoveRule}
+    onToggleEnabled={toggleRuleEnabled}
+  />
 
-    <RuleTestResults
-      results={previewResults}
-      ruleName={selectedPreviewRuleName}
-      onClear={() => (previewResults = [])}
-    />
-  </div>
+  <RuleTestResults
+    results={previewResults}
+    ruleName={selectedPreviewRuleName}
+    onClear={() => (previewResults = [])}
+  />
 </div>
 
 <ConfirmDialog

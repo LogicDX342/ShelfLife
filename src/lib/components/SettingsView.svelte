@@ -221,289 +221,283 @@
   }
 </script>
 
-<div class="h-full flex flex-col min-h-0 relative">
-  <!-- Header -->
-  <PageHeader title={i18n.t('settings.title')} subtitle={i18n.t('settings.subtitle')} />
+<!-- Header -->
+<PageHeader title={i18n.t('settings.title')} subtitle={i18n.t('settings.subtitle')} />
 
-  <!-- Scrollable content -->
-  <div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
-    {#if config}
-      <!-- Grid System for Forms (Full-width settings panel) -->
-      <div class="grid grid-cols-1 gap-6">
-        <!-- Form Settings & Watch Targets -->
-        <div class="space-y-6">
-          <!-- General Preferences Section -->
-          <Card.Root>
-            <Card.Content class="space-y-4">
+<!-- Scrollable content -->
+<div class="flex-1 overflow-y-auto space-y-6 pt-6 pb-16 pr-1">
+  {#if config}
+    <!-- Grid System for Forms (Full-width settings panel) -->
+    <div class="grid grid-cols-1 gap-6">
+      <!-- Form Settings & Watch Targets -->
+      <div class="space-y-6">
+        <!-- General Preferences Section -->
+        <Card.Root>
+          <Card.Content class="space-y-4">
+            <div
+              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
+            >
+              <h3 class="text-sm font-semibold text-primary">
+                {i18n.t('settings.general')}
+              </h3>
               <div
-                class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
+                class="text-[11px] flex items-center gap-1.5 text-fluent-muted-light dark:text-fluent-muted-dark min-h-[1.5rem]"
               >
-                <h3 class="text-sm font-semibold text-primary">
-                  {i18n.t('settings.general')}
-                </h3>
-                <div
-                  class="text-[11px] flex items-center gap-1.5 text-fluent-muted-light dark:text-fluent-muted-dark min-h-[1.5rem]"
-                >
-                  {#if showSavedIndicator}
-                    <span
-                      class="text-green-600 dark:text-green-400 flex items-center gap-1 font-semibold transition-all duration-300"
-                    >
-                      <IconCheckmark class="w-3.5 h-3.5" />
-                      {i18n.t('settings.savedShort')}
-                    </span>
-                  {/if}
-                </div>
-              </div>
-
-              <div
-                class="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-fluent-border-light dark:border-fluent-border-dark pb-4"
-              >
-                <div class="flex flex-col gap-1.5">
-                  <Label for="safe-folder-path">{i18n.t('settings.safeFolder')}</Label>
-                  <div class="flex gap-2">
-                    <Input
-                      id="safe-folder-path"
-                      bind:value={safeFolderPath}
-                      onchange={savePreferences}
-                    />
-                    <Button type="button" variant="outline" onclick={browseSafeFolder}>
-                      {i18n.t('settings.browse')}
-                    </Button>
-                  </div>
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <Label for="lang-select">{i18n.t('lang.title')}</Label>
-                  <Select.Root
-                    type="single"
-                    value={i18n.currentLang}
-                    onValueChange={(value) => i18n.setLang(value as 'en' | 'zh')}
+                {#if showSavedIndicator}
+                  <span
+                    class="text-green-600 dark:text-green-400 flex items-center gap-1 font-semibold transition-all duration-300"
                   >
-                    <Select.Trigger id="lang-select" class="w-full">
-                      <span data-slot="select-value">
-                        {i18n.currentLang === 'zh' ? i18n.t('lang.zh') : i18n.t('lang.en')}
-                      </span>
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Item value="en" label={i18n.t('lang.en')} />
-                      <Select.Item value="zh" label={i18n.t('lang.zh')} />
-                    </Select.Content>
-                  </Select.Root>
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <Label for="theme-select">{i18n.t('theme.title')}</Label>
-                  <Select.Root
-                    type="single"
-                    value={i18n.currentTheme}
-                    onValueChange={(value) => i18n.setTheme(value as 'light' | 'dark' | 'system')}
-                  >
-                    <Select.Trigger id="theme-select" class="w-full">
-                      <span data-slot="select-value">
-                        {i18n.currentTheme === 'light'
-                          ? i18n.t('theme.light')
-                          : i18n.currentTheme === 'dark'
-                            ? i18n.t('theme.dark')
-                            : i18n.t('theme.system')}
-                      </span>
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Item value="light" label={i18n.t('theme.light')} />
-                      <Select.Item value="dark" label={i18n.t('theme.dark')} />
-                      <Select.Item value="system" label={i18n.t('theme.system')} />
-                    </Select.Content>
-                  </Select.Root>
-                </div>
-
-                <div class="flex flex-col gap-1.5">
-                  <Label for="close-behavior-select">{i18n.t('settings.closeBehavior')}</Label>
-                  <Select.Root
-                    type="single"
-                    value={closeBehavior}
-                    onValueChange={async (value) => {
-                      closeBehavior = value as CloseBehavior;
-                      await savePreferences();
-                    }}
-                  >
-                    <Select.Trigger id="close-behavior-select" class="w-full">
-                      <span data-slot="select-value">{closeBehaviorLabel(closeBehavior)}</span>
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Item value="Ask" label={i18n.t('settings.closeAsk')} />
-                      <Select.Item value="HideToTray" label={i18n.t('settings.closeHideToTray')} />
-                      <Select.Item value="Quit" label={i18n.t('settings.closeQuit')} />
-                    </Select.Content>
-                  </Select.Root>
-                </div>
+                    <IconCheckmark class="w-3.5 h-3.5" />
+                    {i18n.t('settings.savedShort')}
+                  </span>
+                {/if}
               </div>
+            </div>
 
-              <!-- Notification & Boot Toggles -->
-              <Item.Group class="select-none flex flex-col gap-3">
-                <Item.Root
-                  class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
-                >
-                  <Item.Content class="flex flex-col gap-0.5">
-                    <Item.Title
-                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex"
-                    >
-                      {i18n.t('settings.notifications')}
-                    </Item.Title>
-                  </Item.Content>
-                  <Item.Actions class="flex-shrink-0 ml-4">
-                    <Switch
-                      checked={notificationsEnabled}
-                      onCheckedChange={async () => {
-                        notificationsEnabled = !notificationsEnabled;
-                        await savePreferences();
-                      }}
-                      aria-label={i18n.t('settings.notifications')}
-                    />
-                  </Item.Actions>
-                </Item.Root>
-
-                <Item.Root
-                  class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
-                >
-                  <Item.Content class="flex flex-col gap-0.5">
-                    <Item.Title
-                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex"
-                    >
-                      {i18n.t('settings.startAtLogin')}
-                    </Item.Title>
-                  </Item.Content>
-                  <Item.Actions class="flex-shrink-0 ml-4">
-                    <Switch
-                      checked={startAtLogin}
-                      onCheckedChange={async () => {
-                        startAtLogin = !startAtLogin;
-                        await savePreferences();
-                      }}
-                      aria-label={i18n.t('settings.startAtLogin')}
-                    />
-                  </Item.Actions>
-                </Item.Root>
-
-                <Item.Root
-                  class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
-                >
-                  <Item.Content class="flex flex-col gap-0.5">
-                    <Item.Title
-                      class="text-xs font-semibold text-neutral-800 dark:text-neutral-200"
-                    >
-                      {i18n.t('settings.dropzone')}
-                      <HelpTooltip content={i18n.t('settings.dropzoneDesc')} />
-                    </Item.Title>
-                  </Item.Content>
-                  <Item.Actions class="flex-shrink-0 ml-4">
-                    <Switch
-                      checked={dropzoneEnabled}
-                      onCheckedChange={async () => {
-                        dropzoneEnabled = !dropzoneEnabled;
-                        await savePreferences();
-                      }}
-                      aria-label={i18n.t('settings.dropzone')}
-                    />
-                  </Item.Actions>
-                </Item.Root>
-              </Item.Group>
-            </Card.Content>
-          </Card.Root>
-
-          <!-- Decay Timeline Card -->
-          <Card.Root>
-            <Card.Content class="space-y-4">
-              <div
-                class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
-              >
-                <h3 class="text-sm font-semibold text-primary">
-                  {i18n.t('settings.decayTimeline')}
-                </h3>
-              </div>
-              <p
-                class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark leading-relaxed"
-              >
-                {i18n.t('settings.decayTimelineDesc')}
-              </p>
-              <div class="pt-2">
-                <DecayTimelineSlider bind:value={sliderValue} onCommit={savePreferences} />
-              </div>
-            </Card.Content>
-          </Card.Root>
-
-          <!-- Watch Targets Section -->
-          <Card.Root>
-            <Card.Content class="space-y-4">
-              <div
-                class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
-              >
-                <h3 class="text-sm font-semibold text-primary font-medium">
-                  {i18n.t('settings.watchTargets')}
-                </h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onclick={triggerManualScan}
-                  disabled={filesState.syncing}
-                >
-                  {#if filesState.syncing}
-                    <Spinner class="w-3.5 h-3.5 text-primary" />
-                    <span>{i18n.t('settings.reconcileScanning')}</span>
-                  {:else}
-                    <IconArrowSync class="w-3.5 h-3.5 text-primary" />
-                    <span>{i18n.t('settings.reconcileScan')}</span>
-                  {/if}
-                </Button>
-              </div>
-
-              <!-- Add new folder form -->
-              <div class="flex flex-col gap-1.5 w-full">
-                <Label for="target-path">{i18n.t('settings.path')}</Label>
-                <div class="flex flex-col md:flex-row gap-2">
-                  <div class="flex flex-1 gap-2">
-                    <Input
-                      id="target-path"
-                      bind:value={targetPath}
-                      placeholder={i18n.t('settings.path')}
-                    />
-                    <Button type="button" variant="outline" onclick={browseTargetFolder}>
-                      {i18n.t('settings.browse')}
-                    </Button>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onclick={() => addTargetWithPath(targetPath)}
-                    disabled={addingTarget || !targetPath.trim()}
-                  >
-                    {i18n.t('settings.addNewTarget')}
+            <div
+              class="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-fluent-border-light dark:border-fluent-border-dark pb-4"
+            >
+              <div class="flex flex-col gap-1.5">
+                <Label for="safe-folder-path">{i18n.t('settings.safeFolder')}</Label>
+                <div class="flex gap-2">
+                  <Input
+                    id="safe-folder-path"
+                    bind:value={safeFolderPath}
+                    onchange={savePreferences}
+                  />
+                  <Button type="button" variant="outline" onclick={browseSafeFolder}>
+                    {i18n.t('settings.browse')}
                   </Button>
                 </div>
               </div>
 
-              <!-- Target list -->
-              {#if config.watch_targets.length === 0}
-                <div
-                  class="p-6 text-center text-xs text-fluent-muted-light dark:text-fluent-muted-dark border border-dashed border-fluent-border-light dark:border-fluent-border-dark rounded-md bg-neutral-50 dark:bg-neutral-900/40"
+              <div class="flex flex-col gap-1.5">
+                <Label for="lang-select">{i18n.t('lang.title')}</Label>
+                <Select.Root
+                  type="single"
+                  value={i18n.currentLang}
+                  onValueChange={(value) => i18n.setLang(value as 'en' | 'zh')}
                 >
-                  {i18n.t('settings.noTargets')}
+                  <Select.Trigger id="lang-select" class="w-full">
+                    <span data-slot="select-value">
+                      {i18n.currentLang === 'zh' ? i18n.t('lang.zh') : i18n.t('lang.en')}
+                    </span>
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="en" label={i18n.t('lang.en')} />
+                    <Select.Item value="zh" label={i18n.t('lang.zh')} />
+                  </Select.Content>
+                </Select.Root>
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <Label for="theme-select">{i18n.t('theme.title')}</Label>
+                <Select.Root
+                  type="single"
+                  value={i18n.currentTheme}
+                  onValueChange={(value) => i18n.setTheme(value as 'light' | 'dark' | 'system')}
+                >
+                  <Select.Trigger id="theme-select" class="w-full">
+                    <span data-slot="select-value">
+                      {i18n.currentTheme === 'light'
+                        ? i18n.t('theme.light')
+                        : i18n.currentTheme === 'dark'
+                          ? i18n.t('theme.dark')
+                          : i18n.t('theme.system')}
+                    </span>
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="light" label={i18n.t('theme.light')} />
+                    <Select.Item value="dark" label={i18n.t('theme.dark')} />
+                    <Select.Item value="system" label={i18n.t('theme.system')} />
+                  </Select.Content>
+                </Select.Root>
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <Label for="close-behavior-select">{i18n.t('settings.closeBehavior')}</Label>
+                <Select.Root
+                  type="single"
+                  value={closeBehavior}
+                  onValueChange={async (value) => {
+                    closeBehavior = value as CloseBehavior;
+                    await savePreferences();
+                  }}
+                >
+                  <Select.Trigger id="close-behavior-select" class="w-full">
+                    <span data-slot="select-value">{closeBehaviorLabel(closeBehavior)}</span>
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="Ask" label={i18n.t('settings.closeAsk')} />
+                    <Select.Item value="HideToTray" label={i18n.t('settings.closeHideToTray')} />
+                    <Select.Item value="Quit" label={i18n.t('settings.closeQuit')} />
+                  </Select.Content>
+                </Select.Root>
+              </div>
+            </div>
+
+            <!-- Notification & Boot Toggles -->
+            <Item.Group class="select-none flex flex-col gap-3">
+              <Item.Root
+                class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
+              >
+                <Item.Content class="flex flex-col gap-0.5">
+                  <Item.Title
+                    class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex"
+                  >
+                    {i18n.t('settings.notifications')}
+                  </Item.Title>
+                </Item.Content>
+                <Item.Actions class="flex-shrink-0 ml-4">
+                  <Switch
+                    checked={notificationsEnabled}
+                    onCheckedChange={async () => {
+                      notificationsEnabled = !notificationsEnabled;
+                      await savePreferences();
+                    }}
+                    aria-label={i18n.t('settings.notifications')}
+                  />
+                </Item.Actions>
+              </Item.Root>
+
+              <Item.Root
+                class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
+              >
+                <Item.Content class="flex flex-col gap-0.5">
+                  <Item.Title
+                    class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex"
+                  >
+                    {i18n.t('settings.startAtLogin')}
+                  </Item.Title>
+                </Item.Content>
+                <Item.Actions class="flex-shrink-0 ml-4">
+                  <Switch
+                    checked={startAtLogin}
+                    onCheckedChange={async () => {
+                      startAtLogin = !startAtLogin;
+                      await savePreferences();
+                    }}
+                    aria-label={i18n.t('settings.startAtLogin')}
+                  />
+                </Item.Actions>
+              </Item.Root>
+
+              <Item.Root
+                class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
+              >
+                <Item.Content class="flex flex-col gap-0.5">
+                  <Item.Title class="text-xs font-semibold text-neutral-800 dark:text-neutral-200">
+                    {i18n.t('settings.dropzone')}
+                    <HelpTooltip content={i18n.t('settings.dropzoneDesc')} />
+                  </Item.Title>
+                </Item.Content>
+                <Item.Actions class="flex-shrink-0 ml-4">
+                  <Switch
+                    checked={dropzoneEnabled}
+                    onCheckedChange={async () => {
+                      dropzoneEnabled = !dropzoneEnabled;
+                      await savePreferences();
+                    }}
+                    aria-label={i18n.t('settings.dropzone')}
+                  />
+                </Item.Actions>
+              </Item.Root>
+            </Item.Group>
+          </Card.Content>
+        </Card.Root>
+
+        <!-- Decay Timeline Card -->
+        <Card.Root>
+          <Card.Content class="space-y-4">
+            <div
+              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
+            >
+              <h3 class="text-sm font-semibold text-primary">
+                {i18n.t('settings.decayTimeline')}
+              </h3>
+            </div>
+            <p class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark leading-relaxed">
+              {i18n.t('settings.decayTimelineDesc')}
+            </p>
+            <div class="pt-2">
+              <DecayTimelineSlider bind:value={sliderValue} onCommit={savePreferences} />
+            </div>
+          </Card.Content>
+        </Card.Root>
+
+        <!-- Watch Targets Section -->
+        <Card.Root>
+          <Card.Content class="space-y-4">
+            <div
+              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
+            >
+              <h3 class="text-sm font-semibold text-primary font-medium">
+                {i18n.t('settings.watchTargets')}
+              </h3>
+              <Button
+                type="button"
+                variant="outline"
+                onclick={triggerManualScan}
+                disabled={filesState.syncing}
+              >
+                {#if filesState.syncing}
+                  <Spinner class="w-3.5 h-3.5 text-primary" />
+                  <span>{i18n.t('settings.reconcileScanning')}</span>
+                {:else}
+                  <IconArrowSync class="w-3.5 h-3.5 text-primary" />
+                  <span>{i18n.t('settings.reconcileScan')}</span>
+                {/if}
+              </Button>
+            </div>
+
+            <!-- Add new folder form -->
+            <div class="flex flex-col gap-1.5 w-full">
+              <Label for="target-path">{i18n.t('settings.path')}</Label>
+              <div class="flex flex-col md:flex-row gap-2">
+                <div class="flex flex-1 gap-2">
+                  <Input
+                    id="target-path"
+                    bind:value={targetPath}
+                    placeholder={i18n.t('settings.path')}
+                  />
+                  <Button type="button" variant="outline" onclick={browseTargetFolder}>
+                    {i18n.t('settings.browse')}
+                  </Button>
                 </div>
-              {:else}
-                <div class="space-y-3">
-                  {#each config.watch_targets as target (target.id)}
-                    <WatchTargetCard
-                      {target}
-                      globalTtlSeconds={config.default_ttl_seconds}
-                      onUpdate={replaceTarget}
-                      onRemove={initiateRemoveTarget}
-                    />
-                  {/each}
-                </div>
-              {/if}
-            </Card.Content>
-          </Card.Root>
-        </div>
+                <Button
+                  variant="outline"
+                  onclick={() => addTargetWithPath(targetPath)}
+                  disabled={addingTarget || !targetPath.trim()}
+                >
+                  {i18n.t('settings.addNewTarget')}
+                </Button>
+              </div>
+            </div>
+
+            <!-- Target list -->
+            {#if config.watch_targets.length === 0}
+              <div
+                class="p-6 text-center text-xs text-fluent-muted-light dark:text-fluent-muted-dark border border-dashed border-fluent-border-light dark:border-fluent-border-dark rounded-md bg-neutral-50 dark:bg-neutral-900/40"
+              >
+                {i18n.t('settings.noTargets')}
+              </div>
+            {:else}
+              <div class="space-y-3">
+                {#each config.watch_targets as target (target.id)}
+                  <WatchTargetCard
+                    {target}
+                    globalTtlSeconds={config.default_ttl_seconds}
+                    onUpdate={replaceTarget}
+                    onRemove={initiateRemoveTarget}
+                  />
+                {/each}
+              </div>
+            {/if}
+          </Card.Content>
+        </Card.Root>
       </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
 </div>
 
 <ConfirmDialog
