@@ -104,10 +104,7 @@ pub fn execute_triage_action(
     let applied = apply_file_action(&source, &mut tracked, &config, timestamp, action)?;
 
     tracked.last_user_action_at = Some(timestamp);
-    if tracked.path != original_tracked_path {
-        storage::tracked::remove_tracked_file(db, &original_tracked_path)?;
-    }
-    storage::tracked::upsert_tracked_file(db, &tracked)?;
+    storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
 
     let entry = AuditEntry {
         id: Uuid::new_v4().to_string(),
@@ -160,10 +157,7 @@ pub fn execute_automation_rule_action(
     )?;
 
     tracked.last_user_action_at = Some(timestamp);
-    if tracked.path != original_tracked_path {
-        storage::tracked::remove_tracked_file(db, &original_tracked_path)?;
-    }
-    storage::tracked::upsert_tracked_file(db, &tracked)?;
+    storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
 
     let entry = AuditEntry {
         id: Uuid::new_v4().to_string(),
@@ -226,10 +220,7 @@ pub fn execute_dropzone_rule_action(
     )?;
 
     tracked.last_user_action_at = Some(timestamp);
-    if tracked.path != original_tracked_path {
-        storage::tracked::remove_tracked_file(db, &original_tracked_path)?;
-    }
-    storage::tracked::upsert_tracked_file(db, &tracked)?;
+    storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
 
     let entry = AuditEntry {
         id: Uuid::new_v4().to_string(),
@@ -397,10 +388,6 @@ pub fn ingest_dropzone_file(
     let original_tracked_path = source.to_string_lossy().to_string();
     fs::rename(&source, &destination)?;
 
-    if storage::tracked::get_tracked_file(db, &original_tracked_path)?.is_some() {
-        storage::tracked::remove_tracked_file(db, &original_tracked_path)?;
-    }
-
     let metadata = fs::metadata(&destination)?;
     let mut tracked = tracked_file_from_metadata(
         &destination,
@@ -414,7 +401,7 @@ pub fn ingest_dropzone_file(
     );
     let timestamp = now_seconds();
     tracked.last_user_action_at = Some(timestamp);
-    storage::tracked::upsert_tracked_file(db, &tracked)?;
+    storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
 
     let entry = AuditEntry {
         id: Uuid::new_v4().to_string(),
@@ -526,8 +513,7 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
             .and_then(|value| value.to_str())
             .unwrap_or(&entry.file_name)
             .to_string();
-        storage::tracked::remove_tracked_file(db, destination)?;
-        storage::tracked::upsert_tracked_file(db, &tracked)?;
+        storage::tracked::replace_tracked_file(db, destination, &tracked)?;
     }
     Ok(())
 }

@@ -225,18 +225,7 @@ pub fn reconcile_with_report_with_progress(
 
     to_upsert.extend(to_mark_missing);
 
-    // Single batch write for all upserts + one batch remove, with a single
-    // index rebuild at the end instead of rebuilding after each operation.
-    if !to_upsert.is_empty() {
-        storage::tracked::upsert_tracked_files_batch_no_reindex(db, &to_upsert)?;
-    }
-    if !to_remove.is_empty() {
-        let refs: Vec<&str> = to_remove.iter().map(|s| s.as_str()).collect();
-        storage::tracked::remove_tracked_files_batch_no_reindex(db, &refs)?;
-    }
-    if !to_upsert.is_empty() || !to_remove.is_empty() {
-        storage::tracked::rebuild_tracked_indexes(db)?;
-    }
+    storage::tracked::update_tracked_files_batch(db, to_upsert, to_remove)?;
 
     Ok(report)
 }
