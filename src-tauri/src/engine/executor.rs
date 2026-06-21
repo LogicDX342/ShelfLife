@@ -722,13 +722,21 @@ pub fn render_rename_template(source: &Path, template: &str) -> Result<String, A
         .replace("{file}", current_name)
         .replace("{date}", &date);
 
-    let cleaned = clean_file_name(if rendered.trim().is_empty() {
+    let file_name = if rendered.trim().is_empty() {
         current_name
+            .trim_matches(' ')
+            .trim_end_matches('.')
+            .to_string()
     } else {
-        &rendered
-    });
-    validate_windows_reserved_name(&cleaned)?;
-    Ok(cleaned)
+        rendered.trim_matches(' ').trim_end_matches('.').to_string()
+    };
+    let file_name = if file_name.is_empty() {
+        String::from("renamed-file")
+    } else {
+        file_name
+    };
+    validate_reserved_name(&file_name)?;
+    Ok(file_name)
 }
 
 pub fn validate_rename_template(template: &str) -> Result<(), AppError> {
@@ -782,68 +790,58 @@ pub fn validate_rename_template(template: &str) -> Result<(), AppError> {
     }
 
     if !template.contains('{') {
-        validate_windows_reserved_name(&clean_file_name(template))?;
+        validate_reserved_name(template.trim_matches(' ').trim_end_matches('.'))?;
     }
 
     Ok(())
 }
 
-fn validate_windows_reserved_name(file_name: &str) -> Result<(), AppError> {
-    let stem = Path::new(file_name)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or(file_name)
-        .trim_end_matches('.');
-    let upper = stem.to_ascii_uppercase();
-    let reserved = matches!(
-        upper.as_str(),
-        "CON"
-            | "PRN"
-            | "AUX"
-            | "NUL"
-            | "COM1"
-            | "COM2"
-            | "COM3"
-            | "COM4"
-            | "COM5"
-            | "COM6"
-            | "COM7"
-            | "COM8"
-            | "COM9"
-            | "LPT1"
-            | "LPT2"
-            | "LPT3"
-            | "LPT4"
-            | "LPT5"
-            | "LPT6"
-            | "LPT7"
-            | "LPT8"
-            | "LPT9"
-    );
-    if reserved {
-        return Err(AppError::with_details(
-            "RULE_INVALID_RENAME_TEMPLATE",
-            "Rename template resolves to a reserved Windows file name.",
-            true,
-            file_name.to_string(),
-        ));
+fn validate_reserved_name(file_name: &str) -> Result<(), AppError> {
+    #[cfg(target_os = "windows")]
+    {
+        let stem = Path::new(file_name)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or(file_name)
+            .trim_end_matches('.');
+        let upper = stem.to_ascii_uppercase();
+        let reserved = matches!(
+            upper.as_str(),
+            "CON"
+                | "PRN"
+                | "AUX"
+                | "NUL"
+                | "COM1"
+                | "COM2"
+                | "COM3"
+                | "COM4"
+                | "COM5"
+                | "COM6"
+                | "COM7"
+                | "COM8"
+                | "COM9"
+                | "LPT1"
+                | "LPT2"
+                | "LPT3"
+                | "LPT4"
+                | "LPT5"
+                | "LPT6"
+                | "LPT7"
+                | "LPT8"
+                | "LPT9"
+        );
+        if reserved {
+            return Err(AppError::with_details(
+                "RULE_INVALID_RENAME_TEMPLATE",
+                "Rename template resolves to a reserved Windows file name.",
+                true,
+                file_name.to_string(),
+            ));
+        }
     }
 
+    let _ = file_name;
     Ok(())
-}
-
-fn clean_file_name(file_name: &str) -> String {
-    let mut name = file_name
-        .replace(" (1)", "")
-        .replace("_copy", "")
-        .replace(" copy", "");
-    name = name.split_whitespace().collect::<Vec<_>>().join(" ");
-    name = name.trim_matches(' ').trim_end_matches('.').to_string();
-    if name.is_empty() {
-        String::from("renamed-file")
-    } else {
-        name
-    }
 }
 
 fn unique_destination(path: &Path) -> PathBuf {
