@@ -333,7 +333,7 @@ freshness_at = max(
 expires_at = freshness_at + effective_ttl_seconds
 ```
 
-`effective_ttl_seconds` comes from the first matching enabled rule only when that effective rule can change the file and is not `PreviewOnly` or `Ignore`. `PreviewOnly`, `Ignore`, and unmatched files use the watch target default TTL, falling back to the app default TTL.
+`effective_ttl_seconds` comes from the first matching enabled rule only when that effective rule can change the file and is not `PreviewOnly` or `Ignore`. `PreviewOnly`, `Ignore`, and unmatched files use the app default TTL.
 
 Pinned files use `Expiry::Permanent`.
 
@@ -1268,7 +1268,6 @@ pub struct WatchTarget {
     pub path: String,
     pub enabled: bool,
     pub recursive: bool,
-    pub default_ttl_seconds: Option<u64>,
     pub ignore_patterns: Vec<String>,
     pub include_hidden_patterns: Vec<String>,
 }
@@ -1325,7 +1324,7 @@ undo move (including with rename)
 missing file reconciliation
 PreviewOnly blocks lower-priority Automatic rules
 Ignore rules apply immediately without rule TTL
-effective rule TTL versus watch-target default TTL
+effective rule TTL versus app default TTL
 ```
 
 ### 20.3 Platform tests

@@ -7,7 +7,7 @@ use redb::Database;
 use uuid::Uuid;
 
 use crate::engine::paths::PathScope;
-use crate::engine::{default_ttl_for_watch_target, now_seconds, tracked_file_from_metadata};
+use crate::engine::{now_seconds, tracked_file_from_metadata};
 use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
     RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus, UserTriageAction,
@@ -389,14 +389,8 @@ pub fn ingest_dropzone_file(
     fs::rename(&source, &destination)?;
 
     let metadata = fs::metadata(&destination)?;
-    let mut tracked = tracked_file_from_metadata(
-        &destination,
-        &metadata,
-        None,
-        &config,
-        default_ttl_for_watch_target(&config, target),
-        &target.id,
-    );
+    let mut tracked =
+        tracked_file_from_metadata(&destination, &metadata, None, &config, &target.id);
     let timestamp = now_seconds();
     tracked.last_user_action_at = Some(timestamp);
     storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
@@ -629,12 +623,7 @@ fn load_or_create_tracked(
 
     let metadata = fs::metadata(path)?;
     Ok(tracked_file_from_metadata(
-        path,
-        &metadata,
-        None,
-        config,
-        config.default_ttl_seconds,
-        "",
+        path, &metadata, None, config, "",
     ))
 }
 

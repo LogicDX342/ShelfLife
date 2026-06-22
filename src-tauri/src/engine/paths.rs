@@ -329,7 +329,6 @@ mod tests {
                 path: path_string(&root.join("missing")),
                 enabled: true,
                 recursive: false,
-                default_ttl_seconds: None,
                 ignore_patterns: Vec::new(),
                 include_hidden_patterns: Vec::new(),
             },
@@ -359,7 +358,6 @@ mod tests {
             path: path_string(&nested),
             enabled: true,
             recursive: false,
-            default_ttl_seconds: None,
             ignore_patterns: Vec::new(),
             include_hidden_patterns: Vec::new(),
         });
@@ -393,7 +391,6 @@ mod tests {
                 path: path_string(&watch),
                 enabled: true,
                 recursive: false,
-                default_ttl_seconds: None,
                 ignore_patterns: Vec::new(),
                 include_hidden_patterns: Vec::new(),
             }],
@@ -523,7 +520,6 @@ mod tests {
                 path: path_string(&self.watch),
                 enabled: true,
                 recursive,
-                default_ttl_seconds: None,
                 ignore_patterns: Vec::new(),
                 include_hidden_patterns: Vec::new(),
             }

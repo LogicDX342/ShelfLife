@@ -1,55 +1,15 @@
 <script lang="ts">
-  import IconChevronDown from '@lucide/svelte/icons/chevron-down';
-
-  import HelpTooltip from '$lib/components/common/HelpTooltip.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
-  import { Input } from '$lib/components/ui/input';
-  import { Label } from '$lib/components/ui/label';
   import { Switch } from '$lib/components/ui/switch';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { WatchTarget } from '$lib/types';
 
-  const SECONDS_PER_DAY = 24 * 60 * 60;
-
-  let { target, globalTtlSeconds, onUpdate, onRemove } = $props<{
+  let { target, onUpdate, onRemove } = $props<{
     target: WatchTarget;
-    globalTtlSeconds: number;
     onUpdate: (target: WatchTarget) => Promise<boolean>;
     onRemove: (target: WatchTarget) => void;
   }>();
-
-  let ttlDays = $state('');
-  let syncedTtlKey = $state('');
-  let expanded = $state(false);
-
-  let inheritedTtlDays = $derived(Math.max(1, Math.round(globalTtlSeconds / 86400)));
-  let targetTtlKey = $derived(`${target.id}:${target.default_ttl_seconds ?? 'inherit'}`);
-
-  function ttlDaysInputFromSeconds(ttlSeconds: number | null): string {
-    return ttlSeconds === null ? '' : String(Math.max(1, Math.round(ttlSeconds / SECONDS_PER_DAY)));
-  }
-
-  function ttlSecondsFromDaysInput(value: string): number | null {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-
-    const days = Number(trimmed);
-    if (!Number.isFinite(days)) return null;
-    return Math.max(1, Math.round(days)) * SECONDS_PER_DAY;
-  }
-
-  $effect(() => {
-    if (syncedTtlKey === targetTtlKey) return;
-    syncedTtlKey = targetTtlKey;
-    ttlDays = ttlDaysInputFromSeconds(target.default_ttl_seconds);
-  });
-
-  async function commitTtl() {
-    const nextTtlSeconds = ttlSecondsFromDaysInput(ttlDays);
-    ttlDays = ttlDaysInputFromSeconds(nextTtlSeconds);
-    await onUpdate({ ...target, default_ttl_seconds: nextTtlSeconds });
-  }
 </script>
 
 <Card.Root class="p-3.5 flex flex-col gap-3 text-xs">
@@ -71,12 +31,6 @@
         <span>
           {target.recursive ? i18n.t('settings.recursiveLabel') : i18n.t('settings.topLevel')}
         </span>
-        {#if target.default_ttl_seconds !== null}
-          <span>•</span>
-          <span>
-            {i18n.t('settings.targetTtlOverride', { days: ttlDays || inheritedTtlDays })}
-          </span>
-        {/if}
       </p>
     </div>
 
@@ -99,35 +53,6 @@
       <Button variant="destructive" onclick={() => onRemove(target)}>
         {i18n.t('settings.remove')}
       </Button>
-
-      <Button variant="outline" onclick={() => (expanded = !expanded)} aria-label="Toggle details">
-        <IconChevronDown
-          class="w-4 h-4 transform transition-transform duration-200 {expanded ? 'rotate-180' : ''}"
-        />
-      </Button>
     </div>
   </div>
-
-  {#if expanded}
-    <div
-      class="grid grid-cols-1 md:grid-cols-[minmax(0,14rem)_1fr] gap-3 md:items-end border-t border-fluent-border-light dark:border-fluent-border-dark pt-3 animate-expand"
-    >
-      <div class="flex flex-col gap-1.5">
-        <div class="flex items-center gap-1.5">
-          <Label class="text-xs" for="target-ttl-{target.id}"
-            >{i18n.t('settings.folderDefaultTtlDays')}</Label
-          >
-          <HelpTooltip content={i18n.t('settings.folderDefaultTtlHelp')} />
-        </div>
-        <Input
-          id="target-ttl-{target.id}"
-          type="number"
-          min="1"
-          placeholder={i18n.t('settings.folderDefaultTtlPlaceholder')}
-          bind:value={ttlDays}
-          onchange={commitTtl}
-        />
-      </div>
-    </div>
-  {/if}
 </Card.Root>

@@ -164,7 +164,6 @@ export type WatchTarget = {
   path: string;
   enabled: boolean;
   recursive: boolean;
-  default_ttl_seconds: number | null;
   ignore_patterns: string[];
   include_hidden_patterns: string[];
 };

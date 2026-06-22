@@ -194,11 +194,6 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.recursiveLabel': 'Recursive',
     'settings.topLevel': 'Top Level',
     'settings.toggleTarget': 'Toggle active status',
-    'settings.folderDefaultTtlDays': 'Default TTL for this folder',
-    'settings.folderDefaultTtlHelp':
-      'Empty uses the global default. A folder default applies to files in this watch target. Matching rules override both.',
-    'settings.folderDefaultTtlPlaceholder': 'Use global default',
-    'settings.targetTtlOverride': 'TTL: {days} days',
     'settings.errorUpdateTargets': 'Could not update watch targets.',
     'settings.errorSavePrefs': 'Could not save preferences.',
     'settings.errorUpdateTarget': 'Could not update watch target.',
@@ -425,11 +420,6 @@ const translations: Record<Language, Record<string, string>> = {
     'settings.recursiveLabel': '递归监控',
     'settings.topLevel': '仅限顶层',
     'settings.toggleTarget': '切换启用状态',
-    'settings.folderDefaultTtlDays': '此文件夹的默认过期时间',
-    'settings.folderDefaultTtlHelp':
-      '留空会使用全局默认值。文件夹默认值适用于此监控目标中的文件。匹配到的规则会覆盖两者。',
-    'settings.folderDefaultTtlPlaceholder': '使用全局默认值',
-    'settings.targetTtlOverride': '过期时间: {days} 天',
     'settings.errorUpdateTargets': '无法更新监控目标。',
     'settings.errorSavePrefs': '无法保存首选项。',
     'settings.errorUpdateTarget': '无法更新监控目标文件夹。',

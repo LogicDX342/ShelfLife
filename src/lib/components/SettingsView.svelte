@@ -50,7 +50,6 @@
       path,
       enabled: true,
       recursive: false,
-      default_ttl_seconds: null,
       ignore_patterns: [],
       include_hidden_patterns: [],
     };
@@ -486,7 +485,6 @@
                 {#each config.watch_targets as target (target.id)}
                   <WatchTargetCard
                     {target}
-                    globalTtlSeconds={config.default_ttl_seconds}
                     onUpdate={replaceTarget}
                     onRemove={initiateRemoveTarget}
                   />

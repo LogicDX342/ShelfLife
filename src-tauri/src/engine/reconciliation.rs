@@ -24,9 +24,7 @@ enum ChangeType {
 
 use crate::engine::paths::PathScope;
 use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
-use crate::engine::{
-    default_ttl_for_watch_target, project_watched_file, tracked_file_from_metadata,
-};
+use crate::engine::{project_watched_file, tracked_file_from_metadata};
 use crate::models::{AppError, FileDecayState, ReconciliationReport, TrackedFile};
 use crate::storage;
 
@@ -62,8 +60,6 @@ pub fn reconcile_with_report_with_progress(
         let hidden_whitelist = build_glob_set(&target.include_hidden_patterns)?;
         // Canonicalize root once — reused inside target_ignores_path.
         let canonical_root = root.canonicalize().ok();
-        let effective_ttl_seconds = default_ttl_for_watch_target(&config, target);
-
         let paths = scan_target_paths(
             &root,
             target.recursive,
@@ -125,14 +121,8 @@ pub fn reconcile_with_report_with_progress(
 
                 let path_string = path.to_string_lossy().to_string();
                 let existing = existing_map.get(&path_string);
-                let tracked = tracked_file_from_metadata(
-                    &path,
-                    &metadata,
-                    existing,
-                    &config,
-                    effective_ttl_seconds,
-                    &target.id,
-                );
+                let tracked =
+                    tracked_file_from_metadata(&path, &metadata, existing, &config, &target.id);
 
                 let tracked = project_watched_file(tracked, &config, &rules, now)?.tracked;
 
@@ -277,14 +267,8 @@ pub fn reconcile_paths(
         }
 
         let existing = storage::tracked::get_tracked_file(db, &path_string)?;
-        let tracked = tracked_file_from_metadata(
-            path,
-            &metadata,
-            existing.as_ref(),
-            &config,
-            default_ttl_for_watch_target(&config, target),
-            &target.id,
-        );
+        let tracked =
+            tracked_file_from_metadata(path, &metadata, existing.as_ref(), &config, &target.id);
 
         let tracked = project_watched_file(tracked, &config, &rules, now)?.tracked;
 
@@ -707,7 +691,6 @@ mod tests {
                     path: path_string(&self.watch),
                     enabled: true,
                     recursive: true,
-                    default_ttl_seconds: None,
                     ignore_patterns: Vec::new(),
                     include_hidden_patterns: Vec::new(),
                 }],
@@ -724,7 +707,6 @@ mod tests {
                     path: path_string(&self.watch),
                     enabled: true,
                     recursive: false,
-                    default_ttl_seconds: None,
                     ignore_patterns,
                     include_hidden_patterns: Vec::new(),
                 }],

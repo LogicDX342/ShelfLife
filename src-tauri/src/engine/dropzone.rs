@@ -205,14 +205,7 @@ pub fn build_dropzone_file(
         .and_then(|value| value.to_str())
         .unwrap_or(path)
         .to_string();
-    let mut tracked = tracked_file_from_metadata(
-        &source,
-        &metadata,
-        None,
-        config,
-        config.default_ttl_seconds,
-        "",
-    );
+    let mut tracked = tracked_file_from_metadata(&source, &metadata, None, config, "");
     tracked.origin = OriginEvidence::Unknown;
 
     Ok((

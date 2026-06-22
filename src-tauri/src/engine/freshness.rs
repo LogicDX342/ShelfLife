@@ -66,7 +66,6 @@ pub fn tracked_file_from_metadata(
     metadata: &Metadata,
     existing: Option<&TrackedFile>,
     config: &AppConfig,
-    effective_ttl_seconds: u64,
     watch_target_id: &str,
 ) -> TrackedFile {
     let now = now_seconds();
@@ -87,7 +86,7 @@ pub fn tracked_file_from_metadata(
     );
     let expiry = existing
         .map(|file| file.expiry.clone())
-        .unwrap_or_else(|| Expiry::At(freshness_at + effective_ttl_seconds));
+        .unwrap_or_else(|| Expiry::At(freshness_at + config.default_ttl_seconds));
     let state = existing
         .filter(|file| matches!(file.state, FileDecayState::Ignored))
         .map(|file| file.state.clone())

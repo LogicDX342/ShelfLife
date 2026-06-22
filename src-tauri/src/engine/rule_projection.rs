@@ -1,10 +1,7 @@
-use std::path::Path;
-
 use crate::engine::freshness::classify_decay_state;
-use crate::engine::paths::PathScope;
 use crate::models::{
     AppConfig, AppError, AutomationRule, Expiry, FileDecayState, RuleAction, RuleMatchExplanation,
-    RuleMode, TrackedFile, WatchTarget,
+    RuleMode, TrackedFile,
 };
 use crate::rules::{decide_file_against_rules, RuleDecision, RuleDecisionScope, RuleVerdict};
 
@@ -28,9 +25,8 @@ pub fn project_watched_file(
 ) -> Result<TrackedRuleProjection, AppError> {
     let decision =
         decide_file_against_rules(&tracked, config, rules, RuleDecisionScope::WatchedFile)?;
-    let default_ttl_seconds = default_ttl_for_tracked_file(config, &tracked);
     tracked.matched_rule_ids = decision.matched_rule_ids.clone();
-    apply_rule_decision(&mut tracked, &decision, config, default_ttl_seconds, now);
+    apply_rule_decision(&mut tracked, &decision, config, now);
 
     Ok(TrackedRuleProjection { tracked, decision })
 }
@@ -74,30 +70,10 @@ pub fn automatic_rule_candidate(
     }
 }
 
-pub fn default_ttl_for_watch_target(config: &AppConfig, target: &WatchTarget) -> u64 {
-    target
-        .default_ttl_seconds
-        .unwrap_or(config.default_ttl_seconds)
-}
-
-fn default_ttl_for_tracked_file(config: &AppConfig, file: &TrackedFile) -> u64 {
-    let scope = PathScope::new(config);
-    let target = config
-        .watch_targets
-        .iter()
-        .find(|target| target.id == file.watch_target_id)
-        .or_else(|| scope.watch_target_for_path(Path::new(&file.path)));
-
-    target
-        .and_then(|target| target.default_ttl_seconds)
-        .unwrap_or(config.default_ttl_seconds)
-}
-
 fn apply_rule_decision(
     tracked: &mut TrackedFile,
     decision: &RuleDecision,
     config: &AppConfig,
-    default_ttl_seconds: u64,
     now: u64,
 ) {
     let is_pinned_or_snoozed = match &tracked.expiry {
@@ -123,7 +99,7 @@ fn apply_rule_decision(
         if let Some(ttl) = matched_rule_ttl {
             tracked.expiry = Expiry::At(tracked.freshness_at + ttl);
         } else {
-            tracked.expiry = Expiry::At(tracked.freshness_at + default_ttl_seconds);
+            tracked.expiry = Expiry::At(tracked.freshness_at + config.default_ttl_seconds);
         }
     }
 
@@ -304,14 +280,7 @@ mod tests {
     ) -> crate::models::TrackedFile {
         let path = fixture.write_watch_file(name, "body");
         let metadata = fs::metadata(&path).expect("metadata should exist");
-        let mut tracked = tracked_file_from_metadata(
-            &path,
-            &metadata,
-            None,
-            config,
-            config.default_ttl_seconds,
-            "watch",
-        );
+        let mut tracked = tracked_file_from_metadata(&path, &metadata, None, config, "watch");
         tracked.origin = OriginEvidence::Unknown;
         tracked
     }
