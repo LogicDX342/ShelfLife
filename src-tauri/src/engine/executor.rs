@@ -6,8 +6,8 @@ use chrono::Local;
 use redb::Database;
 use uuid::Uuid;
 
-use crate::engine::freshness::{now_seconds, tracked_file_from_metadata};
 use crate::engine::paths::PathScope;
+use crate::engine::{default_ttl_for_watch_target, now_seconds, tracked_file_from_metadata};
 use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
     RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus, UserTriageAction,
@@ -394,9 +394,7 @@ pub fn ingest_dropzone_file(
         &metadata,
         None,
         &config,
-        target
-            .default_ttl_seconds
-            .unwrap_or(config.default_ttl_seconds),
+        default_ttl_for_watch_target(&config, target),
         &target.id,
     );
     let timestamp = now_seconds();

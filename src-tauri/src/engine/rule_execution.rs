@@ -3,11 +3,11 @@ use std::collections::HashSet;
 use std::time::Duration;
 use uuid::Uuid;
 
+use crate::engine::automatic_rule_candidate;
 use crate::models::{
-    AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
-    RuleAction, RuleMatchExplanation, TrackedFile, UndoStatus,
+    AppError, AuditActionKind, AuditEntry, AutomationRule, RuleAction, RuleMatchExplanation,
+    TrackedFile, UndoStatus,
 };
-use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
 use crate::storage;
 
 #[derive(Debug, Clone)]
@@ -27,23 +27,21 @@ pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionRep
     let mut failures = Vec::new();
 
     for file in files {
-        if !is_expired_action_candidate(&file, now) {
-            continue;
-        }
-
-        let Some((rule, explanation)) = automatic_rule_match_for_file(&file, &config, &rules)?
-        else {
+        let Some(candidate) = automatic_rule_candidate(&file, &config, &rules)? else {
             continue;
         };
-        if failed_attempts.contains(&(file.path.clone(), rule.id.clone())) {
+        if candidate.expires_at > now {
+            continue;
+        }
+        if failed_attempts.contains(&(file.path.clone(), candidate.rule.id.clone())) {
             continue;
         }
 
         match crate::engine::executor::execute_automation_rule_action(
             db,
             &file.path,
-            &rule,
-            explanation.clone(),
+            &candidate.rule,
+            candidate.explanation.clone(),
         ) {
             Ok(entry) => {
                 entries.push(entry);
@@ -52,13 +50,13 @@ pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionRep
                 let failure_entry = append_failed_rule_execution_audit_entry(
                     db,
                     &file,
-                    &rule,
-                    explanation,
+                    &candidate.rule,
+                    candidate.explanation,
                     &error,
                 )?;
                 entries.push(failure_entry);
                 failures.push(error);
-                failed_attempts.insert((file.path.clone(), rule.id.clone()));
+                failed_attempts.insert((file.path.clone(), candidate.rule.id));
             }
         }
     }
@@ -77,24 +75,15 @@ pub fn next_automatic_rule_execution_delay(
     let failed_attempts = failed_automatic_rule_attempts(db)?;
 
     for file in storage::tracked::list_tracked_files(db)? {
-        let Expiry::At(expires_at) = file.expiry else {
+        let Some(candidate) = automatic_rule_candidate(&file, &config, &rules)? else {
             continue;
         };
-        if matches!(
-            file.state,
-            FileDecayState::Ignored | FileDecayState::Missing
-        ) {
-            continue;
-        }
-        let Some((rule, _)) = automatic_rule_match_for_file(&file, &config, &rules)? else {
-            continue;
-        };
-        if failed_attempts.contains(&(file.path.clone(), rule.id.clone())) {
+        if failed_attempts.contains(&(file.path.clone(), candidate.rule.id.clone())) {
             continue;
         }
         nearest_expiry = Some(match nearest_expiry {
-            Some(existing) => existing.min(expires_at),
-            None => expires_at,
+            Some(existing) => existing.min(candidate.expires_at),
+            None => candidate.expires_at,
         });
     }
 
@@ -156,34 +145,6 @@ fn audit_action_kind_for_rule_action(action: &RuleAction) -> AuditActionKind {
         RuleAction::Trash => AuditActionKind::Trash,
         RuleAction::Move { .. } => AuditActionKind::Move,
         RuleAction::Ignore => AuditActionKind::Ignore,
-    }
-}
-
-fn is_expired_action_candidate(file: &TrackedFile, now: u64) -> bool {
-    matches!(file.expiry, Expiry::At(expires_at) if expires_at <= now)
-        && !matches!(
-            file.state,
-            FileDecayState::Ignored | FileDecayState::Missing
-        )
-}
-
-fn automatic_rule_match_for_file(
-    file: &TrackedFile,
-    config: &AppConfig,
-    rules: &[AutomationRule],
-) -> Result<Option<(AutomationRule, RuleMatchExplanation)>, AppError> {
-    let decision = decide_file_against_rules(file, config, rules, RuleDecisionScope::WatchedFile)?;
-    match decision.verdict {
-        RuleVerdict::Matched {
-            effective_rule,
-            effective_explanation,
-            ..
-        } if matches!(effective_rule.mode, crate::models::RuleMode::Automatic)
-            && !matches!(effective_rule.action, RuleAction::Ignore) =>
-        {
-            Ok(Some((*effective_rule, *effective_explanation)))
-        }
-        RuleVerdict::Matched { .. } | RuleVerdict::Unmatched => Ok(None),
     }
 }
 

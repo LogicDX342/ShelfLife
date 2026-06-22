@@ -2,10 +2,7 @@ use std::fs::Metadata;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{
-    AppConfig, Expiry, FileDecayState, OriginEvidence, RuleAction, RuleMode, TrackedFile,
-};
-use crate::rules::{RuleDecision, RuleVerdict};
+use crate::models::{AppConfig, Expiry, FileDecayState, OriginEvidence, TrackedFile};
 
 pub fn now_seconds() -> u64 {
     SystemTime::now()
@@ -61,53 +58,6 @@ pub fn classify_decay_state(
                 FileDecayState::Fresh
             }
         }
-    }
-}
-
-pub fn apply_rule_decision_to_tracked_file(
-    tracked: &mut TrackedFile,
-    decision: &RuleDecision,
-    config: &AppConfig,
-    default_ttl_seconds: u64,
-    now: u64,
-) {
-    let is_pinned_or_snoozed = match &tracked.expiry {
-        Expiry::Permanent => true,
-        Expiry::SnoozedUntil(until) if *until > now => true,
-        _ => false,
-    };
-
-    let (matched_rule_ttl, matched_rule_is_ignore) = match &decision.verdict {
-        RuleVerdict::Matched {
-            effective_rule,
-            rule_ttl_seconds,
-            ..
-        } => (
-            *rule_ttl_seconds,
-            !matches!(effective_rule.mode, RuleMode::PreviewOnly)
-                && matches!(effective_rule.action, RuleAction::Ignore),
-        ),
-        RuleVerdict::Unmatched => (None, false),
-    };
-
-    if !is_pinned_or_snoozed {
-        if let Some(ttl) = matched_rule_ttl {
-            tracked.expiry = Expiry::At(tracked.freshness_at + ttl);
-        } else {
-            tracked.expiry = Expiry::At(tracked.freshness_at + default_ttl_seconds);
-        }
-    }
-
-    if matches!(tracked.expiry, Expiry::Permanent) {
-        tracked.state = FileDecayState::Pinned;
-    } else if matched_rule_is_ignore {
-        tracked.state = FileDecayState::Ignored;
-    } else if matches!(tracked.state, FileDecayState::Ignored)
-        && tracked.last_user_action_at.is_some()
-    {
-        // Keep as Ignored if it was manually ignored by the user.
-    } else {
-        tracked.state = classify_decay_state(tracked.freshness_at, &tracked.expiry, now, config);
     }
 }
 

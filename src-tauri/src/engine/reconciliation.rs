@@ -22,13 +22,12 @@ enum ChangeType {
     Indexed(String),
 }
 
-use crate::engine::freshness::tracked_file_from_metadata;
 use crate::engine::paths::PathScope;
 use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
-use crate::models::{
-    AppConfig, AppError, FileDecayState, ReconciliationReport, TrackedFile, WatchTarget,
+use crate::engine::{
+    default_ttl_for_watch_target, project_watched_file, tracked_file_from_metadata,
 };
-use crate::rules::{decide_file_against_rules, RuleDecisionScope};
+use crate::models::{AppError, FileDecayState, ReconciliationReport, TrackedFile};
 use crate::storage;
 
 #[allow(clippy::type_complexity)]
@@ -39,6 +38,7 @@ pub fn reconcile_with_report_with_progress(
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
     let rules = storage::rules::list_rules(db)?;
+    let now = crate::engine::freshness::now_seconds();
     let mut observed_paths: HashSet<String> = HashSet::new();
     let mut report = ReconciliationReport::default();
 
@@ -62,7 +62,7 @@ pub fn reconcile_with_report_with_progress(
         let hidden_whitelist = build_glob_set(&target.include_hidden_patterns)?;
         // Canonicalize root once — reused inside target_ignores_path.
         let canonical_root = root.canonicalize().ok();
-        let effective_ttl_seconds = effective_ttl_seconds(&config, target);
+        let effective_ttl_seconds = default_ttl_for_watch_target(&config, target);
 
         let paths = scan_target_paths(
             &root,
@@ -125,7 +125,7 @@ pub fn reconcile_with_report_with_progress(
 
                 let path_string = path.to_string_lossy().to_string();
                 let existing = existing_map.get(&path_string);
-                let mut tracked = tracked_file_from_metadata(
+                let tracked = tracked_file_from_metadata(
                     &path,
                     &metadata,
                     existing,
@@ -134,23 +134,7 @@ pub fn reconcile_with_report_with_progress(
                     &target.id,
                 );
 
-                // Always run rule matching to ensure we match new/deleted/modified rules.
-                let decision = decide_file_against_rules(
-                    &tracked,
-                    &config,
-                    &rules,
-                    RuleDecisionScope::WatchedFile,
-                )?;
-                tracked.matched_rule_ids = decision.matched_rule_ids.clone();
-
-                // Apply rules to adjust expiry & state.
-                crate::engine::freshness::apply_rule_decision_to_tracked_file(
-                    &mut tracked,
-                    &decision,
-                    &config,
-                    effective_ttl_seconds,
-                    crate::engine::freshness::now_seconds(),
-                );
+                let tracked = project_watched_file(tracked, &config, &rules, now)?.tracked;
 
                 let change_type = match existing {
                     Some(e) if tracked_file_changed(e, &tracked) => {
@@ -239,6 +223,7 @@ pub fn reconcile_paths(
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
     let rules = storage::rules::list_rules(db)?;
+    let now = crate::engine::freshness::now_seconds();
     let mut report = ReconciliationReport::default();
     let mut to_upsert: Vec<TrackedFile> = Vec::new();
 
@@ -292,29 +277,16 @@ pub fn reconcile_paths(
         }
 
         let existing = storage::tracked::get_tracked_file(db, &path_string)?;
-        let effective_ttl_seconds = effective_ttl_seconds(&config, target);
-        let mut tracked = tracked_file_from_metadata(
+        let tracked = tracked_file_from_metadata(
             path,
             &metadata,
             existing.as_ref(),
             &config,
-            effective_ttl_seconds,
+            default_ttl_for_watch_target(&config, target),
             &target.id,
         );
 
-        // Always run rule matching to ensure we match new/deleted/modified rules.
-        let decision =
-            decide_file_against_rules(&tracked, &config, &rules, RuleDecisionScope::WatchedFile)?;
-        tracked.matched_rule_ids = decision.matched_rule_ids.clone();
-
-        // Apply rules to adjust expiry & state.
-        crate::engine::freshness::apply_rule_decision_to_tracked_file(
-            &mut tracked,
-            &decision,
-            &config,
-            effective_ttl_seconds,
-            crate::engine::freshness::now_seconds(),
-        );
+        let tracked = project_watched_file(tracked, &config, &rules, now)?.tracked;
 
         match &existing {
             Some(e) if tracked_file_changed(e, &tracked) => {
@@ -426,12 +398,6 @@ fn scan_target_paths_inner(
         }
     }
     Ok(paths)
-}
-
-fn effective_ttl_seconds(config: &AppConfig, target: &WatchTarget) -> u64 {
-    target
-        .default_ttl_seconds
-        .unwrap_or(config.default_ttl_seconds)
 }
 
 fn build_glob_set(patterns: &[String]) -> Result<Option<GlobSet>, AppError> {

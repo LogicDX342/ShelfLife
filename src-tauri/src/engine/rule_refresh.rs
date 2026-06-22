@@ -1,7 +1,7 @@
 use redb::Database;
 
-use crate::models::{AppConfig, AppError, ReconciliationReport, TrackedFile};
-use crate::rules::{decide_file_against_rules, RuleDecisionScope};
+use crate::engine::project_watched_file;
+use crate::models::{AppError, ReconciliationReport};
 use crate::storage;
 
 pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport, AppError> {
@@ -14,18 +14,7 @@ pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport,
     let mut changed = Vec::new();
 
     for file in files {
-        let mut refreshed = file.clone();
-        let decision =
-            decide_file_against_rules(&refreshed, &config, &rules, RuleDecisionScope::WatchedFile)?;
-        refreshed.matched_rule_ids = decision.matched_rule_ids.clone();
-        let ttl_seconds = effective_ttl_seconds_for_file(&config, &refreshed);
-        crate::engine::freshness::apply_rule_decision_to_tracked_file(
-            &mut refreshed,
-            &decision,
-            &config,
-            ttl_seconds,
-            now,
-        );
+        let refreshed = project_watched_file(file.clone(), &config, &rules, now)?.tracked;
 
         if refreshed != file {
             report.updated.push(refreshed.path.clone());
@@ -38,15 +27,6 @@ pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport,
     }
 
     Ok(report)
-}
-
-fn effective_ttl_seconds_for_file(config: &AppConfig, file: &TrackedFile) -> u64 {
-    config
-        .watch_targets
-        .iter()
-        .find(|target| target.id == file.watch_target_id)
-        .and_then(|target| target.default_ttl_seconds)
-        .unwrap_or(config.default_ttl_seconds)
 }
 
 #[cfg(test)]
