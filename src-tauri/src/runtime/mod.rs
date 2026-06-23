@@ -1,3 +1,5 @@
+#[cfg(debug_assertions)]
+pub mod mock;
 pub mod reconciliation;
 pub mod rule_scheduler;
 
@@ -131,10 +133,21 @@ impl AppRuntime {
 pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     engine::executor::init_trash_support();
     let db_path = app.path().app_data_dir()?.join("shelflife.redb");
+    #[cfg(debug_assertions)]
+    if mock::is_mock_mode() && db_path.exists() {
+        let _ = std::fs::remove_file(&db_path);
+    }
     let db = storage::open_database(db_path)
         .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
     let runtime = AppRuntime::new(db);
     app.manage(runtime.clone());
+
+    #[cfg(debug_assertions)]
+    if mock::is_mock_mode() {
+        if let Err(e) = mock::preload_mock_data(app, &runtime.db) {
+            eprintln!("Failed to preload mock data: {:?}", e);
+        }
+    }
 
     let config = storage::get_config(&runtime.db)
         .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
