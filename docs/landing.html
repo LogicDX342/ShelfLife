@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShelfLife — Keep your temporary folders tidy & clean</title>
+    <meta
+      name="description"
+      content="An elegant, lightweight desktop utility for Windows that keeps your temporary folders clean by automatically decaying unpinned files into the Recycle Bin."
+    />
+    <meta
+      name="keywords"
+      content="ShelfLife, file decay, clean downloads, clean desktop, windows file cleanup, automate recycle bin, file staging, file hygiene utility"
+    />
+    <link rel="canonical" href="https://github.com/LogicDX342/ShelfLife" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://github.com/LogicDX342/ShelfLife" />
+    <meta property="og:title" content="ShelfLife — Keep your temporary folders tidy & clean" />
+    <meta
+      property="og:description"
+      content="An elegant, lightweight desktop utility for Windows that keeps your temporary folders clean by automatically decaying unpinned files into the Recycle Bin."
+    />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://github.com/LogicDX342/ShelfLife" />
+    <meta property="twitter:title" content="ShelfLife — Keep your temporary folders tidy & clean" />
+    <meta
+      property="twitter:description"
+      content="An elegant, lightweight desktop utility for Windows that keeps your temporary folders clean by automatically decaying unpinned files into the Recycle Bin."
+    />
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "ShelfLife",
+        "operatingSystem": "Windows 10, Windows 11",
+        "applicationCategory": "UtilitiesApplication",
+        "offers": {
+          "@type": "Offer",
+          "price": "0.00",
+          "priceCurrency": "USD"
+        },
+        "description": "An elegant, lightweight desktop utility for Windows that keeps your temporary folders clean by automatically decaying unpinned files into the Recycle Bin.",
+        "downloadUrl": "https://github.com/LogicDX342/ShelfLife/releases",
+        "license": "https://www.gnu.org/licenses/gpl-3.0.html"
+      }
+    </script>
+
+    <!-- Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <script type="module" src="https://get.microsoft.com/badge/ms-store-badge.bundled.js"></script>
+
+    <style>
+      :root {
+        --bg-color: #f7f6f3;
+        --text-main: #1e1e1c;
+        --text-muted: #6e6d6a;
+        --accent-fresh: #10b981;
+        --accent-stale: #3b82f6;
+        --accent-decaying: #f59e0b;
+        --accent-trash: #ef4444;
+        --border-color: #e2e1de;
+        --card-bg: #ffffff;
+        --font-sans:
+          'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        --font-mono: 'JetBrains Mono', monospace;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-color: #121211;
+          --text-main: #f3f3f0;
+          --text-muted: #a3a29e;
+          --border-color: #2a2a28;
+          --card-bg: #1c1c1a;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        font-family: var(--font-sans);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        padding: 2rem;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      header {
+        max-width: 680px;
+        margin: 0 auto;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 3rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .logo {
+        font-size: 1.25rem;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .logo-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--accent-decaying);
+        display: inline-block;
+      }
+
+      .github-link {
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.2s ease;
+      }
+
+      .github-link:hover {
+        color: var(--text-main);
+      }
+
+      main {
+        max-width: 680px;
+        margin: 4rem auto;
+        width: 100%;
+        flex-grow: 1;
+      }
+
+      .hero {
+        margin-bottom: 4rem;
+      }
+
+      h1 {
+        font-size: 2.25rem;
+        font-weight: 500;
+        line-height: 1.2;
+        letter-spacing: -0.04em;
+        margin-bottom: 1.5rem;
+      }
+
+      .hero-desc {
+        font-size: 1.15rem;
+        color: var(--text-muted);
+        font-weight: 300;
+        max-width: 580px;
+      }
+
+      /* Interactive Decay Simulator */
+      .simulator-section {
+        margin: 4rem 0;
+        padding: 2rem 0;
+        border-top: 1px dashed var(--border-color);
+        border-bottom: 1px dashed var(--border-color);
+      }
+
+      .simulator-title {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        margin-bottom: 1.5rem;
+      }
+
+      .simulator-container {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+      }
+
+      .sim-file {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        background-color: var(--bg-color);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        margin-bottom: 1.5rem;
+      }
+
+      .sim-file-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .sim-file-status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: var(--accent-fresh);
+        transition: background-color 0.3s ease;
+      }
+
+      .sim-file-name {
+        font-family: var(--font-mono);
+        font-size: 0.9rem;
+      }
+
+      .sim-file-state-text {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+      }
+
+      /* Controls */
+      .sim-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .slider-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      .sim-slider {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 100%;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--border-color);
+        outline: none;
+        margin: 0.5rem 0;
+        cursor: pointer;
+      }
+
+      .sim-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--text-main);
+        cursor: pointer;
+        transition: transform 0.1s ease;
+      }
+
+      .sim-slider::-webkit-slider-thumb:hover {
+        transform: scale(1.2);
+      }
+
+      /* States classes */
+      .state-fresh {
+        background-color: rgba(16, 185, 129, 0.1);
+        color: var(--accent-fresh);
+      }
+
+      .state-stale {
+        background-color: rgba(59, 130, 246, 0.1);
+        color: var(--accent-stale);
+      }
+
+      .state-decaying {
+        background-color: rgba(245, 158, 11, 0.1);
+        color: var(--accent-decaying);
+      }
+
+      .state-trash {
+        background-color: rgba(239, 68, 68, 0.1);
+        color: var(--accent-trash);
+      }
+
+      .download-zone {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        margin-top: 3rem;
+      }
+
+      .btn-download {
+        align-self: flex-start;
+        background-color: var(--text-main);
+        color: var(--bg-color);
+        height: 52px;
+        padding: 0 1.75rem;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.95rem;
+        transition:
+          transform 0.35s ease,
+          opacity 0.2s ease,
+          box-shadow 0.35s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-sizing: border-box;
+      }
+
+      .btn-download:hover {
+        transform: translateY(-4px);
+        opacity: 0.9;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.05);
+      }
+
+      .btn-download:active {
+        transform: translateY(-2px);
+      }
+
+      ms-store-badge {
+        display: inline-flex;
+        height: 52px;
+      }
+
+      ms-store-badge::part(img) {
+        height: 52px;
+        max-height: 52px;
+      }
+
+      .features-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        margin-top: 3rem;
+      }
+
+      .feature-card h3 {
+        font-size: 1rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+      }
+
+      .feature-card p {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+      }
+
+      footer {
+        max-width: 680px;
+        margin: 0 auto;
+        width: 100%;
+        padding-top: 3rem;
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 1.5rem;
+        }
+
+        main {
+          margin: 2.5rem auto;
+        }
+
+        .features-grid {
+          grid-template-columns: 1fr;
+          gap: 1.5rem;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <div class="logo">
+        <span class="logo-dot"></span>
+        ShelfLife
+      </div>
+      <a
+        id="header-github-link"
+        href="https://github.com/LogicDX342/ShelfLife"
+        class="github-link"
+        target="_blank"
+        rel="noopener"
+        >GitHub ↗</a
+      >
+    </header>
+
+    <main>
+      <section class="hero">
+        <h1>Keep your desktop and downloads folders tidy. Automatically.</h1>
+        <p class="hero-desc">
+          ShelfLife is a lightweight Windows utility that treats specified folders as temporary
+          staging areas. Files decay safely into the system Recycle Bin after a duration you decide.
+        </p>
+      </section>
+
+      <!-- Simulator -->
+      <section class="simulator-section">
+        <div class="simulator-title">Interactive Decay Simulator</div>
+        <div class="simulator-container">
+          <div class="sim-file" id="simFile">
+            <div class="sim-file-info">
+              <div class="sim-file-status-indicator" id="statusDot"></div>
+              <span class="sim-file-name" id="fileName">proposal_draft_v2.docx</span>
+            </div>
+            <span class="sim-file-state-text state-fresh" id="stateLabel">Fresh</span>
+          </div>
+
+          <div class="sim-controls">
+            <input type="range" min="0" max="3" value="0" class="sim-slider" id="decaySlider" />
+            <div class="slider-wrapper">
+              <span id="sliderTime">Just downloaded</span>
+              <span id="sliderAction">Active</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="features-grid">
+        <div class="feature-card">
+          <h3>Customizable Rules</h3>
+          <p>
+            Create automation rules based on file extensions, size, glob patterns, or source
+            origins. Preview matches safely before activating them.
+          </p>
+        </div>
+        <div class="feature-card">
+          <h3>Decay States</h3>
+          <p>
+            Files transit from Fresh to Stale, then Decaying, and finally to the Recycle Bin. You
+            define the timelines.
+          </p>
+        </div>
+        <div class="feature-card">
+          <h3>Safe & Reversible</h3>
+          <p>
+            Nothing is deleted permanently. Files are moved to the system Recycle Bin, and all
+            actions are fully undoable from the Activity Log.
+          </p>
+        </div>
+        <div class="feature-card">
+          <h3>Zero Resource Waste</h3>
+          <p>
+            Built on Tauri and native Windows file system watchers, it sits silently in the system
+            tray consuming negligible memory.
+          </p>
+        </div>
+      </section>
+
+      <section class="download-zone">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem">
+          <a
+            id="github-download-link"
+            href="https://github.com/LogicDX342/ShelfLife/releases"
+            class="btn-download"
+            target="_blank"
+            rel="noopener"
+          >
+            Download from GitHub Release <span>↓</span>
+          </a>
+          <ms-store-badge
+            id="ms-store-download-badge"
+            productid="9mt2n6xc6f6s"
+            productname="ShelfLife"
+            window-mode="direct"
+            theme="auto"
+            size="small"
+            language="en-us"
+            animation="on"
+          >
+          </ms-store-badge>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Open Source (GPLv3)</span>
+      <span>Windows Utility</span>
+    </footer>
+
+    <script>
+      const slider = document.getElementById('decaySlider');
+      const simFile = document.getElementById('simFile');
+      const statusDot = document.getElementById('statusDot');
+      const stateLabel = document.getElementById('stateLabel');
+      const sliderTime = document.getElementById('sliderTime');
+      const sliderAction = document.getElementById('sliderAction');
+
+      const states = [
+        {
+          label: 'Fresh',
+          dotColor: 'var(--accent-fresh)',
+          bgClass: 'state-fresh',
+          time: 'Just downloaded',
+          action: 'Kept safe',
+          opacity: 1.0,
+          blur: 0,
+        },
+        {
+          label: 'Stale',
+          dotColor: 'var(--accent-stale)',
+          bgClass: 'state-stale',
+          time: '2 days old (inactive)',
+          action: 'Unused staging file',
+          opacity: 0.8,
+          blur: 0,
+        },
+        {
+          label: 'Decaying',
+          dotColor: 'var(--accent-decaying)',
+          bgClass: 'state-decaying',
+          time: '6 days old (expiring soon)',
+          action: 'Nearing disposal threshold',
+          opacity: 0.5,
+          blur: '0.5px',
+        },
+        {
+          label: 'Recycled',
+          dotColor: 'var(--accent-trash)',
+          bgClass: 'state-trash',
+          time: '7 days limit reached',
+          action: 'Moved to Recycle Bin',
+          opacity: 0.15,
+          blur: '2px',
+        },
+      ];
+
+      slider.addEventListener('input', (e) => {
+        const index = parseInt(e.target.value);
+        const state = states[index];
+
+        // Reset labels and classes
+        stateLabel.textContent = state.label;
+        stateLabel.className = 'sim-file-state-text ' + state.bgClass;
+
+        // Dot color
+        statusDot.style.backgroundColor = state.dotColor;
+
+        // Apply opacity and blur to simulate visual decay
+        simFile.style.opacity = state.opacity;
+        simFile.style.filter = `blur(${state.blur})`;
+
+        // Slider text updates
+        sliderTime.textContent = state.time;
+        sliderAction.textContent = state.action;
+      });
+    </script>
+  </body>
+</html>
