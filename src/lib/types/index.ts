@@ -170,6 +170,18 @@ export type WatchTarget = {
 
 export type CloseBehavior = 'Ask' | 'HideToTray' | 'Quit';
 
+export type TrayLabels = {
+  open: string;
+  review: string;
+  pause: string;
+  resume: string;
+  reconcile: string;
+  preferences: string;
+  quit: string;
+  tooltip: string;
+  tooltip_paused: string;
+};
+
 export type AppConfig = {
   watch_targets: WatchTarget[];
   default_ttl_seconds: number;

@@ -211,6 +211,17 @@
     "quit": "Quit ShelfLife",
     "error": "Could not apply close behavior."
   },
+  "tray": {
+    "open": "Open ShelfLife",
+    "review": "Review decaying files",
+    "pause": "Pause watching",
+    "resume": "Resume watching",
+    "reconcile": "Run reconciliation scan",
+    "preferences": "Preferences",
+    "quit": "Quit",
+    "tooltip": "ShelfLife",
+    "tooltipPaused": "ShelfLife (Paused)"
+  },
   "browser": {
     "folders": "Folders",
     "fileCountSingular": "{count} file",

@@ -1,41 +1,50 @@
+use std::sync::Mutex;
+
+use serde::Deserialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{App, AppHandle, Emitter, Manager, Window, WindowEvent};
+use tauri::{App, AppHandle, Emitter, Manager, Runtime, Window, WindowEvent};
 
-use crate::models::CloseBehavior;
+use crate::models::{AppError, CloseBehavior};
 use crate::runtime::AppRuntime;
 
-pub fn setup(app: &mut App) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open shelflife", true, None::<&str>)?;
-    let review = MenuItem::with_id(app, "review", "Review decaying files", true, None::<&str>)?;
-    let pause = MenuItem::with_id(app, "pause", "Pause watching", true, None::<&str>)?;
-    let resume = MenuItem::with_id(app, "resume", "Resume watching", true, None::<&str>)?;
-    let reconcile = MenuItem::with_id(
-        app,
-        "reconcile",
-        "Run reconciliation scan",
-        true,
-        None::<&str>,
-    )?;
-    let preferences = MenuItem::with_id(app, "preferences", "Preferences", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+#[derive(Clone, Debug, Deserialize)]
+pub struct TrayLabels {
+    pub open: String,
+    pub review: String,
+    pub pause: String,
+    pub resume: String,
+    pub reconcile: String,
+    pub preferences: String,
+    pub quit: String,
+    pub tooltip: String,
+    pub tooltip_paused: String,
+}
 
-    let menu = Menu::with_items(
-        app,
-        &[
-            &open,
-            &review,
-            &pause,
-            &resume,
-            &reconcile,
-            &preferences,
-            &quit,
-        ],
-    )?;
+impl Default for TrayLabels {
+    fn default() -> Self {
+        Self {
+            open: "Open ShelfLife".to_string(),
+            review: "Review decaying files".to_string(),
+            pause: "Pause watching".to_string(),
+            resume: "Resume watching".to_string(),
+            reconcile: "Run reconciliation scan".to_string(),
+            preferences: "Preferences".to_string(),
+            quit: "Quit".to_string(),
+            tooltip: "ShelfLife".to_string(),
+            tooltip_paused: "ShelfLife (Paused)".to_string(),
+        }
+    }
+}
+
+pub fn setup(app: &mut App) -> tauri::Result<()> {
+    let labels = TrayLabels::default();
+    app.manage(Mutex::new(labels.clone()));
+    let menu = build_menu(app, &labels)?;
 
     let mut tray = TrayIconBuilder::with_id("shelflife")
         .menu(&menu)
-        .tooltip("ShelfLife")
+        .tooltip(&labels.tooltip)
         .show_menu_on_left_click(false)
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
             "open" => show_main_window(app_handle, None),
@@ -63,6 +72,75 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     }
 
     tray.build(app)?;
+
+    Ok(())
+}
+
+fn build_menu<R: Runtime, M: Manager<R>>(
+    manager: &M,
+    labels: &TrayLabels,
+) -> tauri::Result<Menu<R>> {
+    let open = MenuItem::with_id(manager, "open", &labels.open, true, None::<&str>)?;
+    let review = MenuItem::with_id(manager, "review", &labels.review, true, None::<&str>)?;
+    let pause = MenuItem::with_id(manager, "pause", &labels.pause, true, None::<&str>)?;
+    let resume = MenuItem::with_id(manager, "resume", &labels.resume, true, None::<&str>)?;
+    let reconcile = MenuItem::with_id(manager, "reconcile", &labels.reconcile, true, None::<&str>)?;
+    let preferences = MenuItem::with_id(
+        manager,
+        "preferences",
+        &labels.preferences,
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(manager, "quit", &labels.quit, true, None::<&str>)?;
+
+    Menu::with_items(
+        manager,
+        &[
+            &open,
+            &review,
+            &pause,
+            &resume,
+            &reconcile,
+            &preferences,
+            &quit,
+        ],
+    )
+}
+
+pub fn update_tray_labels(app_handle: &AppHandle, labels: TrayLabels) -> Result<(), AppError> {
+    let labels_state = app_handle.state::<Mutex<TrayLabels>>();
+    {
+        let mut stored_labels = labels_state.lock().map_err(|_| {
+            AppError::new(
+                "ACTION_FAILED",
+                "Tray labels state could not be locked.",
+                true,
+            )
+        })?;
+        *stored_labels = labels.clone();
+    }
+
+    let menu = build_menu(app_handle, &labels).map_err(|error| {
+        AppError::with_details(
+            "ACTION_FAILED",
+            "Tray menu update failed.",
+            true,
+            error.to_string(),
+        )
+    })?;
+
+    if let Some(tray) = app_handle.tray_by_id("shelflife") {
+        tray.set_menu(Some(menu)).map_err(|error| {
+            AppError::with_details(
+                "ACTION_FAILED",
+                "Tray menu update failed.",
+                true,
+                error.to_string(),
+            )
+        })?;
+        update_tray_icon(app_handle);
+    }
 
     Ok(())
 }
@@ -140,14 +218,19 @@ pub fn update_tray_icon(app_handle: &AppHandle) {
     };
 
     if let Some(tray) = app_handle.tray_by_id("shelflife") {
+        let labels = app_handle
+            .try_state::<Mutex<TrayLabels>>()
+            .and_then(|labels| labels.lock().ok().map(|labels| labels.clone()))
+            .unwrap_or_default();
+
         if let Some(icon) = app_handle.default_window_icon() {
             if is_watching {
                 let _ = tray.set_icon(Some(icon.clone()));
-                let _ = tray.set_tooltip(Some("ShelfLife".to_string()));
+                let _ = tray.set_tooltip(Some(labels.tooltip));
             } else {
                 let gray_icon = to_grayscale(icon);
                 let _ = tray.set_icon(Some(gray_icon));
-                let _ = tray.set_tooltip(Some("ShelfLife (Paused)".to_string()));
+                let _ = tray.set_tooltip(Some(labels.tooltip_paused));
             }
         }
     }

@@ -1,4 +1,6 @@
 import { browser } from '$app/environment';
+import { updateTrayLabels } from '$lib/api/tray';
+import type { TrayLabels } from '$lib/types';
 
 type Language = string;
 type Theme = 'light' | 'dark' | 'system';
@@ -95,6 +97,10 @@ class AppState {
       document.documentElement.setAttribute('lang', this.currentLang);
     });
 
+    $effect(() => {
+      void this.syncTrayLabels(this.currentLang);
+    });
+
     // Handle Theme side effects
     $effect(() => {
       const root = document.documentElement;
@@ -129,6 +135,30 @@ class AppState {
     this.currentTheme = theme;
     if (browser) {
       localStorage.setItem('shelflife_theme', theme);
+    }
+  }
+
+  private trayLabels(): TrayLabels {
+    return {
+      open: this.t('tray.open'),
+      review: this.t('tray.review'),
+      pause: this.t('tray.pause'),
+      resume: this.t('tray.resume'),
+      reconcile: this.t('tray.reconcile'),
+      preferences: this.t('tray.preferences'),
+      quit: this.t('tray.quit'),
+      tooltip: this.t('tray.tooltip'),
+      tooltip_paused: this.t('tray.tooltipPaused'),
+    };
+  }
+
+  private async syncTrayLabels(language: Language) {
+    if (!language) return;
+
+    try {
+      await updateTrayLabels(this.trayLabels());
+    } catch {
+      // The tray is only available in the Tauri desktop runtime.
     }
   }
 

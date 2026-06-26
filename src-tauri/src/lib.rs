@@ -51,6 +51,7 @@ pub fn run() {
             commands::is_reconciliation_active,
             commands::pause_watching,
             commands::resume_watching,
+            commands::update_tray_labels,
             commands::select_directory
         ])
         .build(tauri::generate_context!())
