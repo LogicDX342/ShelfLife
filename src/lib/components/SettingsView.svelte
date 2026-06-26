@@ -275,16 +275,17 @@
                 <Select.Root
                   type="single"
                   value={i18n.currentLang}
-                  onValueChange={(value) => i18n.setLang(value as 'en' | 'zh')}
+                  onValueChange={(value) => i18n.setLang(value)}
                 >
                   <Select.Trigger id="lang-select" class="w-full">
                     <span data-slot="select-value">
-                      {i18n.currentLang === 'zh' ? i18n.t('lang.zh') : i18n.t('lang.en')}
+                      {i18n.t(`lang.${i18n.currentLang}`)}
                     </span>
                   </Select.Trigger>
                   <Select.Content>
-                    <Select.Item value="en" label={i18n.t('lang.en')} />
-                    <Select.Item value="zh" label={i18n.t('lang.zh')} />
+                    {#each i18n.languages as language (language)}
+                      <Select.Item value={language} label={i18n.t(`lang.${language}`)} />
+                    {/each}
                   </Select.Content>
                 </Select.Root>
               </div>
