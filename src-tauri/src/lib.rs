@@ -52,7 +52,8 @@ pub fn run() {
             commands::pause_watching,
             commands::resume_watching,
             commands::update_tray_labels,
-            commands::select_directory
+            commands::select_directory,
+            commands::open_external_url
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

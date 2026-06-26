@@ -4,12 +4,13 @@
   import IconPlayCircle from '@lucide/svelte/icons/circle-play';
   import IconFolderOpen from '@lucide/svelte/icons/folder-open';
   import IconHistory from '@lucide/svelte/icons/history';
+  import IconInfo from '@lucide/svelte/icons/info';
   import IconBoard from '@lucide/svelte/icons/layout-dashboard';
   import IconClipboardList from '@lucide/svelte/icons/list-todo';
   import IconSettings from '@lucide/svelte/icons/settings';
   import IconFlash from '@lucide/svelte/icons/zap';
 
-  import { base } from '$app/paths';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { pauseWatching, resumeWatching } from '$lib/api/config';
   import { Badge } from '$lib/components/ui/badge';
@@ -20,6 +21,13 @@
   import { Switch } from '$lib/components/ui/switch';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
+
+  type AppRoute = '/' | '/queue' | '/browser' | '/rules' | '/audit' | '/settings' | '/about';
+  type NavItem = {
+    path: AppRoute;
+    labelKey: string;
+    icon: typeof IconBoard;
+  };
 
   let isPaused = $state(false);
 
@@ -37,7 +45,7 @@
     }
   }
 
-  const navItems = [
+  const navItems: NavItem[] = [
     {
       path: '/',
       labelKey: 'nav.dashboard',
@@ -66,7 +74,9 @@
     },
   ];
 
-  function isActive(path: string) {
+  const secondaryNavItems: NavItem[] = [{ path: '/about', labelKey: 'nav.about', icon: IconInfo }];
+
+  function isActive(path: AppRoute) {
     if (path === '/') {
       return page.url.pathname === '/';
     }
@@ -97,7 +107,7 @@
     {#each navItems as item (item.path)}
       {@const Icon = item.icon}
       <Button
-        href="{base}{item.path}"
+        href={resolve(item.path)}
         variant="ghost"
         class="relative w-full justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 text-sm font-medium group {isActive(
           item.path,
@@ -119,6 +129,30 @@
 
   <!-- Controls band at the bottom -->
   <div class="p-2 md:p-4">
+    <nav class="mb-3 flex flex-col gap-1" aria-label="Secondary">
+      {#each secondaryNavItems as item (item.path)}
+        {@const Icon = item.icon}
+        <Button
+          href={resolve(item.path)}
+          variant="ghost"
+          class="relative w-full justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 text-sm font-medium group {isActive(
+            item.path,
+          )
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold'
+            : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'}"
+          title={i18n.t(item.labelKey)}
+        >
+          {#if isActive(item.path)}
+            <div class="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-primary"></div>
+          {/if}
+          <Icon
+            class="w-5 h-5 flex-shrink-0 transition-transform duration-150 group-hover:scale-105"
+          />
+          <span class="hidden md:inline whitespace-nowrap">{i18n.t(item.labelKey)}</span>
+        </Button>
+      {/each}
+    </nav>
+
     <Separator class="mb-4" />
     <!-- Global Sync Indicator (Active only during scans lasting >= 1s) -->
     {#if filesState.syncing && filesState.syncDuration >= 1}

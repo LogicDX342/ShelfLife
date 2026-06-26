@@ -5,7 +5,8 @@
     "browser": "File Browser",
     "rules": "Rules",
     "audit": "Audit",
-    "settings": "Settings"
+    "settings": "Settings",
+    "about": "About"
   },
   "status": {
     "active": "Active",
@@ -197,6 +198,19 @@
     "reconcileScan": "Re-scan Now",
     "reconcileScanning": "Scanning...",
     "errorReconcileScan": "Manual scan failed."
+  },
+  "about": {
+    "title": "About ShelfLife",
+    "version": "Version",
+    "checkUpdates": "Check for updates",
+    "checkingUpdates": "Checking...",
+    "upToDate": "ShelfLife is up to date. Current version: v{version}.",
+    "updateAvailable": "A newer version is available: v{version}.",
+    "updateCheckFailed": "Could not check for updates.",
+    "github": "GitHub",
+    "reportBug": "Report a bug",
+    "linksTitle": "Project links",
+    "errorOpenLink": "Could not open link."
   },
   "dialog": {
     "confirmTitle": "Confirm Action",

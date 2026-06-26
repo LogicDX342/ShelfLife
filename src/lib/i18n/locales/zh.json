@@ -5,7 +5,8 @@
     "browser": "文件浏览",
     "rules": "自动化规则",
     "audit": "审计日志",
-    "settings": "设置"
+    "settings": "设置",
+    "about": "关于"
   },
   "status": {
     "active": "监控中",
@@ -197,6 +198,19 @@
     "reconcileScan": "立即重新扫描",
     "reconcileScanning": "扫描中…",
     "errorReconcileScan": "手动扫描失败。"
+  },
+  "about": {
+    "title": "关于 ShelfLife",
+    "version": "版本",
+    "checkUpdates": "检查更新",
+    "checkingUpdates": "正在检查…",
+    "upToDate": "ShelfLife 已是最新版本。当前版本：v{version}。",
+    "updateAvailable": "发现新版本：v{version}。",
+    "updateCheckFailed": "无法检查更新。",
+    "github": "GitHub",
+    "reportBug": "报告问题",
+    "linksTitle": "项目链接",
+    "errorOpenLink": "无法打开链接。"
   },
   "dialog": {
     "confirmTitle": "确认操作",
