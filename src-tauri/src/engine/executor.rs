@@ -859,7 +859,8 @@ mod tests {
         let source = fixture.write_watch_file("report.txt", "download");
         let destination_folder = fixture.outside.join("sorted");
         std::fs::create_dir_all(&destination_folder).expect("destination folder should exist");
-        fixture.write_file(&destination_folder.join("report.txt"), "existing");
+        let existing_destination =
+            fixture.write_file(&destination_folder.join("report.txt"), "existing");
         fixture.save_config();
 
         let entry = execute_triage_action(
@@ -876,6 +877,8 @@ mod tests {
             .expect("destination should be recorded");
         assert!(Path::new(&destination).exists());
         assert!(destination.ends_with("report-1.txt"));
+        assert!(!source.exists());
+        assert!(existing_destination.exists());
         assert_eq!(entry.action_kind, AuditActionKind::Move);
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
@@ -931,34 +934,6 @@ mod tests {
         assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
         assert!(!source.exists());
         assert!(Path::new(entry.destination_path.as_ref().unwrap()).exists());
-    }
-
-    #[test]
-    fn scoped_custom_move_succeeds_and_avoids_destination_collision() {
-        let fixture = Fixture::new("shelflife-test");
-        let source = fixture.write_watch_file("report.txt", "download");
-        let destination_folder = fixture.outside.join("sorted");
-        std::fs::create_dir_all(&destination_folder).expect("destination folder should exist");
-        let existing_destination =
-            fixture.write_file(&destination_folder.join("report.txt"), "existing");
-        fixture.save_config();
-
-        let entry = execute_triage_action(
-            &fixture.db,
-            &path_string(&source),
-            UserTriageAction::Move {
-                destination_folder: path_string(&destination_folder),
-            },
-        )
-        .expect("custom move should succeed");
-
-        let destination = entry
-            .destination_path
-            .expect("destination should be recorded");
-        assert!(destination.ends_with("report-1.txt"));
-        assert!(Path::new(&destination).exists());
-        assert!(!source.exists());
-        assert!(existing_destination.exists());
     }
 
     #[test]

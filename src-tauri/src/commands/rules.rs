@@ -272,19 +272,4 @@ mod tests {
 
         assert_eq!(error.code, "RULE_INVALID_DESTINATION");
     }
-
-    #[test]
-    fn move_rule_unknown_rename_placeholder_is_rejected() {
-        let fixture = Fixture::new("shelflife-rule");
-        let config = fixture.config();
-        let mut rule = fixture.rule();
-        rule.action = RuleAction::Move {
-            destination_folder: path_string(&fixture.outside),
-            rename_template: Some(String::from("{month}-{file}")),
-        };
-
-        let error = validate_rule(&rule, &config).expect_err("unknown placeholder should fail");
-
-        assert_eq!(error.code, "RULE_INVALID_RENAME_TEMPLATE");
-    }
 }

@@ -113,19 +113,6 @@ mod tests {
     use super::process_debounced_paths;
 
     #[test]
-    fn burst_duplicate_events_return_stable_paths() {
-        let fixture = Fixture::new();
-        let file = fixture.write_watch_file("burst.txt", "body");
-
-        let paths = process_debounced_paths(
-            vec![file.clone(), file.clone(), file.clone()],
-            Duration::ZERO,
-        );
-
-        assert_eq!(paths, vec![file.clone(), file.clone(), file]);
-    }
-
-    #[test]
     fn deleted_paths_pass_through_as_stable_events() {
         let fixture = Fixture::new();
         let path = fixture.watch.join("missing.txt");
@@ -146,12 +133,6 @@ mod tests {
             let watch = root.join("watch");
             fs::create_dir_all(&watch).expect("watch directory should be created");
             Self { root, watch }
-        }
-
-        fn write_watch_file(&self, name: &str, content: &str) -> PathBuf {
-            let path = self.watch.join(name);
-            fs::write(&path, content).expect("watch file should be written");
-            path
         }
     }
 

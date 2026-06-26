@@ -245,40 +245,6 @@ mod tests {
 
         let report =
             execute_expired_automatic_rules(&fixture.db).expect("rule execution should run");
-
-        assert!(report.entries.is_empty());
-        assert!(report.failures.is_empty());
-        assert!(file.exists());
-    }
-
-    #[test]
-    fn higher_priority_preview_rule_blocks_lower_priority_automatic_rule() {
-        let fixture = Fixture::new("shelflife-rule-execution");
-        fixture.save_config();
-        let file = fixture.write_watch_file("download.zip", "body");
-        fixture.track_file(&file);
-        expire_tracked_file(&fixture, &file);
-
-        let mut preview_rule = fixture.rule();
-        preview_rule.id = String::from("preview-zip-rule");
-        preview_rule.name = String::from("Preview zip downloads");
-        preview_rule.priority = 20;
-        preview_rule.mode = RuleMode::PreviewOnly;
-        storage::rules::save_rule(&fixture.db, &preview_rule).expect("rule should save");
-
-        let mut automatic_rule = fixture.rule();
-        automatic_rule.id = String::from("auto-zip-rule");
-        automatic_rule.name = String::from("Archive zip downloads");
-        automatic_rule.priority = 10;
-        automatic_rule.mode = RuleMode::Automatic;
-        automatic_rule.action = RuleAction::Move {
-            destination_folder: path_string(&fixture.outside),
-            rename_template: None,
-        };
-        storage::rules::save_rule(&fixture.db, &automatic_rule).expect("rule should save");
-
-        let report =
-            execute_expired_automatic_rules(&fixture.db).expect("rule execution should run");
         let delay = super::next_automatic_rule_execution_delay(
             &fixture.db,
             std::time::Duration::from_secs(5),

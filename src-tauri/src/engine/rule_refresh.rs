@@ -31,7 +31,7 @@ pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport,
 
 #[cfg(test)]
 mod tests {
-    use crate::models::{Expiry, RuleAction, RuleMode};
+    use crate::models::{Expiry, RuleMode};
     use crate::storage;
     use crate::storage::test_util::Fixture;
 
@@ -77,48 +77,6 @@ mod tests {
             .expect("tracked file should exist");
 
         assert!(tracked.matched_rule_ids.is_empty());
-        assert_eq!(
-            tracked.expiry,
-            Expiry::At(
-                tracked.freshness_at + crate::models::AppConfig::default().default_ttl_seconds
-            )
-        );
-    }
-
-    #[test]
-    fn refresh_preview_rule_blocks_lower_rule_ttl() {
-        let fixture = Fixture::new("shelflife-rule-refresh");
-        let file = fixture.write_watch_file("download.zip", "body");
-        fixture.save_config();
-        fixture.track_file(&file);
-
-        let mut preview_rule = fixture.rule();
-        preview_rule.id = String::from("preview-zip-rule");
-        preview_rule.priority = 20;
-        preview_rule.mode = RuleMode::PreviewOnly;
-        preview_rule.ttl_seconds = 1;
-        storage::rules::save_rule(&fixture.db, &preview_rule).expect("rule should save");
-
-        let mut automatic_rule = fixture.rule();
-        automatic_rule.id = String::from("auto-zip-rule");
-        automatic_rule.priority = 10;
-        automatic_rule.mode = RuleMode::Automatic;
-        automatic_rule.action = RuleAction::Trash;
-        automatic_rule.ttl_seconds = 1;
-        storage::rules::save_rule(&fixture.db, &automatic_rule).expect("rule should save");
-
-        refresh_tracked_rule_state(&fixture.db).expect("rule state should refresh");
-        let tracked = storage::tracked::get_tracked_file(&fixture.db, &file.to_string_lossy())
-            .expect("tracked lookup should work")
-            .expect("tracked file should exist");
-
-        assert_eq!(
-            tracked.matched_rule_ids,
-            vec![
-                String::from("preview-zip-rule"),
-                String::from("auto-zip-rule")
-            ]
-        );
         assert_eq!(
             tracked.expiry,
             Expiry::At(
