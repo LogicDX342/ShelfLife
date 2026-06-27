@@ -49,10 +49,14 @@ jobs:
         uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'ShelfLife ${{ github.ref_name }}'
           releaseBody: 'See the assets below to download this version.'
           generateReleaseNotes: true
           prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
           assetNamePattern: '[name]_[version]_[arch][setup][ext]'

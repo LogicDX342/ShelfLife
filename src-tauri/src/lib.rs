@@ -20,6 +20,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -53,7 +54,9 @@ pub fn run() {
             commands::resume_watching,
             commands::update_tray_labels,
             commands::select_directory,
-            commands::open_external_url
+            commands::open_external_url,
+            commands::check_for_update,
+            commands::install_update
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

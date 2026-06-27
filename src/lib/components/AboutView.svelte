@@ -1,30 +1,32 @@
 <script lang="ts">
   import IconBug from '@lucide/svelte/icons/bug';
+  import IconDownload from '@lucide/svelte/icons/download';
   import IconExternalLink from '@lucide/svelte/icons/external-link';
   import IconGitBranch from '@lucide/svelte/icons/git-branch';
   import IconRefreshCw from '@lucide/svelte/icons/refresh-cw';
 
   import { type ExternalUrl, externalUrls, openExternalUrl } from '$lib/api/external';
+  import { checkForUpdate, installUpdate } from '$lib/api/updates';
   import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import * as Item from '$lib/components/ui/item';
+  import { Spinner } from '$lib/components/ui/spinner';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
+  import type { AppUpdate, AppUpdateEvent } from '$lib/types';
   import { getErrorMessage } from '$lib/utils/format';
 
   import packageJson from '../../../package.json';
 
-  type LatestReleaseResponse = {
-    tag_name?: string;
-  };
-
-  const latestReleaseApiUrl = 'https://api.github.com/repos/LogicDX342/ShelfLife/releases/latest';
-
   let checkingUpdates = $state(false);
+  let installingUpdate = $state(false);
   let hasCheckedUpdates = $state(false);
   let updateMessage = $state('');
+  let availableUpdate = $state<AppUpdate | null>(null);
+  let installBytesReceived = $state(0);
+  let installContentLength = $state<number | null>(null);
 
   async function openLink(url: ExternalUrl) {
     try {
@@ -47,27 +49,12 @@
     updateMessage = '';
 
     try {
-      const response = await fetch(latestReleaseApiUrl, {
-        headers: {
-          Accept: 'application/vnd.github+json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`GitHub returned ${response.status}`);
-      }
-
-      const release = (await response.json()) as LatestReleaseResponse;
-      const latestVersion = release.tag_name?.replace(/^v/i, '').trim();
-
-      if (!latestVersion) {
-        throw new Error('Latest release did not include a tag name.');
-      }
-
-      updateMessage = isNewerVersion(latestVersion, packageJson.version)
-        ? i18n.t('about.updateAvailable', { version: latestVersion })
+      availableUpdate = await checkForUpdate();
+      updateMessage = availableUpdate
+        ? i18n.t('about.updateAvailable', { version: availableUpdate.version })
         : i18n.t('about.upToDate', { version: packageJson.version });
     } catch (reason) {
+      availableUpdate = null;
       updateMessage = i18n.t('about.updateCheckFailed');
       notifications.error(getErrorMessage(reason, i18n.t('about.updateCheckFailed')));
     } finally {
@@ -75,28 +62,39 @@
     }
   }
 
-  function isNewerVersion(candidate: string, current: string) {
-    const candidateParts = versionParts(candidate);
-    const currentParts = versionParts(current);
-    const length = Math.max(candidateParts.length, currentParts.length);
+  async function installAvailableUpdate() {
+    installingUpdate = true;
+    installBytesReceived = 0;
+    installContentLength = null;
+    updateMessage = i18n.t('about.installStarting');
 
-    for (let index = 0; index < length; index += 1) {
-      const candidatePart = candidateParts[index] ?? 0;
-      const currentPart = currentParts[index] ?? 0;
-
-      if (candidatePart > currentPart) return true;
-      if (candidatePart < currentPart) return false;
+    try {
+      await installUpdate(handleUpdateEvent);
+      updateMessage = i18n.t('about.installComplete');
+    } catch (reason) {
+      notifications.error(getErrorMessage(reason, i18n.t('about.installFailed')));
+      updateMessage = i18n.t('about.installFailed');
+    } finally {
+      installingUpdate = false;
     }
-
-    return false;
   }
 
-  function versionParts(version: string) {
-    return version
-      .replace(/^v/i, '')
-      .split(/[.-]/)
-      .map((part) => Number.parseInt(part, 10))
-      .filter((part) => Number.isFinite(part));
+  function handleUpdateEvent(event: AppUpdateEvent) {
+    if (event.event === 'Progress') {
+      installBytesReceived += event.data.chunkLength;
+      installContentLength = event.data.contentLength;
+      updateMessage =
+        installContentLength && installContentLength > 0
+          ? i18n.t('about.downloadProgress', {
+              progress: Math.min(
+                100,
+                Math.round((installBytesReceived / installContentLength) * 100),
+              ),
+            })
+          : i18n.t('about.installingUpdate');
+    } else {
+      updateMessage = i18n.t('about.installComplete');
+    }
   }
 </script>
 
@@ -108,16 +106,37 @@
       <Card.Header>
         <Card.Title>{i18n.t('about.version')}</Card.Title>
         <Card.Action>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={checkingUpdates}
-            onclick={checkForUpdates}
-          >
-            <IconRefreshCw data-icon="inline-start" />
-            {checkingUpdates ? i18n.t('about.checkingUpdates') : i18n.t('about.checkUpdates')}
-          </Button>
+          <div class="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={checkingUpdates || installingUpdate}
+              onclick={checkForUpdates}
+            >
+              {#if checkingUpdates}
+                <Spinner data-icon="inline-start" />
+              {:else}
+                <IconRefreshCw data-icon="inline-start" />
+              {/if}
+              {checkingUpdates ? i18n.t('about.checkingUpdates') : i18n.t('about.checkUpdates')}
+            </Button>
+            {#if availableUpdate}
+              <Button
+                type="button"
+                size="sm"
+                disabled={checkingUpdates || installingUpdate}
+                onclick={installAvailableUpdate}
+              >
+                {#if installingUpdate}
+                  <Spinner data-icon="inline-start" />
+                {:else}
+                  <IconDownload data-icon="inline-start" />
+                {/if}
+                {installingUpdate ? i18n.t('about.installing') : i18n.t('about.installUpdate')}
+              </Button>
+            {/if}
+          </div>
         </Card.Action>
       </Card.Header>
       <Card.Content class="flex flex-col gap-3">
@@ -125,6 +144,11 @@
         {#if hasCheckedUpdates}
           <p class="min-h-5 text-sm text-muted-foreground" aria-live="polite">
             {updateMessage}
+          </p>
+        {/if}
+        {#if availableUpdate}
+          <p class="text-xs text-muted-foreground">
+            {i18n.t('about.installWarning')}
           </p>
         {/if}
       </Card.Content>

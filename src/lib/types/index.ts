@@ -214,3 +214,12 @@ export type AppError = {
   recoverable: boolean;
   details: string | null;
 };
+
+export type AppUpdate = {
+  version: string;
+  current_version: string;
+};
+
+export type AppUpdateEvent =
+  | { event: 'Progress'; data: { chunkLength: number; contentLength: number | null } }
+  | { event: 'Finished' };

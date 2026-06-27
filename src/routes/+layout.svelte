@@ -7,6 +7,7 @@
 
   import { page } from '$app/state';
   import { resolveCloseRequest } from '$lib/api/config';
+  import { checkForUpdate } from '$lib/api/updates';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import TitleBar from '$lib/components/TitleBar.svelte';
@@ -30,6 +31,19 @@
 
   onMount(() => {
     const stopLiveSnapshots = startLiveSnapshots();
+    if (!isDropzoneRoute) {
+      void checkForUpdate()
+        .then((update) => {
+          if (update) {
+            notifications.info(
+              i18n.t('about.updateAvailableStartup', { version: update.version }),
+              8000,
+            );
+          }
+        })
+        .catch(() => {});
+    }
+
     const unlisten = listen('close_behavior_requested', () => {
       closePromptOpen = true;
       rememberCloseBehavior = true;

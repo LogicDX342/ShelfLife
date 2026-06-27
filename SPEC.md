@@ -1405,7 +1405,17 @@ key storage and rotation policy
 
 ### 21.2 Updates
 
-App updates must be signed. The updater must not be enabled until the signing flow is implemented and tested.
+App updates must be signed. The app uses Tauri v2's Rust updater API with signed updater
+artifacts published from GitHub Releases. The frontend talks to ShelfLife-owned IPC commands
+only; updater authority and signature verification stay in the Rust layer.
+
+Updater behavior is conservative:
+
+- ShelfLife checks once per main-window session and allows manual checks from About.
+- Users must explicitly choose to install an available update.
+- On Windows, the UI warns that ShelfLife exits while the installer applies the update.
+- The updater private key must be stored only in release secrets; only the public key is
+  checked into `tauri.conf.json`.
 
 ### 21.3 Privacy posture
 
