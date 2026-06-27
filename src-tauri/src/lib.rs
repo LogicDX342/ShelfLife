@@ -58,14 +58,6 @@ pub fn run() {
             commands::check_for_update,
             commands::install_update
         ])
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application")
-        .run(move |_app_handle, event| {
-            if let tauri::RunEvent::Exit = event {
-                #[cfg(debug_assertions)]
-                if runtime::mock::is_mock_mode() {
-                    runtime::mock::cleanup_mock_data(_app_handle);
-                }
-            }
-        });
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

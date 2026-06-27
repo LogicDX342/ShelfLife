@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "dev:mock": "set SHELFLIFE_MOCK=1&& tauri dev",
     "build": "vite build",
     "build:no-bundle": "tauri build --no-bundle",
     "preview": "vite preview",

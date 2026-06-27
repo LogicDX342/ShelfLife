@@ -132,22 +132,9 @@ impl AppRuntime {
 
 pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     engine::executor::init_trash_support();
-    let db_path = app.path().app_data_dir()?.join("shelflife.redb");
-    #[cfg(debug_assertions)]
-    if mock::is_mock_mode() && db_path.exists() {
-        let _ = std::fs::remove_file(&db_path);
-    }
-    let db = storage::open_database(db_path)
-        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
+    let db = open_runtime_database(app)?;
     let runtime = AppRuntime::new(db);
     app.manage(runtime.clone());
-
-    #[cfg(debug_assertions)]
-    if mock::is_mock_mode() {
-        if let Err(e) = mock::preload_mock_data(app, &runtime.db) {
-            eprintln!("Failed to preload mock data: {:?}", e);
-        }
-    }
 
     let config = storage::get_config(&runtime.db)
         .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
@@ -162,4 +149,18 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     reconciliation::start_periodic_reconciliation(app.handle().clone(), runtime.clone());
     rule_scheduler::start_periodic_rule_execution(app.handle().clone(), runtime);
     Ok(())
+}
+
+fn open_runtime_database(app: &App) -> Result<Arc<Database>, Box<dyn std::error::Error>> {
+    #[cfg(debug_assertions)]
+    if mock::is_mock_mode() {
+        let workspace = mock::reset_mock_workspace(app)?;
+        let db = storage::open_database(&workspace.db_path)
+            .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
+        mock::seed_mock_workspace(&db, &workspace)?;
+        return Ok(db);
+    }
+
+    let db_path = app.path().app_data_dir()?.join("shelflife.redb");
+    storage::open_database(db_path).map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
 }

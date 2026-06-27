@@ -9,24 +9,43 @@ use crate::models::{
 };
 use crate::storage;
 
+const MOCK_ROOT_DIR: &str = "mock-mode";
+const MOCK_DB_FILE: &str = "shelflife.redb";
+const MOCK_WATCH_DIR: &str = "watch";
+const MOCK_SAFE_DIR: &str = "safe";
+
+pub struct MockWorkspace {
+    pub db_path: PathBuf,
+    watch_dir: PathBuf,
+    safe_dir: PathBuf,
+}
+
 pub fn is_mock_mode() -> bool {
-    if std::env::var("SHELFLIFE_MOCK").is_ok() || std::env::var("VITE_MOCK").is_ok() {
-        return true;
+    env_flag_enabled("SHELFLIFE_MOCK")
+}
+
+fn env_flag_enabled(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "True"))
+        .unwrap_or(false)
+}
+
+pub fn reset_mock_workspace(app: &App) -> Result<MockWorkspace, Box<dyn std::error::Error>> {
+    let root = app.path().app_data_dir()?.join(MOCK_ROOT_DIR);
+    if root.exists() {
+        std::fs::remove_dir_all(&root)?;
     }
 
-    if cfg!(debug_assertions) {
-        for path in &[Path::new(".env.mock"), Path::new("../.env.mock")] {
-            if path.exists() {
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    if content.contains("VITE_MOCK=true") || content.contains("SHELFLIFE_MOCK=true")
-                    {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    false
+    let watch_dir = root.join(MOCK_WATCH_DIR);
+    let safe_dir = root.join(MOCK_SAFE_DIR);
+    std::fs::create_dir_all(&watch_dir)?;
+    std::fs::create_dir_all(&safe_dir)?;
+
+    Ok(MockWorkspace {
+        db_path: root.join(MOCK_DB_FILE),
+        watch_dir,
+        safe_dir,
+    })
 }
 
 fn set_file_times(path: &Path, time: SystemTime) -> Result<(), std::io::Error> {
@@ -38,21 +57,12 @@ fn set_file_times(path: &Path, time: SystemTime) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-pub fn preload_mock_data(app: &App, db: &Database) -> Result<(), Box<dyn std::error::Error>> {
-    let mut mock_watch_dir = PathBuf::from("E:\\shelflife-mock-watch");
-
-    // Attempt to create E:\shelflife-mock-watch. Fall back to AppData if E: drive does not exist/is not accessible.
-    if std::fs::create_dir_all(&mock_watch_dir).is_err() {
-        mock_watch_dir = app.path().app_data_dir()?.join("shelflife-mock-watch");
-        if mock_watch_dir.exists() {
-            let _ = std::fs::remove_dir_all(&mock_watch_dir);
-        }
-        std::fs::create_dir_all(&mock_watch_dir)?;
-    } else {
-        let _ = std::fs::remove_dir_all(&mock_watch_dir);
-        std::fs::create_dir_all(&mock_watch_dir)?;
-    }
-
+pub fn seed_mock_workspace(
+    db: &Database,
+    workspace: &MockWorkspace,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mock_watch_dir = &workspace.watch_dir;
+    let safe_folder = &workspace.safe_dir;
     let now = SystemTime::now();
     let now_secs = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
 
@@ -122,7 +132,6 @@ pub fn preload_mock_data(app: &App, db: &Database) -> Result<(), Box<dyn std::er
 
     // 2. Set Config in database
     let mock_target_id = String::from("mock-watch");
-    let safe_folder = app.path().app_data_dir()?.join("shelflife-mock-safe");
     let safe_folder_str = safe_folder.to_string_lossy().to_string();
     let config = AppConfig {
         watch_targets: vec![WatchTarget {
@@ -143,9 +152,6 @@ pub fn preload_mock_data(app: &App, db: &Database) -> Result<(), Box<dyn std::er
         dropzone_enabled: true,
     };
     storage::save_config(db, &config)?;
-
-    // Make sure safe folder exists too
-    let _ = std::fs::create_dir_all(&safe_folder);
 
     // 3. Save Automation Rules
     // Rule 1: Clean Installer Executables
@@ -392,20 +398,4 @@ pub fn preload_mock_data(app: &App, db: &Database) -> Result<(), Box<dyn std::er
         "Mock database successfully preloaded with watch targets, rules, files, and audit entries."
     );
     Ok(())
-}
-
-pub fn cleanup_mock_data(app: &tauri::AppHandle) {
-    let mock_watch_dir_e = PathBuf::from("E:\\shelflife-mock-watch");
-    if mock_watch_dir_e.exists() {
-        let _ = std::fs::remove_dir_all(&mock_watch_dir_e);
-    }
-
-    if let Ok(app_data) = app.path().app_data_dir() {
-        let mock_watch_dir_appdata = app_data.join("shelflife-mock-watch");
-        if mock_watch_dir_appdata.exists() {
-            let _ = std::fs::remove_dir_all(&mock_watch_dir_appdata);
-        }
-    }
-
-    println!("Mock watch folders successfully removed on exit.");
 }
