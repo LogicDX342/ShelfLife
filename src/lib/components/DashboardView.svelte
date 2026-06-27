@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
@@ -9,7 +10,7 @@
 
 <PageHeader title={i18n.t('nav.dashboard')} subtitle={i18n.t('dashboard.welcome')} />
 
-<div class="space-y-6 mt-6">
+<PageBody>
   <StatusBar files={filesState.files} />
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -32,4 +33,4 @@
       valueClass="text-neutral-500"
     />
   </div>
-</div>
+</PageBody>

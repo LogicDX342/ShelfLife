@@ -75,10 +75,8 @@
         <Sidebar />
 
         <!-- Page Content -->
-        <main class="flex-1 overflow-hidden px-6 pb-6 pt-8 md:px-10 md:pt-10 flex justify-center">
-          <div class="max-w-6xl w-full h-full flex flex-col min-h-0">
-            {@render children()}
-          </div>
+        <main class="flex-1 overflow-hidden flex flex-col min-h-0">
+          {@render children()}
         </main>
       </div>
 

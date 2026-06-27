@@ -4,6 +4,7 @@
 
   import EmptyState from '$lib/components/common/EmptyState.svelte';
   import LoadingState from '$lib/components/common/LoadingState.svelte';
+  import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as InputGroup from '$lib/components/ui/input-group';
@@ -74,12 +75,14 @@
 </PageHeader>
 
 <!-- Status Summary Band -->
-<div class="flex-shrink-0 mt-6">
-  <StatusBar files={filesState.files} />
+<div class="w-full flex-shrink-0 px-6 md:px-10 mt-6">
+  <div class="max-w-6xl mx-auto w-full">
+    <StatusBar files={filesState.files} />
+  </div>
 </div>
 
 <!-- Scrollable content -->
-<div class="flex-1 overflow-y-auto space-y-4 pb-16 pr-1 mt-6">
+<PageBody>
   {#if filesState.error}
     <div class="p-6 text-center text-red-500">
       <p class="font-semibold">{i18n.t('dashboard.errorLoading')}</p>
@@ -113,4 +116,4 @@
       {/if}
     </div>
   {/if}
-</div>
+</PageBody>

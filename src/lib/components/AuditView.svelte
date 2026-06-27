@@ -4,6 +4,7 @@
   import AuditRow from '$lib/components/AuditRow.svelte';
   import EmptyState from '$lib/components/common/EmptyState.svelte';
   import LoadingState from '$lib/components/common/LoadingState.svelte';
+  import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import { i18n } from '$lib/i18n/i18n.svelte';
@@ -19,8 +20,7 @@
   {/snippet}
 </PageHeader>
 
-<!-- Scrollable content -->
-<div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
+<PageBody>
   <!-- Content -->
   {#if auditState.error}
     <div class="p-4 rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300">
@@ -51,4 +51,4 @@
       {/each}
     </div>
   {/if}
-</div>
+</PageBody>

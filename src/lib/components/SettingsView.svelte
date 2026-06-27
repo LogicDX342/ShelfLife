@@ -12,6 +12,7 @@
   } from '$lib/api/config';
   import { selectDirectory } from '$lib/api/files';
   import HelpTooltip from '$lib/components/common/HelpTooltip.svelte';
+  import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
@@ -220,11 +221,9 @@
   }
 </script>
 
-<!-- Header -->
 <PageHeader title={i18n.t('settings.title')} subtitle={i18n.t('settings.subtitle')} />
 
-<!-- Scrollable content -->
-<div class="flex-1 overflow-y-auto space-y-6 pt-6 pb-16 pr-1">
+<PageBody>
   {#if config}
     <!-- Grid System for Forms (Full-width settings panel) -->
     <div class="grid grid-cols-1 gap-6">
@@ -497,7 +496,7 @@
       </div>
     </div>
   {/if}
-</div>
+</PageBody>
 
 <ConfirmDialog
   open={!!targetToRemove}

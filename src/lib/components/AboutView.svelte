@@ -5,6 +5,7 @@
   import IconRefreshCw from '@lucide/svelte/icons/refresh-cw';
 
   import { type ExternalUrl, externalUrls, openExternalUrl } from '$lib/api/external';
+  import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
@@ -101,7 +102,7 @@
 
 <PageHeader title={i18n.t('about.title')} />
 
-<div class="flex-1 overflow-y-auto pt-6 pb-16 pr-1">
+<PageBody>
   <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
     <Card.Root>
       <Card.Header>
@@ -197,4 +198,4 @@
       </Card.Content>
     </Card.Root>
   </div>
-</div>
+</PageBody>

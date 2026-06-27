@@ -6,6 +6,7 @@
   import { getConfig } from '$lib/api/config';
   import { executeBulkTriageAction } from '$lib/api/triage';
   import EmptyState from '$lib/components/common/EmptyState.svelte';
+  import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import * as Breadcrumb from '$lib/components/ui/breadcrumb';
   import { Button } from '$lib/components/ui/button';
@@ -285,7 +286,7 @@
 </PageHeader>
 
 <!-- Contents List -->
-<div class="flex-1 overflow-y-auto space-y-6 pb-24 pr-1 mt-6">
+<PageBody>
   <!-- Folders Section -->
   {#if directoryContents.folders.length > 0}
     <div>
@@ -424,7 +425,7 @@
       description={i18n.t('browser.emptyFolderDesc')}
     />
   {/if}
-</div>
+</PageBody>
 
 <!-- Sticky Bulk Action Bar at Bottom -->
 {#if selectedPaths.length > 0}

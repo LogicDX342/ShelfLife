@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
 
   import { deleteRule, saveRule, testRule } from '$lib/api/rules';
+  import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import { i18n } from '$lib/i18n/i18n.svelte';
@@ -100,7 +101,7 @@
   {/snippet}
 </PageHeader>
 
-<div class="flex-1 overflow-y-auto space-y-6 pt-4 pb-16 pr-1">
+<PageBody>
   {#if showNewEditor || editingRule}
     <div class="space-y-4">
       <h2 class="text-lg font-semibold text-primary">
@@ -127,7 +128,7 @@
     ruleName={selectedPreviewRuleName}
     onClear={() => (previewResults = [])}
   />
-</div>
+</PageBody>
 
 <ConfirmDialog
   open={!!ruleToDelete}
