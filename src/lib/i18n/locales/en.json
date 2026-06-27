@@ -37,6 +37,7 @@
     "ignoredDesc": "Files excluded from active rules",
     "subtitle": "Manage and triage files before they expire.",
     "search": "Search files by name...",
+    "results": "{count} results",
     "noFiles": "No files found in the queue.",
     "clearSelection": "Clear Selection",
     "errorLoading": "Error loading queue",

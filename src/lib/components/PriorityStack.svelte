@@ -21,9 +21,10 @@
   // Debounce search query
   let debounceTimer: ReturnType<typeof setTimeout>;
   $effect(() => {
+    const query = searchInputValue;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      searchQuery = searchInputValue;
+      searchQuery = query;
       visibleLimit = 50; // reset scroll limit when search query changes
     }, 200);
     return () => clearTimeout(debounceTimer);
@@ -67,6 +68,9 @@
         placeholder={i18n.t('dashboard.search')}
         bind:value={searchInputValue}
       />
+      <InputGroup.Addon align="inline-end">
+        {i18n.t('dashboard.results', { count: filteredFiles.length })}
+      </InputGroup.Addon>
       <InputGroup.Addon>
         <IconSearch />
       </InputGroup.Addon>
