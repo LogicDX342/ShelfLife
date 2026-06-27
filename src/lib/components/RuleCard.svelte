@@ -4,7 +4,7 @@
   import * as Card from '$lib/components/ui/card';
   import { Switch } from '$lib/components/ui/switch';
   import { i18n } from '$lib/i18n/i18n.svelte';
-  import type { AutomationRule } from '$lib/types';
+  import type { AutomationRule, RuleAction, RuleMode } from '$lib/types';
 
   let {
     rule,
@@ -21,6 +21,22 @@
     onDelete: (rule: AutomationRule) => void;
     onToggleEnabled: (rule: AutomationRule) => void;
   }>();
+
+  function modeLabel(mode: RuleMode) {
+    if (mode === 'AskFirst') return i18n.t('rules.modeAskFirst');
+    if (mode === 'Automatic') return i18n.t('rules.modeAutomatic');
+    return i18n.t('rules.modePreviewOnly');
+  }
+
+  function actionLabel(action: RuleAction) {
+    if (action === 'Trash') return i18n.t('file.trash');
+    if (action === 'Ignore') return i18n.t('rules.actionIgnoreLabel');
+    return i18n.t('rules.actionMoveLabel');
+  }
+
+  function folderName(path: string) {
+    return path.split(/[\\/]/).pop() || path;
+  }
 </script>
 
 <Card.Root class="flex flex-col justify-between gap-4 p-4 md:flex-row md:items-center">
@@ -47,16 +63,17 @@
       class="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
     >
       <Badge variant="outline">
-        {i18n.t('rules.mode')}: {rule.mode}
+        {i18n.t('rules.mode')}: {modeLabel(rule.mode)}
       </Badge>
       {#if typeof rule.action === 'string'}
         <Badge variant="outline">
-          {i18n.t('rules.action')}: {rule.action}
+          {i18n.t('rules.action')}: {actionLabel(rule.action)}
         </Badge>
       {:else if 'Move' in rule.action}
         <Badge variant="outline">
-          {i18n.t('rules.action')}: {rule.action.Move.destination_folder.split('/').pop() ||
-            rule.action.Move.destination_folder}
+          {i18n.t('rules.action')}: {actionLabel(rule.action)} ({folderName(
+            rule.action.Move.destination_folder,
+          )})
         </Badge>
         {#if rule.action.Move.rename_template}
           <Badge variant="outline">
