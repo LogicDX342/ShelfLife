@@ -730,7 +730,7 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_applies_rule_ttl_to_decay_state() {
+    fn reconcile_scales_rule_ttl_decay_window_from_global_ratio() {
         let fixture = Fixture::new();
         let file = fixture.write_watch_file("download.zip", "body");
         fixture.save_config();
@@ -757,15 +757,12 @@ mod tests {
         };
         storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
 
-        // Set config decay thresholds: buffer = 48 hours
         let mut config = storage::get_config(&fixture.db).expect("config should load");
         config.decaying_threshold_seconds = 48 * 60 * 60; // 48h warning buffer
         storage::save_config(&fixture.db, &config).expect("config should save");
 
-        // Run reconciliation
         reconcile(&fixture.db).expect("reconciliation should succeed");
 
-        // Verify the file state is Decaying and expiry is 1 day from now/freshness_at
         let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
             .expect("tracked lookup should work")
             .expect("tracked file should exist");
@@ -775,7 +772,7 @@ mod tests {
             tracked.expiry,
             crate::models::Expiry::At(tracked.freshness_at + 24 * 60 * 60)
         );
-        assert_eq!(tracked.state, FileDecayState::Decaying);
+        assert_eq!(tracked.state, FileDecayState::Fresh);
     }
 
     #[test]

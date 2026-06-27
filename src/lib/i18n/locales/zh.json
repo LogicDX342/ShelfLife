@@ -174,7 +174,7 @@
     "remove": "移除",
     "browse": "浏览…",
     "decayTimeline": "文件生命周期与过期时间线",
-    "decayTimelineDesc": "调整滑块设置文件保持活跃的时长、何时进入闲置期，以及过期前多久进入预警期。",
+    "decayTimelineDesc": "调整滑块设置文件保持活跃的时长、何时进入闲置期，以及过期前多久进入预警期。自定义有效期的规则会按相同比例缩放这条时间线。",
     "freshZone": "活跃期",
     "freshZoneDesc": "近期使用或修改过的文件。",
     "staleZone": "闲置期",

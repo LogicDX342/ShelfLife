@@ -49,16 +49,58 @@ pub fn classify_decay_state(
                 Expiry::At(value) | Expiry::SnoozedUntil(value) => *value,
                 Expiry::Permanent => unreachable!(),
             };
+            let (stale_threshold_seconds, decaying_threshold_seconds) =
+                effective_decay_thresholds(freshness_at, expires_at, config);
 
-            if expires_at <= now + config.decaying_threshold_seconds {
+            if expires_at <= now.saturating_add(decaying_threshold_seconds) {
                 FileDecayState::Decaying
-            } else if freshness_at + config.stale_threshold_seconds <= now {
+            } else if freshness_at.saturating_add(stale_threshold_seconds) <= now {
                 FileDecayState::Stale
             } else {
                 FileDecayState::Fresh
             }
         }
     }
+}
+
+fn effective_decay_thresholds(
+    freshness_at: u64,
+    expires_at: u64,
+    config: &AppConfig,
+) -> (u64, u64) {
+    let effective_ttl_seconds = expires_at.saturating_sub(freshness_at);
+
+    if config.default_ttl_seconds == 0 || effective_ttl_seconds == config.default_ttl_seconds {
+        return (
+            config.stale_threshold_seconds,
+            config.decaying_threshold_seconds,
+        );
+    }
+
+    (
+        scale_threshold_to_ttl(
+            config.stale_threshold_seconds,
+            effective_ttl_seconds,
+            config.default_ttl_seconds,
+        ),
+        scale_threshold_to_ttl(
+            config.decaying_threshold_seconds,
+            effective_ttl_seconds,
+            config.default_ttl_seconds,
+        ),
+    )
+}
+
+fn scale_threshold_to_ttl(global_threshold: u64, effective_ttl: u64, default_ttl: u64) -> u64 {
+    if global_threshold == 0 || effective_ttl == 0 || default_ttl == 0 {
+        return 0;
+    }
+
+    let scaled =
+        (global_threshold as u128).saturating_mul(effective_ttl as u128) / default_ttl as u128;
+    let capped = scaled.min(effective_ttl as u128) as u64;
+
+    capped.max(1)
 }
 
 pub fn tracked_file_from_metadata(

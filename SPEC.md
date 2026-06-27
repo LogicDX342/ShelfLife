@@ -337,6 +337,18 @@ expires_at = freshness_at + effective_ttl_seconds
 
 Pinned files use `Expiry::Permanent`.
 
+When a file uses a rule-specific TTL, its stale and decaying thresholds inherit the same shape as the global timeline instead of using the global durations directly:
+
+```text
+effective_stale_threshold =
+  effective_ttl_seconds * stale_threshold_seconds / default_ttl_seconds
+
+effective_decaying_threshold =
+  effective_ttl_seconds * decaying_threshold_seconds / default_ttl_seconds
+```
+
+Non-zero scaled thresholds clamp to at least 1 second.
+
 ### 6.4 Decay states
 
 ```rust
@@ -354,8 +366,8 @@ pub enum FileDecayState {
 Default state thresholds:
 
 ```text
-Fresh: first seen or active within the configured fresh threshold (default 48 hours)
-Stale: no observed activity beyond the fresh threshold (default after 48 hours)
+Fresh: first seen or active within the configured stale threshold (default 5 days)
+Stale: no observed activity beyond the stale threshold (default after 5 days)
 Decaying: expiry is within the configured warning window (default 24 hours)
 Pinned: user has explicitly protected the file
 Ignored: file is excluded by user or rule

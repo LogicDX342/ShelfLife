@@ -174,7 +174,7 @@
     "remove": "Remove",
     "browse": "Browse...",
     "decayTimeline": "File Decay & Expiry Timeline",
-    "decayTimelineDesc": "Adjust the handles to set how long files remain Fresh, when they become Stale, and when the warning Decay Buffer begins prior to Expiry.",
+    "decayTimelineDesc": "Adjust the handles to set how long files remain Fresh, when they become Stale, and when the warning Decay Buffer begins prior to Expiry. Rules with custom TTLs use the same shape scaled to their TTL.",
     "freshZone": "Fresh Zone",
     "freshZoneDesc": "Recently active files.",
     "staleZone": "Stale Zone",
