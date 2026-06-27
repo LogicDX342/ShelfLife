@@ -2,7 +2,10 @@ use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::engine;
-use crate::models::{AppError, AuditEntry, BulkTriageFailure, BulkTriageResult, UserTriageAction};
+use crate::models::{
+    AppError, AuditActionKind, AuditEntry, BulkTriageFailure, BulkTriageResult, UndoStatus,
+    UserTriageAction,
+};
 use crate::runtime::AppRuntime;
 use crate::storage;
 
@@ -23,7 +26,7 @@ pub async fn execute_triage_action(
                 "Action completed",
                 format!(
                     "{} recorded for {}.",
-                    entry.action_kind.label(),
+                    audit_action_kind_label(&entry.action_kind),
                     entry.file_name
                 ),
             );
@@ -103,7 +106,10 @@ pub async fn undo_audit_entry(
                 &app_handle,
                 &state,
                 "Audit updated",
-                format!("Undo status is now {}.", entry.undo_status.label()),
+                format!(
+                    "Undo status is now {}.",
+                    undo_status_label(&entry.undo_status)
+                ),
             );
 
             // Run reconciliation asynchronously and report progress/completion.
@@ -152,35 +158,23 @@ fn notify_if_enabled(
         .show();
 }
 
-trait AuditActionKindLabel {
-    fn label(&self) -> &'static str;
-}
-
-impl AuditActionKindLabel for crate::models::AuditActionKind {
-    fn label(&self) -> &'static str {
-        match self {
-            crate::models::AuditActionKind::Trash => "Trash Now",
-            crate::models::AuditActionKind::Move => "Move",
-            crate::models::AuditActionKind::Pin => "Pin",
-            crate::models::AuditActionKind::Snooze => "Snooze",
-            crate::models::AuditActionKind::Ignore => "Ignore",
-            crate::models::AuditActionKind::RulePreview => "Rule preview",
-        }
+fn audit_action_kind_label(action_kind: &AuditActionKind) -> &'static str {
+    match action_kind {
+        AuditActionKind::Trash => "Trash Now",
+        AuditActionKind::Move => "Move",
+        AuditActionKind::Pin => "Pin",
+        AuditActionKind::Snooze => "Snooze",
+        AuditActionKind::Ignore => "Ignore",
+        AuditActionKind::RulePreview => "Rule preview",
     }
 }
 
-trait UndoStatusLabel {
-    fn label(&self) -> &'static str;
-}
-
-impl UndoStatusLabel for crate::models::UndoStatus {
-    fn label(&self) -> &'static str {
-        match self {
-            crate::models::UndoStatus::Available => "available",
-            crate::models::UndoStatus::Unavailable { .. } => "unavailable",
-            crate::models::UndoStatus::Completed => "completed",
-            crate::models::UndoStatus::Failed { .. } => "failed",
-        }
+fn undo_status_label(status: &UndoStatus) -> &'static str {
+    match status {
+        UndoStatus::Available => "available",
+        UndoStatus::Unavailable { .. } => "unavailable",
+        UndoStatus::Completed => "completed",
+        UndoStatus::Failed { .. } => "failed",
     }
 }
 
