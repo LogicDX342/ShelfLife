@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use redb::Database;
 use uuid::Uuid;
 
 use crate::engine::freshness::tracked_file_from_metadata;
@@ -17,7 +16,7 @@ pub struct Fixture {
     pub watch: PathBuf,
     pub outside: PathBuf,
     pub safe: PathBuf,
-    pub db: Arc<Database>,
+    pub db: Arc<storage::Database>,
 }
 
 impl Fixture {
@@ -29,7 +28,7 @@ impl Fixture {
         fs::create_dir_all(&watch).expect("watch directory should be created");
         fs::create_dir_all(&outside).expect("outside directory should be created");
         fs::create_dir_all(&safe).expect("safe directory should be created");
-        let db = storage::open_database(root.join("test.redb")).expect("database should open");
+        let db = storage::open_database(root.join("test.sqlite")).expect("database should open");
         Self {
             root,
             watch,

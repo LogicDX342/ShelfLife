@@ -9,14 +9,14 @@ use crate::models::{
 };
 use crate::rules::explain_file_against_rules;
 use crate::runtime::AppRuntime;
-use crate::storage;
+use crate::storage::{self, Database};
 
 #[tauri::command]
 pub async fn get_active_files(state: State<'_, AppRuntime>) -> Result<Vec<TrackedFile>, AppError> {
     active_files(&state.db)
 }
 
-fn active_files(db: &redb::Database) -> Result<Vec<TrackedFile>, AppError> {
+fn active_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
     Ok(storage::tracked::list_tracked_files(db)?
         .into_iter()
         .filter(|file| {
@@ -356,7 +356,7 @@ mod tests {
         let ignored = fixture.write("ignored.txt", "ignored");
         let missing = fixture.root.join("missing.txt");
         let db =
-            storage::open_database(fixture.root.join("test.redb")).expect("database should open");
+            storage::open_database(fixture.root.join("test.sqlite")).expect("database should open");
 
         for (path, state) in [
             (&fresh, FileDecayState::Fresh),

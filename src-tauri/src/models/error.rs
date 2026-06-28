@@ -71,66 +71,11 @@ impl From<std::io::Error> for AppError {
     }
 }
 
-impl From<redb::DatabaseError> for AppError {
-    fn from(value: redb::DatabaseError) -> Self {
+impl From<rusqlite::Error> for AppError {
+    fn from(value: rusqlite::Error) -> Self {
         Self::with_details(
             "DATABASE_ERROR",
             "Database operation failed.",
-            true,
-            value.to_string(),
-        )
-    }
-}
-
-impl From<redb::TableError> for AppError {
-    fn from(value: redb::TableError) -> Self {
-        Self::with_details(
-            "DATABASE_ERROR",
-            "Database table operation failed.",
-            true,
-            value.to_string(),
-        )
-    }
-}
-
-impl From<redb::TransactionError> for AppError {
-    fn from(value: redb::TransactionError) -> Self {
-        Self::with_details(
-            "DATABASE_ERROR",
-            "Database transaction failed.",
-            true,
-            value.to_string(),
-        )
-    }
-}
-
-impl From<redb::CommitError> for AppError {
-    fn from(value: redb::CommitError) -> Self {
-        Self::with_details(
-            "DATABASE_ERROR",
-            "Database commit failed.",
-            true,
-            value.to_string(),
-        )
-    }
-}
-
-impl From<redb::StorageError> for AppError {
-    fn from(value: redb::StorageError) -> Self {
-        Self::with_details(
-            "DATABASE_ERROR",
-            "Database storage operation failed.",
-            true,
-            value.to_string(),
-        )
-    }
-}
-
-impl From<bincode::Error> for AppError {
-    fn from(value: bincode::Error) -> Self {
-        Self::with_details(
-            "DATABASE_ERROR",
-            "Stored record serialization failed.",
             true,
             value.to_string(),
         )

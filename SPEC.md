@@ -4,7 +4,7 @@ Version: 2.0
 Status: v2 planned / in progress
 Primary goal: Recoverable, explainable file hygiene for desktop clutter with interactive dropzone and archiving
 Target platforms: Windows (macOS and Linux deferred to future phases)
-Core stack: Tauri v2, Rust, Svelte 5, redb
+Core stack: Tauri v2, Rust, Svelte 5, SQLite
 
 ---
 
@@ -115,8 +115,8 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 +---------------------------v------------------------------+
 |                   Embedded Storage                       |
 |                                                          |
-|  redb tables                                             |
-|  bincode internal records                                |
+|  SQLite tables                                           |
+|  normalized records                                      |
 |  JSON config import/export                               |
 +----------------------------------------------------------+
 ```
@@ -142,8 +142,8 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 - Rust.
 - notify for filesystem event watching.
 - notify-debouncer-full or equivalent debouncing layer for event normalization.
-- redb for embedded storage.
-- bincode for internal binary serialization.
+- SQLite via rusqlite for embedded storage.
+- Normalized SQLite tables for internal records.
 - serde and serde_json for IPC/config serialization.
 - trash crate or platform-specific equivalent for OS Trash/Recycle Bin behavior.
 - regex and globset for pattern matching.
@@ -731,13 +731,21 @@ Permission denied.
 
 ### 11.1 Database
 
-The app uses redb as an embedded key-value store. Storage owns database opening, migrations, table definitions, and CRUD only. Runtime lifecycle state does not live in storage.
+The app uses SQLite as an embedded relational store. Storage owns database opening, schema migrations, table definitions, and CRUD only. Runtime lifecycle state does not live in storage.
+
+The runtime database file is:
+
+```text
+shelflife.sqlite
+```
+
+This is a breaking storage change from the earlier redb prototype. Existing `.redb` files are not imported or deleted.
 
 Runtime state:
 
 ```rust
 use std::sync::Arc;
-use redb::Database;
+use crate::storage::Database;
 
 pub struct AppRuntime {
     pub db: Arc<Database>,
@@ -761,10 +769,12 @@ runtime event emission
 
 ### 11.2 Serialization
 
-Internal records:
+Internal records are fully normalized into SQLite columns and child tables. SQLite columns are the source of truth; internal storage must not duplicate full model payloads as JSON or binary blobs.
+
+Schema versioning:
 
 ```text
-bincode
+PRAGMA user_version
 ```
 
 Config export/import:
@@ -781,51 +791,52 @@ serde JSON-compatible structs
 
 ### 11.3 Tables
 
-```rust
-use redb::TableDefinition;
+```text
+app_config
+watch_targets
+watch_target_ignore_patterns
+watch_target_include_hidden_patterns
 
-pub const META_TABLE: TableDefinition<&str, &[u8]> =
-    TableDefinition::new("meta");
+automation_rules
+rule_extensions
+rule_filename_globs
+rule_filename_regexes
+rule_source_domains
 
-pub const RULES_BY_ID_TABLE: TableDefinition<&str, &[u8]> =
-    TableDefinition::new("rules_by_id");
+tracked_files
+tracked_file_rules
+origin_values
 
-pub const TRACKED_BY_PATH_TABLE: TableDefinition<&str, &[u8]> =
-    TableDefinition::new("tracked_by_path");
-
-pub const TRACKED_BY_EXPIRY_TABLE: TableDefinition<u64, &[u8]> =
-    TableDefinition::new("tracked_by_expiry");
-
-/// Value is a bincode-encoded Vec<String> of file paths matching this rule.
-pub const TRACKED_BY_RULE_TABLE: TableDefinition<&str, &[u8]> =
-    TableDefinition::new("tracked_by_rule");
-
-pub const AUDIT_BY_SEQUENCE_TABLE: TableDefinition<u64, &[u8]> =
-    TableDefinition::new("audit_by_sequence");
-
-pub const AUDIT_BY_TIME_TABLE: TableDefinition<u64, &[u8]> =
-    TableDefinition::new("audit_by_time");
+audit_sequence_state
+audit_entries
 ```
+
+`audit_entries` stores optional `RuleMatchExplanation` fields as nullable `explanation_*` columns. There is no separate one-to-one explanation table.
 
 ### 11.4 Index strategy
 
 Primary lookups:
 
 ```text
+config singleton -> app config
 file path -> tracked file
 rule id -> rule
+audit id -> audit entry
 audit sequence -> audit entry
 ```
 
 Secondary lookups:
 
 ```text
-expiry timestamp -> path list
-rule id -> path list
-audit timestamp -> audit sequence list
+rule priority/name -> rule ordering
+tracked state -> dashboard filtering
+tracked expiry -> automatic scheduling
+matched rule id -> tracked paths
+audit sequence -> audit ordering
+failed status + source path + rule id -> failed automatic attempts
 ```
 
-The secondary tables avoid expensive full scans for common dashboard queries.
+Indexes must support common dashboard, scheduler, and audit queries without duplicating authoritative model payloads.
 
 ---
 
@@ -1245,7 +1256,7 @@ Process runtime diagnostics detail
 
 Use indexed table reads where possible. Avoid expensive dashboard-triggered full scans.
 
-Background aggregation can update summary rows in `META_TABLE` or a future `STATS_TABLE`.
+Background aggregation can update a future normalized `stats` table.
 
 ---
 
@@ -1315,7 +1326,7 @@ symlink rejection
 move destination collision handling
 audit row creation
 undo state transitions
-serialization compatibility
+storage schema migrations and model round-trips
 ```
 
 ### 20.2 Integration tests
@@ -1444,7 +1455,7 @@ Goal: prove the core file model without UI.
 Deliverables:
 
 ```text
-redb initialization
+SQLite initialization
 watch target config
 notify watcher
 500 ms debounced event queue

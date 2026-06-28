@@ -4,69 +4,613 @@ pub mod rules;
 pub mod test_util;
 pub mod tracked;
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
-use redb::{Database, ReadableDatabase, TableDefinition};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
-use crate::models::{AppConfig, AppError};
+use crate::models::{AppConfig, AppError, CloseBehavior, RuleAction, RuleMode, WatchTarget};
 
-pub const META_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("meta");
-pub const RULES_BY_ID_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("rules_by_id");
-pub const TRACKED_BY_PATH_TABLE: TableDefinition<&str, &[u8]> =
-    TableDefinition::new("tracked_by_path");
-pub const TRACKED_BY_EXPIRY_TABLE: TableDefinition<u64, &[u8]> =
-    TableDefinition::new("tracked_by_expiry");
-pub const TRACKED_BY_RULE_TABLE: TableDefinition<&str, &[u8]> =
-    TableDefinition::new("tracked_by_rule");
-pub const AUDIT_BY_SEQUENCE_TABLE: TableDefinition<u64, &[u8]> =
-    TableDefinition::new("audit_by_sequence");
-pub const AUDIT_BY_TIME_TABLE: TableDefinition<u64, &[u8]> = TableDefinition::new("audit_by_time");
+const SCHEMA_VERSION: i64 = 1;
 
-const CONFIG_KEY: &str = "config";
+#[derive(Debug, Clone)]
+pub struct Database {
+    path: PathBuf,
+}
+
+impl Database {
+    fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    pub(crate) fn connect(&self) -> Result<Connection, AppError> {
+        let conn = Connection::open(&self.path)?;
+        configure_connection(&conn)?;
+        Ok(conn)
+    }
+
+    pub(crate) fn write<T>(
+        &self,
+        write: impl FnOnce(&Transaction<'_>) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        let mut conn = self.connect()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let result = write(&tx)?;
+        tx.commit()?;
+        Ok(result)
+    }
+}
 
 pub fn open_database(path: impl AsRef<Path>) -> Result<Arc<Database>, AppError> {
     if let Some(parent) = path.as_ref().parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    let db = Arc::new(Database::create(path)?);
-    initialize_tables(&db)?;
+    let db = Arc::new(Database::new(path.as_ref().to_path_buf()));
+    initialize_database(&db)?;
     Ok(db)
 }
 
-pub fn initialize_tables(db: &Database) -> Result<(), AppError> {
-    let write_txn = db.begin_write()?;
-    {
-        write_txn.open_table(META_TABLE)?;
-        write_txn.open_table(RULES_BY_ID_TABLE)?;
-        write_txn.open_table(TRACKED_BY_PATH_TABLE)?;
-        write_txn.open_table(TRACKED_BY_EXPIRY_TABLE)?;
-        write_txn.open_table(TRACKED_BY_RULE_TABLE)?;
-        write_txn.open_table(AUDIT_BY_SEQUENCE_TABLE)?;
-        write_txn.open_table(AUDIT_BY_TIME_TABLE)?;
-    }
-    write_txn.commit()?;
+fn configure_connection(conn: &Connection) -> Result<(), AppError> {
+    conn.busy_timeout(Duration::from_millis(5_000))?;
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys = ON;
+        PRAGMA journal_mode = WAL;
+        PRAGMA synchronous = NORMAL;
+        ",
+    )?;
     Ok(())
 }
 
+fn initialize_database(db: &Database) -> Result<(), AppError> {
+    let conn = db.connect()?;
+    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version > SCHEMA_VERSION {
+        return Err(AppError::with_details(
+            "DATABASE_ERROR",
+            "Database schema is newer than this ShelfLife build supports.",
+            true,
+            format!("database={version}, supported={SCHEMA_VERSION}"),
+        ));
+    }
+
+    conn.execute_batch(SCHEMA_SQL)?;
+    conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    Ok(())
+}
+
+const SCHEMA_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS app_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    default_ttl_seconds INTEGER NOT NULL,
+    stale_threshold_seconds INTEGER NOT NULL,
+    decaying_threshold_seconds INTEGER NOT NULL,
+    safe_folder_path TEXT NOT NULL,
+    notifications_enabled INTEGER NOT NULL CHECK (notifications_enabled IN (0, 1)),
+    start_at_login INTEGER NOT NULL CHECK (start_at_login IN (0, 1)),
+    close_behavior TEXT NOT NULL CHECK (close_behavior IN ('ask', 'hide_to_tray', 'quit')),
+    dropzone_enabled INTEGER NOT NULL CHECK (dropzone_enabled IN (0, 1))
+);
+
+CREATE TABLE IF NOT EXISTS watch_targets (
+    id TEXT PRIMARY KEY,
+    ordinal INTEGER NOT NULL,
+    path TEXT NOT NULL,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    recursive INTEGER NOT NULL CHECK (recursive IN (0, 1))
+);
+
+CREATE TABLE IF NOT EXISTS watch_target_ignore_patterns (
+    target_id TEXT NOT NULL REFERENCES watch_targets(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (target_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS watch_target_include_hidden_patterns (
+    target_id TEXT NOT NULL REFERENCES watch_targets(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (target_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS automation_rules (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    priority INTEGER NOT NULL,
+    watch_path TEXT NOT NULL,
+    ttl_seconds INTEGER NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('preview_only', 'ask_first', 'automatic')),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    action_kind TEXT NOT NULL CHECK (action_kind IN ('trash', 'move', 'ignore')),
+    action_destination_folder TEXT,
+    action_rename_template TEXT,
+    size_kind TEXT NOT NULL CHECK (size_kind IN ('any', 'less_than', 'greater_than', 'between')),
+    size_min INTEGER,
+    size_max INTEGER,
+    CHECK (
+        (size_kind = 'any' AND size_min IS NULL AND size_max IS NULL)
+        OR (size_kind = 'less_than' AND size_min IS NULL AND size_max IS NOT NULL)
+        OR (size_kind = 'greater_than' AND size_min IS NOT NULL AND size_max IS NULL)
+        OR (size_kind = 'between' AND size_min IS NOT NULL AND size_max IS NOT NULL AND size_min <= size_max)
+    )
+);
+
+CREATE TABLE IF NOT EXISTS rule_extensions (
+    rule_id TEXT NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (rule_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS rule_filename_globs (
+    rule_id TEXT NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (rule_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS rule_filename_regexes (
+    rule_id TEXT NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (rule_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS rule_source_domains (
+    rule_id TEXT NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (rule_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS tracked_files (
+    path TEXT PRIMARY KEY,
+    file_name TEXT NOT NULL,
+    watch_target_id TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    first_seen_at INTEGER NOT NULL,
+    last_observed_mtime INTEGER,
+    last_observed_atime INTEGER,
+    last_user_action_at INTEGER,
+    freshness_at INTEGER NOT NULL,
+    expiry_kind TEXT NOT NULL CHECK (expiry_kind IN ('at', 'permanent', 'snoozed_until')),
+    expires_at INTEGER,
+    state TEXT NOT NULL CHECK (state IN ('fresh', 'stale', 'decaying', 'pinned', 'ignored', 'missing')),
+    origin_kind TEXT NOT NULL CHECK (origin_kind IN ('mac_where_froms', 'windows_zone_identifier', 'linux_xattr', 'unknown')),
+    origin_zone_id INTEGER,
+    origin_host_url TEXT,
+    origin_referrer_url TEXT,
+    origin_xattr_key TEXT,
+    origin_xattr_value_utf8 TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tracked_file_rules (
+    file_path TEXT NOT NULL REFERENCES tracked_files(path) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    rule_id TEXT NOT NULL,
+    PRIMARY KEY (file_path, ordinal),
+    UNIQUE (file_path, rule_id)
+);
+
+CREATE TABLE IF NOT EXISTS origin_values (
+    file_path TEXT NOT NULL REFERENCES tracked_files(path) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (file_path, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS audit_sequence_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    next_sequence INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_entries (
+    sequence INTEGER PRIMARY KEY,
+    id TEXT NOT NULL UNIQUE,
+    timestamp INTEGER NOT NULL,
+    action_kind TEXT NOT NULL CHECK (action_kind IN ('trash', 'move', 'pin', 'snooze', 'ignore', 'rule_preview')),
+    source_path TEXT NOT NULL,
+    destination_path TEXT,
+    file_name TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    rule_id TEXT,
+    rule_name TEXT,
+    undo_status_kind TEXT NOT NULL CHECK (undo_status_kind IN ('available', 'unavailable', 'completed', 'failed')),
+    undo_status_reason TEXT,
+    explanation_file_path TEXT,
+    explanation_size_bytes INTEGER,
+    explanation_rule_id TEXT,
+    explanation_rule_name TEXT,
+    explanation_matched_extension INTEGER CHECK (explanation_matched_extension IN (0, 1)),
+    explanation_matched_size INTEGER CHECK (explanation_matched_size IN (0, 1)),
+    explanation_matched_origin TEXT,
+    explanation_matched_filename_pattern TEXT,
+    explanation_proposed_action_kind TEXT CHECK (explanation_proposed_action_kind IN ('trash', 'move', 'ignore')),
+    explanation_proposed_action_destination_folder TEXT,
+    explanation_proposed_action_rename_template TEXT,
+    explanation_mode TEXT CHECK (explanation_mode IN ('preview_only', 'ask_first', 'automatic')),
+    explanation_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_watch_targets_ordinal ON watch_targets(ordinal);
+CREATE INDEX IF NOT EXISTS idx_rules_order ON automation_rules(priority DESC, name COLLATE NOCASE ASC);
+CREATE INDEX IF NOT EXISTS idx_tracked_state ON tracked_files(state);
+CREATE INDEX IF NOT EXISTS idx_tracked_expiry ON tracked_files(expires_at);
+CREATE INDEX IF NOT EXISTS idx_tracked_file_rules_rule_id ON tracked_file_rules(rule_id);
+CREATE INDEX IF NOT EXISTS idx_audit_failed_rules
+    ON audit_entries(undo_status_kind, source_path, rule_id)
+    WHERE rule_id IS NOT NULL;
+"#;
+
 pub fn get_config(db: &Database) -> Result<AppConfig, AppError> {
-    let read_txn = db.begin_read()?;
-    let table = read_txn.open_table(META_TABLE)?;
-    let Some(value) = table.get(CONFIG_KEY)? else {
+    let conn = db.connect()?;
+    let Some(config) = conn
+        .query_row(
+            "
+            SELECT default_ttl_seconds,
+                   stale_threshold_seconds,
+                   decaying_threshold_seconds,
+                   safe_folder_path,
+                   notifications_enabled,
+                   start_at_login,
+                   close_behavior,
+                   dropzone_enabled
+            FROM app_config
+            WHERE id = 1
+            ",
+            [],
+            |row| {
+                Ok(ConfigRow {
+                    default_ttl_seconds: row.get(0)?,
+                    stale_threshold_seconds: row.get(1)?,
+                    decaying_threshold_seconds: row.get(2)?,
+                    safe_folder_path: row.get(3)?,
+                    notifications_enabled: row.get(4)?,
+                    start_at_login: row.get(5)?,
+                    close_behavior: row.get(6)?,
+                    dropzone_enabled: row.get(7)?,
+                })
+            },
+        )
+        .optional()?
+    else {
         return Ok(AppConfig::default());
     };
 
-    Ok(bincode::deserialize::<AppConfig>(value.value())?)
+    let mut watch_targets = Vec::new();
+    let mut stmt = conn.prepare(
+        "
+        SELECT id, path, enabled, recursive
+        FROM watch_targets
+        ORDER BY ordinal ASC
+        ",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(WatchTargetRow {
+            id: row.get(0)?,
+            path: row.get(1)?,
+            enabled: row.get(2)?,
+            recursive: row.get(3)?,
+        })
+    })?;
+    for row in rows {
+        let row = row?;
+        watch_targets.push(WatchTarget {
+            ignore_patterns: load_ordered_values(
+                &conn,
+                "watch_target_ignore_patterns",
+                "target_id",
+                &row.id,
+            )?,
+            include_hidden_patterns: load_ordered_values(
+                &conn,
+                "watch_target_include_hidden_patterns",
+                "target_id",
+                &row.id,
+            )?,
+            id: row.id,
+            path: row.path,
+            enabled: row.enabled,
+            recursive: row.recursive,
+        });
+    }
+
+    Ok(AppConfig {
+        watch_targets,
+        default_ttl_seconds: i64_to_u64(config.default_ttl_seconds, "default_ttl_seconds")?,
+        stale_threshold_seconds: i64_to_u64(
+            config.stale_threshold_seconds,
+            "stale_threshold_seconds",
+        )?,
+        decaying_threshold_seconds: i64_to_u64(
+            config.decaying_threshold_seconds,
+            "decaying_threshold_seconds",
+        )?,
+        safe_folder_path: config.safe_folder_path,
+        notifications_enabled: config.notifications_enabled,
+        start_at_login: config.start_at_login,
+        close_behavior: close_behavior_from_label(&config.close_behavior)?,
+        dropzone_enabled: config.dropzone_enabled,
+    })
 }
 
 pub fn save_config(db: &Database, config: &AppConfig) -> Result<(), AppError> {
-    let bytes = bincode::serialize(config)?;
-    let write_txn = db.begin_write()?;
-    {
-        let mut table = write_txn.open_table(META_TABLE)?;
-        table.insert(CONFIG_KEY, bytes.as_slice())?;
+    db.write(|tx| {
+        tx.execute(
+            "
+            INSERT INTO app_config (
+                id,
+                default_ttl_seconds,
+                stale_threshold_seconds,
+                decaying_threshold_seconds,
+                safe_folder_path,
+                notifications_enabled,
+                start_at_login,
+                close_behavior,
+                dropzone_enabled
+            ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(id) DO UPDATE SET
+                default_ttl_seconds = excluded.default_ttl_seconds,
+                stale_threshold_seconds = excluded.stale_threshold_seconds,
+                decaying_threshold_seconds = excluded.decaying_threshold_seconds,
+                safe_folder_path = excluded.safe_folder_path,
+                notifications_enabled = excluded.notifications_enabled,
+                start_at_login = excluded.start_at_login,
+                close_behavior = excluded.close_behavior,
+                dropzone_enabled = excluded.dropzone_enabled
+            ",
+            params![
+                u64_to_i64(config.default_ttl_seconds, "default_ttl_seconds")?,
+                u64_to_i64(config.stale_threshold_seconds, "stale_threshold_seconds")?,
+                u64_to_i64(
+                    config.decaying_threshold_seconds,
+                    "decaying_threshold_seconds"
+                )?,
+                config.safe_folder_path,
+                config.notifications_enabled,
+                config.start_at_login,
+                close_behavior_label(&config.close_behavior),
+                config.dropzone_enabled,
+            ],
+        )?;
+
+        tx.execute("DELETE FROM watch_targets", [])?;
+        for (ordinal, target) in config.watch_targets.iter().enumerate() {
+            tx.execute(
+                "
+                INSERT INTO watch_targets (id, ordinal, path, enabled, recursive)
+                VALUES (?1, ?2, ?3, ?4, ?5)
+                ",
+                params![
+                    target.id,
+                    usize_to_i64(ordinal, "watch_targets.ordinal")?,
+                    target.path,
+                    target.enabled,
+                    target.recursive,
+                ],
+            )?;
+            insert_ordered_values(
+                tx,
+                "watch_target_ignore_patterns",
+                "target_id",
+                &target.id,
+                &target.ignore_patterns,
+            )?;
+            insert_ordered_values(
+                tx,
+                "watch_target_include_hidden_patterns",
+                "target_id",
+                &target.id,
+                &target.include_hidden_patterns,
+            )?;
+        }
+
+        Ok(())
+    })
+}
+
+struct ConfigRow {
+    default_ttl_seconds: i64,
+    stale_threshold_seconds: i64,
+    decaying_threshold_seconds: i64,
+    safe_folder_path: String,
+    notifications_enabled: bool,
+    start_at_login: bool,
+    close_behavior: String,
+    dropzone_enabled: bool,
+}
+
+struct WatchTargetRow {
+    id: String,
+    path: String,
+    enabled: bool,
+    recursive: bool,
+}
+
+pub(crate) fn load_ordered_values(
+    conn: &Connection,
+    table: &str,
+    owner_column: &str,
+    owner_id: &str,
+) -> Result<Vec<String>, AppError> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT value FROM {table} WHERE {owner_column} = ?1 ORDER BY ordinal ASC"
+    ))?;
+    let rows = stmt.query_map(params![owner_id], |row| row.get::<_, String>(0))?;
+    let mut values = Vec::new();
+    for row in rows {
+        values.push(row?);
     }
-    write_txn.commit()?;
+    Ok(values)
+}
+
+pub(crate) fn load_ordered_values_by_owner(
+    conn: &Connection,
+    table: &str,
+    owner_column: &str,
+    value_column: &str,
+) -> Result<HashMap<String, Vec<String>>, AppError> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {owner_column}, {value_column} FROM {table} ORDER BY {owner_column} ASC, ordinal ASC"
+    ))?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut values_by_owner: HashMap<String, Vec<String>> = HashMap::new();
+    for row in rows {
+        let (owner_id, value) = row?;
+        values_by_owner.entry(owner_id).or_default().push(value);
+    }
+    Ok(values_by_owner)
+}
+
+pub(crate) fn insert_ordered_values(
+    tx: &Transaction<'_>,
+    table: &str,
+    owner_column: &str,
+    owner_id: &str,
+    values: &[String],
+) -> Result<(), AppError> {
+    let sql = format!("INSERT INTO {table} ({owner_column}, ordinal, value) VALUES (?1, ?2, ?3)");
+    for (ordinal, value) in values.iter().enumerate() {
+        tx.execute(
+            &sql,
+            params![
+                owner_id,
+                usize_to_i64(ordinal, "ordered_values.ordinal")?,
+                value
+            ],
+        )?;
+    }
     Ok(())
+}
+
+pub(crate) fn u64_to_i64(value: u64, field: &str) -> Result<i64, AppError> {
+    i64::try_from(value).map_err(|_| {
+        storage_data_error(
+            "Numeric value is too large for SQLite storage.",
+            format!("{field}={value}"),
+        )
+    })
+}
+
+pub(crate) fn usize_to_i64(value: usize, field: &str) -> Result<i64, AppError> {
+    i64::try_from(value).map_err(|_| {
+        storage_data_error(
+            "Numeric value is too large for SQLite storage.",
+            format!("{field}={value}"),
+        )
+    })
+}
+
+pub(crate) fn opt_u64_to_i64(value: Option<u64>, field: &str) -> Result<Option<i64>, AppError> {
+    value.map(|value| u64_to_i64(value, field)).transpose()
+}
+
+pub(crate) fn i64_to_u64(value: i64, field: &str) -> Result<u64, AppError> {
+    u64::try_from(value).map_err(|_| {
+        storage_data_error(
+            "Stored numeric value cannot be represented by the Rust model.",
+            format!("{field}={value}"),
+        )
+    })
+}
+
+pub(crate) fn opt_i64_to_u64(value: Option<i64>, field: &str) -> Result<Option<u64>, AppError> {
+    value.map(|value| i64_to_u64(value, field)).transpose()
+}
+
+pub(crate) fn storage_data_error(
+    message: impl Into<String>,
+    details: impl Into<String>,
+) -> AppError {
+    AppError::with_details("DATABASE_ERROR", message, true, details)
+}
+
+fn close_behavior_label(behavior: &CloseBehavior) -> &'static str {
+    match behavior {
+        CloseBehavior::Ask => "ask",
+        CloseBehavior::HideToTray => "hide_to_tray",
+        CloseBehavior::Quit => "quit",
+    }
+}
+
+fn close_behavior_from_label(value: &str) -> Result<CloseBehavior, AppError> {
+    match value {
+        "ask" => Ok(CloseBehavior::Ask),
+        "hide_to_tray" => Ok(CloseBehavior::HideToTray),
+        "quit" => Ok(CloseBehavior::Quit),
+        other => Err(storage_data_error(
+            "Stored close behavior is not recognized.",
+            other,
+        )),
+    }
+}
+
+pub(crate) fn rule_mode_label(mode: &RuleMode) -> &'static str {
+    match mode {
+        RuleMode::PreviewOnly => "preview_only",
+        RuleMode::AskFirst => "ask_first",
+        RuleMode::Automatic => "automatic",
+    }
+}
+
+pub(crate) fn rule_mode_from_label(value: &str) -> Result<RuleMode, AppError> {
+    match value {
+        "preview_only" => Ok(RuleMode::PreviewOnly),
+        "ask_first" => Ok(RuleMode::AskFirst),
+        "automatic" => Ok(RuleMode::Automatic),
+        other => Err(storage_data_error(
+            "Stored rule mode is not recognized.",
+            other,
+        )),
+    }
+}
+
+pub(crate) fn rule_action_parts(action: &RuleAction) -> (&'static str, Option<&str>, Option<&str>) {
+    match action {
+        RuleAction::Trash => ("trash", None, None),
+        RuleAction::Move {
+            destination_folder,
+            rename_template,
+        } => (
+            "move",
+            Some(destination_folder.as_str()),
+            rename_template.as_deref(),
+        ),
+        RuleAction::Ignore => ("ignore", None, None),
+    }
+}
+
+pub(crate) fn rule_action_from_parts(
+    kind: &str,
+    destination_folder: Option<String>,
+    rename_template: Option<String>,
+) -> Result<RuleAction, AppError> {
+    match kind {
+        "trash" => Ok(RuleAction::Trash),
+        "move" => {
+            let Some(destination_folder) = destination_folder else {
+                return Err(storage_data_error(
+                    "Stored move rule is missing its destination folder.",
+                    kind,
+                ));
+            };
+            Ok(RuleAction::Move {
+                destination_folder,
+                rename_template,
+            })
+        }
+        "ignore" => Ok(RuleAction::Ignore),
+        other => Err(storage_data_error(
+            "Stored rule action is not recognized.",
+            other,
+        )),
+    }
 }

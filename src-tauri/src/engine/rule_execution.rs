@@ -1,5 +1,3 @@
-use redb::Database;
-use std::collections::HashSet;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -8,7 +6,7 @@ use crate::models::{
     AppError, AuditActionKind, AuditEntry, AutomationRule, RuleAction, RuleMatchExplanation,
     TrackedFile, UndoStatus,
 };
-use crate::storage;
+use crate::storage::{self, Database};
 
 #[derive(Debug, Clone)]
 pub struct RuleExecutionReport {
@@ -21,7 +19,7 @@ pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionRep
     let rules = storage::rules::list_rules(db)?;
     let now = crate::engine::freshness::now_seconds();
     let files = storage::tracked::list_tracked_files(db)?;
-    let mut failed_attempts = failed_automatic_rule_attempts(db)?;
+    let mut failed_attempts = storage::audit::list_failed_automatic_rule_attempts(db)?;
 
     let mut entries = Vec::new();
     let mut failures = Vec::new();
@@ -72,7 +70,7 @@ pub fn next_automatic_rule_execution_delay(
     let rules = storage::rules::list_rules(db)?;
     let now = crate::engine::freshness::now_seconds();
     let mut nearest_expiry: Option<u64> = None;
-    let failed_attempts = failed_automatic_rule_attempts(db)?;
+    let failed_attempts = storage::audit::list_failed_automatic_rule_attempts(db)?;
 
     for file in storage::tracked::list_tracked_files(db)? {
         let Some(candidate) = automatic_rule_candidate(&file, &config, &rules)? else {
@@ -127,17 +125,6 @@ fn append_failed_rule_execution_audit_entry(
     };
     storage::audit::append_audit_entry(db, &entry)?;
     Ok(entry)
-}
-
-fn failed_automatic_rule_attempts(db: &Database) -> Result<HashSet<(String, String)>, AppError> {
-    Ok(storage::audit::list_audit_entries(db)?
-        .into_iter()
-        .filter(|entry| matches!(entry.undo_status, UndoStatus::Failed { .. }))
-        .filter_map(|entry| {
-            let rule_id = entry.rule_id?;
-            Some((entry.source_path, rule_id))
-        })
-        .collect())
 }
 
 fn audit_action_kind_for_rule_action(action: &RuleAction) -> AuditActionKind {

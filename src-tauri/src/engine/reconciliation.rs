@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
-use redb::Database;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
@@ -26,7 +25,7 @@ use crate::engine::paths::PathScope;
 use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
 use crate::engine::{project_watched_file, tracked_file_from_metadata};
 use crate::models::{AppError, FileDecayState, ReconciliationReport, TrackedFile};
-use crate::storage;
+use crate::storage::{self, Database};
 
 #[allow(clippy::type_complexity)]
 pub fn reconcile_with_report_with_progress(
@@ -447,8 +446,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::models::{AppConfig, AppError, FileDecayState, WatchTarget};
-    use crate::storage;
-    use redb::Database;
+    use crate::storage::{self, Database};
 
     use super::reconcile_with_report_with_progress;
 
@@ -668,7 +666,7 @@ mod tests {
     struct Fixture {
         root: PathBuf,
         watch: PathBuf,
-        db: std::sync::Arc<redb::Database>,
+        db: std::sync::Arc<Database>,
     }
 
     impl Fixture {
@@ -676,7 +674,8 @@ mod tests {
             let root = std::env::temp_dir().join(format!("shelflife-reconcile-{}", Uuid::new_v4()));
             let watch = root.join("watch");
             fs::create_dir_all(&watch).expect("watch directory should be created");
-            let db = storage::open_database(root.join("test.redb")).expect("database should open");
+            let db =
+                storage::open_database(root.join("test.sqlite")).expect("database should open");
             Self { root, watch, db }
         }
 

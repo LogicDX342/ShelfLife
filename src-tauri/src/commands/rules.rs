@@ -8,7 +8,7 @@ use crate::models::{
 };
 use crate::rules::explain_file_against_rules;
 use crate::runtime::AppRuntime;
-use crate::storage;
+use crate::storage::{self, Database};
 
 #[tauri::command]
 pub async fn list_rules(state: State<'_, AppRuntime>) -> Result<Vec<AutomationRule>, AppError> {
@@ -59,7 +59,7 @@ pub async fn test_rule(
 }
 
 fn build_rule_preview_entries(
-    db: &redb::Database,
+    db: &Database,
     rule: &AutomationRule,
 ) -> Result<(Vec<RuleMatchExplanation>, Vec<AuditEntry>), AppError> {
     let config = storage::get_config(db)?;

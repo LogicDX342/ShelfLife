@@ -3,7 +3,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::Local;
-use redb::Database;
 use uuid::Uuid;
 
 use crate::engine::paths::PathScope;
@@ -13,6 +12,7 @@ use crate::models::{
     RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus, UserTriageAction,
 };
 use crate::storage;
+use crate::storage::Database;
 use std::sync::OnceLock;
 
 const DROPZONE_INGEST_AUDIT_ID: &str = "__dropzone_ingest__";

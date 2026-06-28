@@ -7,7 +7,7 @@ use crate::models::{
     UserTriageAction,
 };
 use crate::runtime::AppRuntime;
-use crate::storage;
+use crate::storage::{self, Database};
 
 #[tauri::command]
 pub async fn execute_triage_action(
@@ -76,7 +76,7 @@ pub async fn execute_bulk_triage_action(
 }
 
 fn execute_bulk_triage(
-    db: &redb::Database,
+    db: &Database,
     paths: Vec<String>,
     action: UserTriageAction,
 ) -> Result<BulkTriageResult, AppError> {

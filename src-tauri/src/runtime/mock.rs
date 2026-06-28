@@ -1,4 +1,3 @@
-use redb::Database;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{App, Manager};
@@ -8,9 +7,10 @@ use crate::models::{
     RuleAction, RuleConditions, RuleMode, SizeCondition, TrackedFile, UndoStatus, WatchTarget,
 };
 use crate::storage;
+use crate::storage::Database;
 
 const MOCK_ROOT_DIR: &str = "mock-mode";
-const MOCK_DB_FILE: &str = "shelflife.redb";
+const MOCK_DB_FILE: &str = "shelflife.sqlite";
 const MOCK_WATCH_DIR: &str = "watch";
 const MOCK_SAFE_DIR: &str = "safe";
 

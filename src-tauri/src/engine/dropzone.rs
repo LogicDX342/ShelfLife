@@ -2,8 +2,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use redb::Database;
-
 use crate::engine::freshness::tracked_file_from_metadata;
 use crate::engine::paths::PathScope;
 use crate::models::{
@@ -11,7 +9,7 @@ use crate::models::{
     DropzoneRuleGroup, OriginEvidence, RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
 };
 use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
-use crate::storage;
+use crate::storage::{self, Database};
 
 pub const SHAKE_INTERVAL_MS: u64 = 1_000;
 pub const SHAKE_MINIMUM_DISTANCE: f64 = 1_000.0;

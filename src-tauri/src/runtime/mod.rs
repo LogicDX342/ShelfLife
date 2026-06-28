@@ -7,12 +7,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use redb::Database;
 use tauri::{App, AppHandle, Manager};
 
 use crate::engine;
 use crate::models::AppError;
-use crate::storage;
+use crate::storage::{self, Database};
 
 #[derive(Clone)]
 pub struct AppRuntime {
@@ -161,6 +160,6 @@ fn open_runtime_database(app: &App) -> Result<Arc<Database>, Box<dyn std::error:
         return Ok(db);
     }
 
-    let db_path = app.path().app_data_dir()?.join("shelflife.redb");
+    let db_path = app.path().app_data_dir()?.join("shelflife.sqlite");
     storage::open_database(db_path).map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
 }

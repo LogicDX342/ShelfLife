@@ -10,6 +10,7 @@ use crate::models::ReconciliationReport;
 use crate::runtime::AppRuntime;
 
 const PERIODIC_RECONCILIATION_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const MAX_PATH_EVENT_EMITS: usize = 256;
 
 pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
     if runtime.reconciliation_active.swap(true, Ordering::SeqCst) {
@@ -74,14 +75,20 @@ fn emit_indexed_files(app_handle: &AppHandle, paths: &[String]) {
 }
 
 pub fn emit_reconciliation_report(app_handle: &AppHandle, report: &ReconciliationReport) {
-    emit_indexed_files(app_handle, &report.indexed);
-    for path in &report.updated {
-        let _ = app_handle.emit("file_updated", path);
+    let path_event_count = report.indexed.len() + report.updated.len() + report.removed.len();
+
+    if path_event_count <= MAX_PATH_EVENT_EMITS {
+        emit_indexed_files(app_handle, &report.indexed);
+        for path in &report.updated {
+            let _ = app_handle.emit("file_updated", path);
+        }
+        for path in &report.removed {
+            let _ = app_handle.emit("file_removed", path);
+        }
+        let _ = app_handle.emit("reconciliation_completed", report);
+    } else {
+        let _ = app_handle.emit("reconciliation_completed", ReconciliationReport::default());
     }
-    for path in &report.removed {
-        let _ = app_handle.emit("file_removed", path);
-    }
-    let _ = app_handle.emit("reconciliation_completed", report);
 }
 
 pub fn watcher_event_sink(

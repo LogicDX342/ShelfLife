@@ -1,8 +1,6 @@
-use redb::Database;
-
 use crate::engine::project_watched_file;
 use crate::models::{AppError, ReconciliationReport};
-use crate::storage;
+use crate::storage::{self, Database};
 
 pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
