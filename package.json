@@ -24,6 +24,8 @@
     "verify": "pnpm validate && pnpm cargo:fmt:check && pnpm cargo:clippy && pnpm test",
     "i18n:audit": "node scripts/audit-i18n.mjs",
     "tauri": "tauri",
+    "tauri:dev:withidentity": "cargo build --manifest-path src-tauri/Cargo.toml && (if not exist dist mkdir dist) && copy /Y src-tauri\\target\\debug\\shelflife.exe dist\\ >nul && winapp run .\\dist",
+    "pack:msix": "pnpm tauri build --no-bundle && (if not exist dist mkdir dist) && copy /Y src-tauri\\target\\release\\shelflife.exe dist\\ >nul && winapp pack .\\dist --cert .\\devcert.pfx",
     "prepare": "husky"
   },
   "license": "GPL-3.0-only",

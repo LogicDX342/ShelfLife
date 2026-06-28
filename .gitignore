@@ -8,3 +8,13 @@ node_modules
 !.env.example
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Development certificate
+devcert.pfx
+
+# Build and packaging output
+/dist/
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
