@@ -12,6 +12,10 @@ jobs:
       contents: write
 
     runs-on: windows-latest
+    env:
+      DIST_DIR: ${{ github.workspace }}\dist
+      PACKAGE_PATH: ${{ github.workspace }}\release\ShelfLife.msix
+      WINAPP_CLI_UPDATE_CHECK: '0'
 
     steps:
       - name: Checkout repository
@@ -39,11 +43,38 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
+      - name: Setup WinApp CLI
+        uses: microsoft/setup-WinAppCli@v0.1
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Run release verification
         run: pnpm verify
+
+      - name: Stamp manifest version
+        shell: pwsh
+        run: |
+          $package = Get-Content -Raw package.json | ConvertFrom-Json
+          $parts = @($package.version.Split('.'))
+
+          if ($parts.Count -gt 3) {
+            throw "package.json version '$($package.version)' cannot be converted to a four-part MSIX version."
+          }
+
+          $identityVersion = ($parts + @('0', '0', '0'))[0..3] -join '.'
+          [xml]$manifest = Get-Content -Raw Package.appxmanifest
+          $namespace = New-Object System.Xml.XmlNamespaceManager($manifest.NameTable)
+          $namespace.AddNamespace('pkg', 'http://schemas.microsoft.com/appx/manifest/foundation/windows10')
+          $identity = $manifest.SelectSingleNode('/pkg:Package/pkg:Identity', $namespace)
+
+          if ($null -eq $identity) {
+            throw "Package.appxmanifest does not contain a Package/Identity element."
+          }
+
+          $identity.SetAttribute('Version', $identityVersion)
+          $manifest.Save((Resolve-Path Package.appxmanifest))
+          Write-Host "Stamped Package.appxmanifest Identity Version=$identityVersion"
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0.6.2
@@ -60,3 +91,44 @@ jobs:
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
           assetNamePattern: '[name]_[version]_[arch][setup][ext]'
+
+      - name: Stage MSIX contents
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:DIST_DIR | Out-Null
+          Copy-Item -Path src-tauri\target\release\shelflife.exe -Destination (Join-Path $env:DIST_DIR 'shelflife.exe') -Force
+          Copy-Item -Path Assets -Destination (Join-Path $env:DIST_DIR 'Assets') -Recurse -Force
+
+      - name: Package MSIX
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path (Split-Path $env:PACKAGE_PATH) | Out-Null
+          winapp pack $env:DIST_DIR --manifest Package.appxmanifest --executable shelflife.exe --output $env:PACKAGE_PATH
+
+          if (-not (Test-Path $env:PACKAGE_PATH)) {
+            Get-ChildItem -Recurse -Filter *.msix | Format-Table -AutoSize
+            throw "Expected MSIX was not created at $env:PACKAGE_PATH."
+          }
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ShelfLife-msix
+          path: ${{ env.PACKAGE_PATH }}
+          if-no-files-found: error
+
+      - name: Configure Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+
+      - name: Reconfigure Store credentials
+        shell: pwsh
+        run: |
+          msstore reconfigure `
+            --tenantId ${{ secrets.AZURE_AD_TENANT_ID }} `
+            --sellerId ${{ secrets.SELLER_ID }} `
+            --clientId ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }} `
+            --clientSecret ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+
+      - name: Publish MSIX to Microsoft Store
+        shell: pwsh
+        run: msstore publish "$env:PACKAGE_PATH" -id "${{ vars.MICROSOFT_STORE_PRODUCT_ID }}"
