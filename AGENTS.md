@@ -44,10 +44,11 @@ src-tauri/src/
 │   ├── evaluator.rs         # Rule decisions, effective verdicts, scope-specific evaluation
 │   ├── explanation.rs       # RuleMatchExplanation generation
 │   └── regex_cache.rs       # Shared compiled-regex cache
-├── storage/                 # redb persistence layer
-│   ├── mod.rs               # Database init, table definitions, config persistence
+├── storage/                 # SQLite/Diesel persistence layer
+│   ├── mod.rs               # Database init, DDL bootstrap, config persistence
 │   ├── audit.rs             # AuditEntry CRUD and sequence management
 │   ├── rules.rs             # AutomationRule CRUD
+│   ├── schema.rs            # Diesel table! metadata mirroring SCHEMA_SQL
 │   ├── test_util.rs         # Rust test fixtures
 │   └── tracked.rs           # TrackedFile CRUD and tracked secondary indexes
 └── models/                  # Shared data types (serde structs/enums; no business logic)
@@ -55,7 +56,7 @@ src-tauri/src/
     ├── audit.rs             # AuditEntry, AuditActionKind, UndoStatus, bulk triage models
     ├── config.rs            # AppConfig, WatchTarget, CloseBehavior
     ├── dropzone.rs          # Dropzone preview/action result models
-    ├── error.rs             # AppError and redb/io/bincode conversions
+    ├── error.rs             # AppError and Diesel/io conversions
     ├── origin.rs            # OriginEvidence
     ├── preview.rs           # FilePreview, FilePreviewContent
     ├── rule.rs              # AutomationRule, RuleMode, RuleAction, RuleConditions
@@ -70,10 +71,11 @@ src-tauri/src/
 - `commands/` files are thin Tauri seams: validate input, call `engine/`, `rules/`, `storage/`, or `runtime/`, emit events/notifications, and return results.
 - `runtime/` owns lifecycle state and orchestration: watcher restart/pause/resume, dropzone monitor sync, reconciliation scheduling, automatic rule scheduling, and runtime event emission.
 - `dropzone.rs` at the backend root is Tauri/window-specific. Pure dropzone behavior belongs in `engine/dropzone.rs`; file-changing dropzone actions belong in `engine/executor.rs`.
-- `engine/` and `rules/` must not depend on Tauri types. They may depend on storage models and redb where the current engine interface already does, but do not introduce Tauri handles or window/event concerns there.
+- `engine/` and `rules/` must not depend on Tauri types. They may depend on storage models and storage APIs where the current engine interface already does, but do not introduce Tauri handles, Diesel connections, SQLite transactions, or window/event concerns there.
 - `engine::watcher` must not open storage or hold database handles. It debounces events, waits for stable paths, and emits paths for `runtime/` to reconcile.
-- `storage/` owns all redb transactions and table definitions. Other modules must not open redb transactions directly.
-- Keep tracked-file secondary index invariants inside `storage/`. Do not add new callers that manually coordinate `*_no_reindex` plus `rebuild_tracked_indexes` unless storage exposes that as one coherent operation.
+- `storage/` owns all SQLite/Diesel connections, transactions, table definitions, and Diesel `schema.rs` metadata. Other modules must not open SQLite/Diesel connections or transactions directly.
+- Keep `SCHEMA_SQL` in `storage/mod.rs` and Diesel `table!` metadata in `storage/schema.rs` synchronized whenever schema changes.
+- Keep tracked-file secondary index invariants inside `storage/`; expose coherent storage operations instead of making callers coordinate index updates manually.
 - `models/` contains data structures with serde derives plus basic defaults/conversions only. No workflow logic.
 - Automatic rule failures are stored as audit entries. Do not reintroduce in-memory retry/backoff state unless `SPEC.md` is updated first.
 - Archive/resource-limit v2 work is not currently implemented in the Rust model. Do not refer to `RuleAction::Archive` or `sysinfo` unless you are implementing that feature and updating `SPEC.md`.

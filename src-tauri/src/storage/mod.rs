@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod rules;
+pub(crate) mod schema;
 #[cfg(test)]
 pub mod test_util;
 pub mod tracked;
@@ -7,11 +8,14 @@ pub mod tracked;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 
-use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
+use diesel::prelude::*;
+use diesel::sql_query;
+use diesel::sql_types::{BigInt, Integer, Text};
+use diesel::sqlite::SqliteConnection;
 
 use crate::models::{AppConfig, AppError, CloseBehavior, RuleAction, RuleMode, WatchTarget};
+use crate::storage::schema::{app_config, watch_targets};
 
 const SCHEMA_VERSION: i64 = 1;
 
@@ -25,21 +29,19 @@ impl Database {
         Self { path }
     }
 
-    pub(crate) fn connect(&self) -> Result<Connection, AppError> {
-        let conn = Connection::open(&self.path)?;
-        configure_connection(&conn)?;
+    pub(crate) fn connect(&self) -> Result<SqliteConnection, AppError> {
+        let database_url = self.path.to_string_lossy().into_owned();
+        let mut conn = SqliteConnection::establish(&database_url)?;
+        configure_connection(&mut conn)?;
         Ok(conn)
     }
 
     pub(crate) fn write<T>(
         &self,
-        write: impl FnOnce(&Transaction<'_>) -> Result<T, AppError>,
+        write: impl FnOnce(&mut SqliteConnection) -> Result<T, AppError>,
     ) -> Result<T, AppError> {
         let mut conn = self.connect()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let result = write(&tx)?;
-        tx.commit()?;
-        Ok(result)
+        conn.immediate_transaction(|conn| write(conn))
     }
 }
 
@@ -53,21 +55,18 @@ pub fn open_database(path: impl AsRef<Path>) -> Result<Arc<Database>, AppError> 
     Ok(db)
 }
 
-fn configure_connection(conn: &Connection) -> Result<(), AppError> {
-    conn.busy_timeout(Duration::from_millis(5_000))?;
-    conn.execute_batch(
-        "
-        PRAGMA foreign_keys = ON;
-        PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
-        ",
-    )?;
+fn configure_connection(conn: &mut SqliteConnection) -> Result<(), AppError> {
+    sql_query("PRAGMA busy_timeout = 5000").execute(conn)?;
+    sql_query("PRAGMA foreign_keys = ON").execute(conn)?;
+    sql_query("PRAGMA journal_mode = WAL").execute(conn)?;
+    sql_query("PRAGMA synchronous = NORMAL").execute(conn)?;
     Ok(())
 }
 
 fn initialize_database(db: &Database) -> Result<(), AppError> {
-    let conn = db.connect()?;
-    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    let mut conn = db.connect()?;
+    let version_row = sql_query("PRAGMA user_version").get_result::<UserVersionRow>(&mut conn)?;
+    let version = i64::from(version_row.user_version);
     if version > SCHEMA_VERSION {
         return Err(AppError::with_details(
             "DATABASE_ERROR",
@@ -77,9 +76,21 @@ fn initialize_database(db: &Database) -> Result<(), AppError> {
         ));
     }
 
-    conn.execute_batch(SCHEMA_SQL)?;
-    conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    for statement in SCHEMA_SQL
+        .split(';')
+        .map(str::trim)
+        .filter(|sql| !sql.is_empty())
+    {
+        sql_query(statement).execute(&mut conn)?;
+    }
+    sql_query(format!("PRAGMA user_version = {SCHEMA_VERSION}")).execute(&mut conn)?;
     Ok(())
+}
+
+#[derive(QueryableByName)]
+struct UserVersionRow {
+    #[diesel(sql_type = Integer)]
+    user_version: i32,
 }
 
 const SCHEMA_SQL: &str = r#"
@@ -249,70 +260,37 @@ CREATE INDEX IF NOT EXISTS idx_audit_failed_rules
 "#;
 
 pub fn get_config(db: &Database) -> Result<AppConfig, AppError> {
-    let conn = db.connect()?;
-    let Some(config) = conn
-        .query_row(
-            "
-            SELECT default_ttl_seconds,
-                   stale_threshold_seconds,
-                   decaying_threshold_seconds,
-                   safe_folder_path,
-                   notifications_enabled,
-                   start_at_login,
-                   close_behavior,
-                   dropzone_enabled
-            FROM app_config
-            WHERE id = 1
-            ",
-            [],
-            |row| {
-                Ok(ConfigRow {
-                    default_ttl_seconds: row.get(0)?,
-                    stale_threshold_seconds: row.get(1)?,
-                    decaying_threshold_seconds: row.get(2)?,
-                    safe_folder_path: row.get(3)?,
-                    notifications_enabled: row.get(4)?,
-                    start_at_login: row.get(5)?,
-                    close_behavior: row.get(6)?,
-                    dropzone_enabled: row.get(7)?,
-                })
-            },
-        )
+    let mut conn = db.connect()?;
+    let Some(config) = app_config::table
+        .find(1_i32)
+        .select(ConfigRow::as_select())
+        .first(&mut conn)
         .optional()?
     else {
         return Ok(AppConfig::default());
     };
 
+    let target_rows = watch_targets::table
+        .order(watch_targets::ordinal.asc())
+        .select(WatchTargetRow::as_select())
+        .load::<WatchTargetRow>(&mut conn)?;
+
     let mut watch_targets = Vec::new();
-    let mut stmt = conn.prepare(
-        "
-        SELECT id, path, enabled, recursive
-        FROM watch_targets
-        ORDER BY ordinal ASC
-        ",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok(WatchTargetRow {
-            id: row.get(0)?,
-            path: row.get(1)?,
-            enabled: row.get(2)?,
-            recursive: row.get(3)?,
-        })
-    })?;
-    for row in rows {
-        let row = row?;
+    for row in target_rows {
         watch_targets.push(WatchTarget {
             ignore_patterns: load_ordered_values(
-                &conn,
+                &mut conn,
                 "watch_target_ignore_patterns",
                 "target_id",
                 &row.id,
+                "value",
             )?,
             include_hidden_patterns: load_ordered_values(
-                &conn,
+                &mut conn,
                 "watch_target_include_hidden_patterns",
                 "target_id",
                 &row.id,
+                "value",
             )?,
             id: row.id,
             path: row.path,
@@ -341,73 +319,61 @@ pub fn get_config(db: &Database) -> Result<AppConfig, AppError> {
 }
 
 pub fn save_config(db: &Database, config: &AppConfig) -> Result<(), AppError> {
-    db.write(|tx| {
-        tx.execute(
-            "
-            INSERT INTO app_config (
-                id,
-                default_ttl_seconds,
-                stale_threshold_seconds,
-                decaying_threshold_seconds,
-                safe_folder_path,
-                notifications_enabled,
-                start_at_login,
-                close_behavior,
-                dropzone_enabled
-            ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-            ON CONFLICT(id) DO UPDATE SET
-                default_ttl_seconds = excluded.default_ttl_seconds,
-                stale_threshold_seconds = excluded.stale_threshold_seconds,
-                decaying_threshold_seconds = excluded.decaying_threshold_seconds,
-                safe_folder_path = excluded.safe_folder_path,
-                notifications_enabled = excluded.notifications_enabled,
-                start_at_login = excluded.start_at_login,
-                close_behavior = excluded.close_behavior,
-                dropzone_enabled = excluded.dropzone_enabled
-            ",
-            params![
-                u64_to_i64(config.default_ttl_seconds, "default_ttl_seconds")?,
-                u64_to_i64(config.stale_threshold_seconds, "stale_threshold_seconds")?,
-                u64_to_i64(
-                    config.decaying_threshold_seconds,
-                    "decaying_threshold_seconds"
-                )?,
-                config.safe_folder_path,
-                config.notifications_enabled,
-                config.start_at_login,
-                close_behavior_label(&config.close_behavior),
-                config.dropzone_enabled,
-            ],
-        )?;
+    db.write(|conn| {
+        let row = ConfigWriteRow {
+            id: 1,
+            default_ttl_seconds: u64_to_i64(config.default_ttl_seconds, "default_ttl_seconds")?,
+            stale_threshold_seconds: u64_to_i64(
+                config.stale_threshold_seconds,
+                "stale_threshold_seconds",
+            )?,
+            decaying_threshold_seconds: u64_to_i64(
+                config.decaying_threshold_seconds,
+                "decaying_threshold_seconds",
+            )?,
+            safe_folder_path: &config.safe_folder_path,
+            notifications_enabled: config.notifications_enabled,
+            start_at_login: config.start_at_login,
+            close_behavior: close_behavior_label(&config.close_behavior),
+            dropzone_enabled: config.dropzone_enabled,
+        };
 
-        tx.execute("DELETE FROM watch_targets", [])?;
+        diesel::insert_into(app_config::table)
+            .values(&row)
+            .on_conflict(app_config::id)
+            .do_update()
+            .set(&row)
+            .execute(conn)?;
+
+        diesel::delete(watch_targets::table).execute(conn)?;
         for (ordinal, target) in config.watch_targets.iter().enumerate() {
-            tx.execute(
-                "
-                INSERT INTO watch_targets (id, ordinal, path, enabled, recursive)
-                VALUES (?1, ?2, ?3, ?4, ?5)
-                ",
-                params![
-                    target.id,
-                    usize_to_i64(ordinal, "watch_targets.ordinal")?,
-                    target.path,
-                    target.enabled,
-                    target.recursive,
-                ],
-            )?;
+            let target_row = WatchTargetWriteRow {
+                id: &target.id,
+                ordinal: usize_to_i64(ordinal, "watch_targets.ordinal")?,
+                path: &target.path,
+                enabled: target.enabled,
+                recursive: target.recursive,
+            };
+            diesel::insert_into(watch_targets::table)
+                .values(&target_row)
+                .execute(conn)?;
             insert_ordered_values(
-                tx,
+                conn,
                 "watch_target_ignore_patterns",
                 "target_id",
+                "value",
                 &target.id,
                 &target.ignore_patterns,
+                "watch_target_ignore_patterns.ordinal",
             )?;
             insert_ordered_values(
-                tx,
+                conn,
                 "watch_target_include_hidden_patterns",
                 "target_id",
+                "value",
                 &target.id,
                 &target.include_hidden_patterns,
+                "watch_target_include_hidden_patterns.ordinal",
             )?;
         }
 
@@ -415,6 +381,9 @@ pub fn save_config(db: &Database, config: &AppConfig) -> Result<(), AppError> {
     })
 }
 
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = app_config)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 struct ConfigRow {
     default_ttl_seconds: i64,
     stale_threshold_seconds: i64,
@@ -426,6 +395,23 @@ struct ConfigRow {
     dropzone_enabled: bool,
 }
 
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = app_config)]
+struct ConfigWriteRow<'a> {
+    id: i32,
+    default_ttl_seconds: i64,
+    stale_threshold_seconds: i64,
+    decaying_threshold_seconds: i64,
+    safe_folder_path: &'a str,
+    notifications_enabled: bool,
+    start_at_login: bool,
+    close_behavior: &'a str,
+    dropzone_enabled: bool,
+}
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = watch_targets)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 struct WatchTargetRow {
     id: String,
     path: String,
@@ -433,62 +419,109 @@ struct WatchTargetRow {
     recursive: bool,
 }
 
+#[derive(Insertable)]
+#[diesel(table_name = watch_targets)]
+struct WatchTargetWriteRow<'a> {
+    id: &'a str,
+    ordinal: i64,
+    path: &'a str,
+    enabled: bool,
+    recursive: bool,
+}
+
+#[derive(QueryableByName)]
+struct ValueRow {
+    #[diesel(sql_type = Text)]
+    value: String,
+}
+
+#[derive(QueryableByName)]
+struct OwnerValueRow {
+    #[diesel(sql_type = Text)]
+    owner_id: String,
+    #[diesel(sql_type = Text)]
+    value: String,
+}
+
 pub(crate) fn load_ordered_values(
-    conn: &Connection,
+    conn: &mut SqliteConnection,
     table: &str,
     owner_column: &str,
     owner_id: &str,
+    value_column: &str,
 ) -> Result<Vec<String>, AppError> {
-    let mut stmt = conn.prepare(&format!(
-        "SELECT value FROM {table} WHERE {owner_column} = ?1 ORDER BY ordinal ASC"
-    ))?;
-    let rows = stmt.query_map(params![owner_id], |row| row.get::<_, String>(0))?;
-    let mut values = Vec::new();
-    for row in rows {
-        values.push(row?);
-    }
-    Ok(values)
+    let sql = format!(
+        "SELECT {value_column} AS value FROM {table} WHERE {owner_column} = ? ORDER BY ordinal ASC"
+    );
+    let rows = sql_query(sql.as_str())
+        .bind::<Text, _>(owner_id)
+        .load::<ValueRow>(conn)?;
+    Ok(rows.into_iter().map(|row| row.value).collect())
 }
 
 pub(crate) fn load_ordered_values_by_owner(
-    conn: &Connection,
+    conn: &mut SqliteConnection,
     table: &str,
     owner_column: &str,
     value_column: &str,
 ) -> Result<HashMap<String, Vec<String>>, AppError> {
-    let mut stmt = conn.prepare(&format!(
-        "SELECT {owner_column}, {value_column} FROM {table} ORDER BY {owner_column} ASC, ordinal ASC"
-    ))?;
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-    let mut values_by_owner: HashMap<String, Vec<String>> = HashMap::new();
-    for row in rows {
-        let (owner_id, value) = row?;
-        values_by_owner.entry(owner_id).or_default().push(value);
-    }
-    Ok(values_by_owner)
+    let sql = format!(
+        "SELECT {owner_column} AS owner_id, {value_column} AS value FROM {table} ORDER BY {owner_column} ASC, ordinal ASC"
+    );
+    let rows = sql_query(sql.as_str()).load::<OwnerValueRow>(conn)?;
+    Ok(collect_ordered_values_by_owner(
+        rows.into_iter()
+            .map(|row| (row.owner_id, row.value))
+            .collect(),
+    ))
 }
 
-pub(crate) fn insert_ordered_values(
-    tx: &Transaction<'_>,
+pub(crate) fn delete_owner_rows(
+    conn: &mut SqliteConnection,
     table: &str,
     owner_column: &str,
     owner_id: &str,
-    values: &[String],
 ) -> Result<(), AppError> {
-    let sql = format!("INSERT INTO {table} ({owner_column}, ordinal, value) VALUES (?1, ?2, ?3)");
+    let sql = format!("DELETE FROM {table} WHERE {owner_column} = ?");
+    sql_query(sql.as_str())
+        .bind::<Text, _>(owner_id)
+        .execute(conn)?;
+    Ok(())
+}
+
+pub(crate) fn insert_ordered_values(
+    conn: &mut SqliteConnection,
+    table: &str,
+    owner_column: &str,
+    value_column: &str,
+    owner_id: &str,
+    values: &[String],
+    ordinal_field: &str,
+) -> Result<(), AppError> {
+    if values.is_empty() {
+        return Ok(());
+    }
+
+    let sql =
+        format!("INSERT INTO {table} ({owner_column}, ordinal, {value_column}) VALUES (?, ?, ?)");
     for (ordinal, value) in values.iter().enumerate() {
-        tx.execute(
-            &sql,
-            params![
-                owner_id,
-                usize_to_i64(ordinal, "ordered_values.ordinal")?,
-                value
-            ],
-        )?;
+        sql_query(sql.as_str())
+            .bind::<Text, _>(owner_id)
+            .bind::<BigInt, _>(usize_to_i64(ordinal, ordinal_field)?)
+            .bind::<Text, _>(value)
+            .execute(conn)?;
     }
     Ok(())
+}
+
+pub(crate) fn collect_ordered_values_by_owner(
+    rows: Vec<(String, String)>,
+) -> HashMap<String, Vec<String>> {
+    let mut values_by_owner: HashMap<String, Vec<String>> = HashMap::new();
+    for (owner_id, value) in rows {
+        values_by_owner.entry(owner_id).or_default().push(value);
+    }
+    values_by_owner
 }
 
 pub(crate) fn u64_to_i64(value: u64, field: &str) -> Result<i64, AppError> {

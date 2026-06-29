@@ -1,58 +1,66 @@
-use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
+use diesel::dsl::sql;
+use diesel::prelude::*;
+use diesel::sql_types::{Integer, Text};
+use diesel::sqlite::SqliteConnection;
 
 use crate::models::{AppError, Expiry, FileDecayState, OriginEvidence, TrackedFile};
+use crate::storage::schema::tracked_files;
 use crate::storage::{
-    i64_to_u64, insert_ordered_values, load_ordered_values_by_owner, opt_i64_to_u64,
-    opt_u64_to_i64, storage_data_error, u64_to_i64, usize_to_i64, Database,
+    delete_owner_rows, i64_to_u64, insert_ordered_values, load_ordered_values,
+    load_ordered_values_by_owner, opt_i64_to_u64, opt_u64_to_i64, storage_data_error, u64_to_i64,
+    Database,
 };
 
-const TRACKED_LIST_ORDER: &str = "
-ORDER BY CASE state
-    WHEN 'decaying' THEN 0
-    WHEN 'stale' THEN 1
-    WHEN 'fresh' THEN 2
-    WHEN 'pinned' THEN 3
-    WHEN 'ignored' THEN 4
-    WHEN 'missing' THEN 5
-    ELSE 6
-END,
-file_name COLLATE NOCASE ASC,
-path ASC
-";
-
 pub fn get_tracked_file(db: &Database, path: &str) -> Result<Option<TrackedFile>, AppError> {
-    let conn = db.connect()?;
-    let row = conn
-        .query_row(
-            tracked_select_sql("WHERE path = ?1").as_str(),
-            params![path],
-            tracked_row_from_sql,
-        )
+    let mut conn = db.connect()?;
+    let row = tracked_files::table
+        .find(path)
+        .select(TrackedRow::as_select())
+        .first::<TrackedRow>(&mut conn)
         .optional()?;
 
     row.map(|row| {
-        let matched_rule_ids = load_matched_rule_ids(&conn, &row.path)?;
-        let origin_values = load_origin_values(&conn, &row.path)?;
+        let matched_rule_ids = load_ordered_values(
+            &mut conn,
+            "tracked_file_rules",
+            "file_path",
+            &row.path,
+            "rule_id",
+        )?;
+        let origin_values =
+            load_ordered_values(&mut conn, "origin_values", "file_path", &row.path, "value")?;
         tracked_file_from_row(row, matched_rule_ids, origin_values)
     })
     .transpose()
 }
 
 pub fn list_tracked_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
-    let conn = db.connect()?;
-    let rows = {
-        let mut stmt = conn.prepare(tracked_select_sql(TRACKED_LIST_ORDER).as_str())?;
-        let rows = stmt.query_map([], tracked_row_from_sql)?;
-        let mut rows_vec = Vec::new();
-        for row in rows {
-            rows_vec.push(row?);
-        }
-        rows_vec
-    };
+    let mut conn = db.connect()?;
+    let rows = tracked_files::table
+        .order((
+            sql::<Integer>(
+                "
+                CASE state
+                    WHEN 'decaying' THEN 0
+                    WHEN 'stale' THEN 1
+                    WHEN 'fresh' THEN 2
+                    WHEN 'pinned' THEN 3
+                    WHEN 'ignored' THEN 4
+                    WHEN 'missing' THEN 5
+                    ELSE 6
+                END
+                ",
+            ),
+            sql::<Text>("file_name COLLATE NOCASE ASC"),
+            tracked_files::path.asc(),
+        ))
+        .select(TrackedRow::as_select())
+        .load::<TrackedRow>(&mut conn)?;
+
     let mut matched_rules_by_path =
-        load_ordered_values_by_owner(&conn, "tracked_file_rules", "file_path", "rule_id")?;
+        load_ordered_values_by_owner(&mut conn, "tracked_file_rules", "file_path", "rule_id")?;
     let mut origin_values_by_path =
-        load_ordered_values_by_owner(&conn, "origin_values", "file_path", "value")?;
+        load_ordered_values_by_owner(&mut conn, "origin_values", "file_path", "value")?;
     let mut files = Vec::new();
     for row in rows {
         let matched_rule_ids = matched_rules_by_path.remove(&row.path).unwrap_or_default();
@@ -94,117 +102,80 @@ pub fn update_tracked_files_batch(
         return Ok(());
     }
 
-    db.write(|tx| {
+    db.write(|conn| {
         for path in &removes {
-            tx.execute("DELETE FROM tracked_files WHERE path = ?1", params![path])?;
+            diesel::delete(tracked_files::table.filter(tracked_files::path.eq(path)))
+                .execute(conn)?;
         }
         for file in &upserts {
-            upsert_tracked_file_tx(tx, file)?;
+            upsert_tracked_file_tx(conn, file)?;
         }
         Ok(())
     })
 }
 
-fn upsert_tracked_file_tx(tx: &Transaction<'_>, file: &TrackedFile) -> Result<(), AppError> {
+fn upsert_tracked_file_tx(conn: &mut SqliteConnection, file: &TrackedFile) -> Result<(), AppError> {
     let (expiry_kind, expires_at) = expiry_parts(&file.expiry)?;
     let origin = origin_parts(&file.origin)?;
+    let row = TrackedWriteRow {
+        path: &file.path,
+        file_name: &file.file_name,
+        watch_target_id: &file.watch_target_id,
+        size_bytes: u64_to_i64(file.size_bytes, "tracked_files.size_bytes")?,
+        first_seen_at: u64_to_i64(file.first_seen_at, "tracked_files.first_seen_at")?,
+        last_observed_mtime: opt_u64_to_i64(
+            file.last_observed_mtime,
+            "tracked_files.last_observed_mtime",
+        )?,
+        last_observed_atime: opt_u64_to_i64(
+            file.last_observed_atime,
+            "tracked_files.last_observed_atime",
+        )?,
+        last_user_action_at: opt_u64_to_i64(
+            file.last_user_action_at,
+            "tracked_files.last_user_action_at",
+        )?,
+        freshness_at: u64_to_i64(file.freshness_at, "tracked_files.freshness_at")?,
+        expiry_kind,
+        expires_at,
+        state: state_label(&file.state),
+        origin_kind: origin.kind,
+        origin_zone_id: origin.zone_id,
+        origin_host_url: origin.host_url,
+        origin_referrer_url: origin.referrer_url,
+        origin_xattr_key: origin.xattr_key,
+        origin_xattr_value_utf8: origin.xattr_value_utf8,
+    };
 
-    tx.execute(
-        "
-        INSERT INTO tracked_files (
-            path,
-            file_name,
-            watch_target_id,
-            size_bytes,
-            first_seen_at,
-            last_observed_mtime,
-            last_observed_atime,
-            last_user_action_at,
-            freshness_at,
-            expiry_kind,
-            expires_at,
-            state,
-            origin_kind,
-            origin_zone_id,
-            origin_host_url,
-            origin_referrer_url,
-            origin_xattr_key,
-            origin_xattr_value_utf8
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
-        ON CONFLICT(path) DO UPDATE SET
-            file_name = excluded.file_name,
-            watch_target_id = excluded.watch_target_id,
-            size_bytes = excluded.size_bytes,
-            first_seen_at = excluded.first_seen_at,
-            last_observed_mtime = excluded.last_observed_mtime,
-            last_observed_atime = excluded.last_observed_atime,
-            last_user_action_at = excluded.last_user_action_at,
-            freshness_at = excluded.freshness_at,
-            expiry_kind = excluded.expiry_kind,
-            expires_at = excluded.expires_at,
-            state = excluded.state,
-            origin_kind = excluded.origin_kind,
-            origin_zone_id = excluded.origin_zone_id,
-            origin_host_url = excluded.origin_host_url,
-            origin_referrer_url = excluded.origin_referrer_url,
-            origin_xattr_key = excluded.origin_xattr_key,
-            origin_xattr_value_utf8 = excluded.origin_xattr_value_utf8
-        ",
-        params![
-            &file.path,
-            &file.file_name,
-            &file.watch_target_id,
-            u64_to_i64(file.size_bytes, "tracked_files.size_bytes")?,
-            u64_to_i64(file.first_seen_at, "tracked_files.first_seen_at")?,
-            opt_u64_to_i64(
-                file.last_observed_mtime,
-                "tracked_files.last_observed_mtime"
-            )?,
-            opt_u64_to_i64(
-                file.last_observed_atime,
-                "tracked_files.last_observed_atime"
-            )?,
-            opt_u64_to_i64(
-                file.last_user_action_at,
-                "tracked_files.last_user_action_at"
-            )?,
-            u64_to_i64(file.freshness_at, "tracked_files.freshness_at")?,
-            expiry_kind,
-            expires_at,
-            state_label(&file.state),
-            origin.kind,
-            origin.zone_id,
-            origin.host_url,
-            origin.referrer_url,
-            origin.xattr_key,
-            origin.xattr_value_utf8,
-        ],
+    diesel::insert_into(tracked_files::table)
+        .values(&row)
+        .on_conflict(tracked_files::path)
+        .do_update()
+        .set(&row)
+        .execute(conn)?;
+
+    delete_owner_rows(conn, "tracked_file_rules", "file_path", &file.path)?;
+    insert_ordered_values(
+        conn,
+        "tracked_file_rules",
+        "file_path",
+        "rule_id",
+        &file.path,
+        &file.matched_rule_ids,
+        "tracked_file_rules.ordinal",
     )?;
 
-    tx.execute(
-        "DELETE FROM tracked_file_rules WHERE file_path = ?1",
-        params![&file.path],
-    )?;
-    for (ordinal, rule_id) in file.matched_rule_ids.iter().enumerate() {
-        tx.execute(
-            "
-            INSERT INTO tracked_file_rules (file_path, ordinal, rule_id)
-            VALUES (?1, ?2, ?3)
-            ",
-            params![
-                &file.path,
-                usize_to_i64(ordinal, "tracked_file_rules.ordinal")?,
-                rule_id,
-            ],
-        )?;
-    }
-
-    tx.execute(
-        "DELETE FROM origin_values WHERE file_path = ?1",
-        params![&file.path],
-    )?;
+    delete_owner_rows(conn, "origin_values", "file_path", &file.path)?;
     if let OriginEvidence::MacWhereFroms { values } = &file.origin {
-        insert_ordered_values(tx, "origin_values", "file_path", &file.path, values)?;
+        insert_ordered_values(
+            conn,
+            "origin_values",
+            "file_path",
+            "value",
+            &file.path,
+            values,
+            "origin_values.ordinal",
+        )?;
     }
 
     Ok(())
@@ -243,56 +214,9 @@ fn tracked_file_from_row(
     })
 }
 
-fn tracked_select_sql(predicate: &str) -> String {
-    format!(
-        "
-        SELECT path,
-               file_name,
-               watch_target_id,
-               size_bytes,
-               first_seen_at,
-               last_observed_mtime,
-               last_observed_atime,
-               last_user_action_at,
-               freshness_at,
-               expiry_kind,
-               expires_at,
-               state,
-               origin_kind,
-               origin_zone_id,
-               origin_host_url,
-               origin_referrer_url,
-               origin_xattr_key,
-               origin_xattr_value_utf8
-        FROM tracked_files
-        {predicate}
-        "
-    )
-}
-
-fn tracked_row_from_sql(row: &Row<'_>) -> rusqlite::Result<TrackedRow> {
-    Ok(TrackedRow {
-        path: row.get(0)?,
-        file_name: row.get(1)?,
-        watch_target_id: row.get(2)?,
-        size_bytes: row.get(3)?,
-        first_seen_at: row.get(4)?,
-        last_observed_mtime: row.get(5)?,
-        last_observed_atime: row.get(6)?,
-        last_user_action_at: row.get(7)?,
-        freshness_at: row.get(8)?,
-        expiry_kind: row.get(9)?,
-        expires_at: row.get(10)?,
-        state: row.get(11)?,
-        origin_kind: row.get(12)?,
-        origin_zone_id: row.get(13)?,
-        origin_host_url: row.get(14)?,
-        origin_referrer_url: row.get(15)?,
-        origin_xattr_key: row.get(16)?,
-        origin_xattr_value_utf8: row.get(17)?,
-    })
-}
-
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = tracked_files)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 struct TrackedRow {
     path: String,
     file_name: String,
@@ -314,38 +238,28 @@ struct TrackedRow {
     origin_xattr_value_utf8: Option<String>,
 }
 
-fn load_matched_rule_ids(conn: &Connection, path: &str) -> Result<Vec<String>, AppError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT rule_id
-        FROM tracked_file_rules
-        WHERE file_path = ?1
-        ORDER BY ordinal ASC
-        ",
-    )?;
-    let rows = stmt.query_map(params![path], |row| row.get::<_, String>(0))?;
-    let mut rule_ids = Vec::new();
-    for row in rows {
-        rule_ids.push(row?);
-    }
-    Ok(rule_ids)
-}
-
-fn load_origin_values(conn: &Connection, path: &str) -> Result<Vec<String>, AppError> {
-    let mut stmt = conn.prepare(
-        "
-        SELECT value
-        FROM origin_values
-        WHERE file_path = ?1
-        ORDER BY ordinal ASC
-        ",
-    )?;
-    let rows = stmt.query_map(params![path], |row| row.get::<_, String>(0))?;
-    let mut values = Vec::new();
-    for row in rows {
-        values.push(row?);
-    }
-    Ok(values)
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = tracked_files)]
+#[diesel(treat_none_as_null = true)]
+struct TrackedWriteRow<'a> {
+    path: &'a str,
+    file_name: &'a str,
+    watch_target_id: &'a str,
+    size_bytes: i64,
+    first_seen_at: i64,
+    last_observed_mtime: Option<i64>,
+    last_observed_atime: Option<i64>,
+    last_user_action_at: Option<i64>,
+    freshness_at: i64,
+    expiry_kind: &'a str,
+    expires_at: Option<i64>,
+    state: &'a str,
+    origin_kind: &'a str,
+    origin_zone_id: Option<i64>,
+    origin_host_url: Option<&'a str>,
+    origin_referrer_url: Option<&'a str>,
+    origin_xattr_key: Option<&'a str>,
+    origin_xattr_value_utf8: Option<&'a str>,
 }
 
 fn expiry_parts(expiry: &Expiry) -> Result<(&'static str, Option<i64>), AppError> {
@@ -499,9 +413,10 @@ fn i64_to_u32(value: i64) -> Result<u32, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::params;
+    use diesel::prelude::*;
 
     use crate::models::{Expiry, OriginEvidence};
+    use crate::storage::schema::{tracked_file_rules, tracked_files};
     use crate::storage::test_util::{path_string, Fixture};
 
     use super::{get_tracked_file, replace_tracked_file, update_tracked_files_batch};
@@ -607,38 +522,22 @@ mod tests {
     }
 
     fn expiry_index_paths(fixture: &Fixture, expires_at: u64) -> Vec<String> {
-        let conn = fixture.db.connect().expect("database should connect");
-        let mut stmt = conn
-            .prepare(
-                "
-                SELECT path
-                FROM tracked_files
-                WHERE expires_at = ?1
-                ORDER BY path ASC
-                ",
-            )
-            .expect("expiry query should prepare");
-        let rows = stmt
-            .query_map(params![expires_at as i64], |row| row.get::<_, String>(0))
-            .expect("expiry query should work");
-        rows.map(|row| row.expect("path row should load")).collect()
+        let mut conn = fixture.db.connect().expect("database should connect");
+        tracked_files::table
+            .filter(tracked_files::expires_at.eq(Some(expires_at as i64)))
+            .order(tracked_files::path.asc())
+            .select(tracked_files::path)
+            .load::<String>(&mut conn)
+            .expect("expiry query should work")
     }
 
     fn rule_index_paths(fixture: &Fixture, rule_id: &str) -> Vec<String> {
-        let conn = fixture.db.connect().expect("database should connect");
-        let mut stmt = conn
-            .prepare(
-                "
-                SELECT file_path
-                FROM tracked_file_rules
-                WHERE rule_id = ?1
-                ORDER BY file_path ASC
-                ",
-            )
-            .expect("rule query should prepare");
-        let rows = stmt
-            .query_map(params![rule_id], |row| row.get::<_, String>(0))
-            .expect("rule query should work");
-        rows.map(|row| row.expect("path row should load")).collect()
+        let mut conn = fixture.db.connect().expect("database should connect");
+        tracked_file_rules::table
+            .filter(tracked_file_rules::rule_id.eq(rule_id))
+            .order(tracked_file_rules::file_path.asc())
+            .select(tracked_file_rules::file_path)
+            .load::<String>(&mut conn)
+            .expect("rule query should work")
     }
 }

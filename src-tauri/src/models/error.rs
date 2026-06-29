@@ -71,8 +71,19 @@ impl From<std::io::Error> for AppError {
     }
 }
 
-impl From<rusqlite::Error> for AppError {
-    fn from(value: rusqlite::Error) -> Self {
+impl From<diesel::result::Error> for AppError {
+    fn from(value: diesel::result::Error) -> Self {
+        Self::with_details(
+            "DATABASE_ERROR",
+            "Database operation failed.",
+            true,
+            value.to_string(),
+        )
+    }
+}
+
+impl From<diesel::ConnectionError> for AppError {
+    fn from(value: diesel::ConnectionError) -> Self {
         Self::with_details(
             "DATABASE_ERROR",
             "Database operation failed.",

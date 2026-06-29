@@ -1,49 +1,34 @@
-use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
+use diesel::dsl::sql;
+use diesel::prelude::*;
+use diesel::sql_types::Text;
+use diesel::sqlite::SqliteConnection;
 
 use crate::models::{AppError, AutomationRule, RuleConditions, SizeCondition};
+use crate::storage::schema::automation_rules;
 use crate::storage::{
-    i64_to_u64, insert_ordered_values, load_ordered_values, load_ordered_values_by_owner,
-    rule_action_from_parts, rule_action_parts, rule_mode_from_label, rule_mode_label,
-    storage_data_error, u64_to_i64, Database,
+    delete_owner_rows, i64_to_u64, insert_ordered_values, load_ordered_values,
+    load_ordered_values_by_owner, rule_action_from_parts, rule_action_parts, rule_mode_from_label,
+    rule_mode_label, storage_data_error, u64_to_i64, Database,
 };
 
 pub fn list_rules(db: &Database) -> Result<Vec<AutomationRule>, AppError> {
-    let conn = db.connect()?;
-    let mut stmt = conn.prepare(
-        "
-        SELECT id,
-               name,
-               enabled,
-               priority,
-               watch_path,
-               ttl_seconds,
-               mode,
-               created_at,
-               updated_at,
-               action_kind,
-               action_destination_folder,
-               action_rename_template,
-               size_kind,
-               size_min,
-               size_max
-        FROM automation_rules
-        ORDER BY priority DESC, name COLLATE NOCASE ASC
-        ",
-    )?;
-    let rows = stmt.query_map([], rule_row_from_sql)?;
-    let mut rule_rows = Vec::new();
-    for row in rows {
-        rule_rows.push(row?);
-    }
+    let mut conn = db.connect()?;
+    let rule_rows = automation_rules::table
+        .order((
+            automation_rules::priority.desc(),
+            sql::<Text>("name COLLATE NOCASE ASC"),
+        ))
+        .select(RuleRow::as_select())
+        .load::<RuleRow>(&mut conn)?;
 
     let mut extensions_by_rule =
-        load_ordered_values_by_owner(&conn, "rule_extensions", "rule_id", "value")?;
+        load_ordered_values_by_owner(&mut conn, "rule_extensions", "rule_id", "value")?;
     let mut globs_by_rule =
-        load_ordered_values_by_owner(&conn, "rule_filename_globs", "rule_id", "value")?;
+        load_ordered_values_by_owner(&mut conn, "rule_filename_globs", "rule_id", "value")?;
     let mut regexes_by_rule =
-        load_ordered_values_by_owner(&conn, "rule_filename_regexes", "rule_id", "value")?;
+        load_ordered_values_by_owner(&mut conn, "rule_filename_regexes", "rule_id", "value")?;
     let mut domains_by_rule =
-        load_ordered_values_by_owner(&conn, "rule_source_domains", "rule_id", "value")?;
+        load_ordered_values_by_owner(&mut conn, "rule_source_domains", "rule_id", "value")?;
 
     let mut rules = Vec::new();
     for row in rule_rows {
@@ -60,172 +45,140 @@ pub fn list_rules(db: &Database) -> Result<Vec<AutomationRule>, AppError> {
 }
 
 pub fn get_rule(db: &Database, id: &str) -> Result<Option<AutomationRule>, AppError> {
-    let conn = db.connect()?;
-    let row = conn
-        .query_row(
-            "
-            SELECT id,
-                   name,
-                   enabled,
-                   priority,
-                   watch_path,
-                   ttl_seconds,
-                   mode,
-                   created_at,
-                   updated_at,
-                   action_kind,
-                   action_destination_folder,
-                   action_rename_template,
-                   size_kind,
-                   size_min,
-                   size_max
-            FROM automation_rules
-            WHERE id = ?1
-            ",
-            params![id],
-            rule_row_from_sql,
-        )
+    let mut conn = db.connect()?;
+    let row = automation_rules::table
+        .find(id)
+        .select(RuleRow::as_select())
+        .first::<RuleRow>(&mut conn)
         .optional()?;
 
     row.map(|row| {
-        let children = load_rule_child_values(&conn, &row.id)?;
+        let children = load_rule_child_values(&mut conn, &row.id)?;
         rule_from_row(row, children)
     })
     .transpose()
 }
 
 pub fn save_rule(db: &Database, rule: &AutomationRule) -> Result<(), AppError> {
-    db.write(|tx| {
-        save_rule_tx(tx, rule)?;
+    db.write(|conn| {
+        save_rule_tx(conn, rule)?;
         Ok(())
     })
 }
 
-fn save_rule_tx(tx: &Transaction<'_>, rule: &AutomationRule) -> Result<(), AppError> {
+fn save_rule_tx(conn: &mut SqliteConnection, rule: &AutomationRule) -> Result<(), AppError> {
     let (action_kind, action_destination_folder, action_rename_template) =
         rule_action_parts(&rule.action);
     let (size_kind, size_min, size_max) = size_condition_parts(&rule.conditions.size)?;
+    let row = RuleWriteRow {
+        id: &rule.id,
+        name: &rule.name,
+        enabled: rule.enabled,
+        priority: rule.priority,
+        watch_path: &rule.watch_path,
+        ttl_seconds: u64_to_i64(rule.ttl_seconds, "automation_rules.ttl_seconds")?,
+        mode: rule_mode_label(&rule.mode),
+        created_at: u64_to_i64(rule.created_at, "automation_rules.created_at")?,
+        updated_at: u64_to_i64(rule.updated_at, "automation_rules.updated_at")?,
+        action_kind,
+        action_destination_folder,
+        action_rename_template,
+        size_kind,
+        size_min,
+        size_max,
+    };
 
-    tx.execute(
-        "
-        INSERT INTO automation_rules (
-            id,
-            name,
-            enabled,
-            priority,
-            watch_path,
-            ttl_seconds,
-            mode,
-            created_at,
-            updated_at,
-            action_kind,
-            action_destination_folder,
-            action_rename_template,
-            size_kind,
-            size_min,
-            size_max
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
-        ON CONFLICT(id) DO UPDATE SET
-            name = excluded.name,
-            enabled = excluded.enabled,
-            priority = excluded.priority,
-            watch_path = excluded.watch_path,
-            ttl_seconds = excluded.ttl_seconds,
-            mode = excluded.mode,
-            created_at = excluded.created_at,
-            updated_at = excluded.updated_at,
-            action_kind = excluded.action_kind,
-            action_destination_folder = excluded.action_destination_folder,
-            action_rename_template = excluded.action_rename_template,
-            size_kind = excluded.size_kind,
-            size_min = excluded.size_min,
-            size_max = excluded.size_max
-        ",
-        params![
-            &rule.id,
-            &rule.name,
-            rule.enabled,
-            rule.priority,
-            &rule.watch_path,
-            u64_to_i64(rule.ttl_seconds, "automation_rules.ttl_seconds")?,
-            rule_mode_label(&rule.mode),
-            u64_to_i64(rule.created_at, "automation_rules.created_at")?,
-            u64_to_i64(rule.updated_at, "automation_rules.updated_at")?,
-            action_kind,
-            action_destination_folder,
-            action_rename_template,
-            size_kind,
-            size_min,
-            size_max,
-        ],
-    )?;
+    diesel::insert_into(automation_rules::table)
+        .values(&row)
+        .on_conflict(automation_rules::id)
+        .do_update()
+        .set(&row)
+        .execute(conn)?;
 
     // The parent row survives on upsert, so cascades do not clear replaced condition lists.
-    delete_rule_children(tx, &rule.id)?;
+    delete_rule_children(conn, &rule.id)?;
     insert_ordered_values(
-        tx,
+        conn,
         "rule_extensions",
         "rule_id",
+        "value",
         &rule.id,
         &rule.conditions.extensions,
+        "rule_extensions.ordinal",
     )?;
     insert_ordered_values(
-        tx,
+        conn,
         "rule_filename_globs",
         "rule_id",
+        "value",
         &rule.id,
         &rule.conditions.filename_globs,
+        "rule_filename_globs.ordinal",
     )?;
     insert_ordered_values(
-        tx,
+        conn,
         "rule_filename_regexes",
         "rule_id",
+        "value",
         &rule.id,
         &rule.conditions.filename_regexes,
+        "rule_filename_regexes.ordinal",
     )?;
     insert_ordered_values(
-        tx,
+        conn,
         "rule_source_domains",
         "rule_id",
+        "value",
         &rule.id,
         &rule.conditions.source_domains,
+        "rule_source_domains.ordinal",
     )?;
     Ok(())
 }
 
 pub fn delete_rule(db: &Database, id: &str) -> Result<(), AppError> {
-    db.write(|tx| {
-        tx.execute("DELETE FROM automation_rules WHERE id = ?1", params![id])?;
+    db.write(|conn| {
+        diesel::delete(automation_rules::table.filter(automation_rules::id.eq(id)))
+            .execute(conn)?;
         Ok(())
     })
 }
 
-fn delete_rule_children(tx: &Transaction<'_>, rule_id: &str) -> Result<(), AppError> {
-    tx.execute(
-        "DELETE FROM rule_extensions WHERE rule_id = ?1",
-        params![rule_id],
-    )?;
-    tx.execute(
-        "DELETE FROM rule_filename_globs WHERE rule_id = ?1",
-        params![rule_id],
-    )?;
-    tx.execute(
-        "DELETE FROM rule_filename_regexes WHERE rule_id = ?1",
-        params![rule_id],
-    )?;
-    tx.execute(
-        "DELETE FROM rule_source_domains WHERE rule_id = ?1",
-        params![rule_id],
-    )?;
+fn delete_rule_children(conn: &mut SqliteConnection, rule_id: &str) -> Result<(), AppError> {
+    delete_owner_rows(conn, "rule_extensions", "rule_id", rule_id)?;
+    delete_owner_rows(conn, "rule_filename_globs", "rule_id", rule_id)?;
+    delete_owner_rows(conn, "rule_filename_regexes", "rule_id", rule_id)?;
+    delete_owner_rows(conn, "rule_source_domains", "rule_id", rule_id)?;
     Ok(())
 }
 
-fn load_rule_child_values(conn: &Connection, rule_id: &str) -> Result<RuleChildValues, AppError> {
+fn load_rule_child_values(
+    conn: &mut SqliteConnection,
+    rule_id: &str,
+) -> Result<RuleChildValues, AppError> {
     Ok(RuleChildValues {
-        extensions: load_ordered_values(conn, "rule_extensions", "rule_id", rule_id)?,
-        filename_globs: load_ordered_values(conn, "rule_filename_globs", "rule_id", rule_id)?,
-        filename_regexes: load_ordered_values(conn, "rule_filename_regexes", "rule_id", rule_id)?,
-        source_domains: load_ordered_values(conn, "rule_source_domains", "rule_id", rule_id)?,
+        extensions: load_ordered_values(conn, "rule_extensions", "rule_id", rule_id, "value")?,
+        filename_globs: load_ordered_values(
+            conn,
+            "rule_filename_globs",
+            "rule_id",
+            rule_id,
+            "value",
+        )?,
+        filename_regexes: load_ordered_values(
+            conn,
+            "rule_filename_regexes",
+            "rule_id",
+            rule_id,
+            "value",
+        )?,
+        source_domains: load_ordered_values(
+            conn,
+            "rule_source_domains",
+            "rule_id",
+            rule_id,
+            "value",
+        )?,
     })
 }
 
@@ -258,26 +211,9 @@ fn rule_from_row(row: RuleRow, children: RuleChildValues) -> Result<AutomationRu
     })
 }
 
-fn rule_row_from_sql(row: &Row<'_>) -> rusqlite::Result<RuleRow> {
-    Ok(RuleRow {
-        id: row.get(0)?,
-        name: row.get(1)?,
-        enabled: row.get(2)?,
-        priority: row.get(3)?,
-        watch_path: row.get(4)?,
-        ttl_seconds: row.get(5)?,
-        mode: row.get(6)?,
-        created_at: row.get(7)?,
-        updated_at: row.get(8)?,
-        action_kind: row.get(9)?,
-        action_destination_folder: row.get(10)?,
-        action_rename_template: row.get(11)?,
-        size_kind: row.get(12)?,
-        size_min: row.get(13)?,
-        size_max: row.get(14)?,
-    })
-}
-
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = automation_rules)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 struct RuleRow {
     id: String,
     name: String,
@@ -292,6 +228,27 @@ struct RuleRow {
     action_destination_folder: Option<String>,
     action_rename_template: Option<String>,
     size_kind: String,
+    size_min: Option<i64>,
+    size_max: Option<i64>,
+}
+
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = automation_rules)]
+#[diesel(treat_none_as_null = true)]
+struct RuleWriteRow<'a> {
+    id: &'a str,
+    name: &'a str,
+    enabled: bool,
+    priority: i32,
+    watch_path: &'a str,
+    ttl_seconds: i64,
+    mode: &'a str,
+    created_at: i64,
+    updated_at: i64,
+    action_kind: &'a str,
+    action_destination_folder: Option<&'a str>,
+    action_rename_template: Option<&'a str>,
+    size_kind: &'a str,
     size_min: Option<i64>,
     size_max: Option<i64>,
 }
