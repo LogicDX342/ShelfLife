@@ -1,5 +1,4 @@
 <script lang="ts">
-  import IconArchive from '@lucide/svelte/icons/archive';
   import IconPauseCircle from '@lucide/svelte/icons/circle-pause';
   import IconPlayCircle from '@lucide/svelte/icons/circle-play';
   import IconFolderOpen from '@lucide/svelte/icons/folder-open';
@@ -10,7 +9,7 @@
   import IconSettings from '@lucide/svelte/icons/settings';
   import IconFlash from '@lucide/svelte/icons/zap';
 
-  import { resolve } from '$app/paths';
+  import { assets, resolve } from '$app/paths';
   import { page } from '$app/state';
   import { pauseWatching, resumeWatching } from '$lib/api/config';
   import { Badge } from '$lib/components/ui/badge';
@@ -92,7 +91,13 @@
     class="px-3 md:px-6 pt-5 pb-2 flex items-center justify-center md:justify-start gap-3"
     data-tauri-drag-region
   >
-    <IconArchive class="w-6 h-6 text-primary flex-shrink-0" data-tauri-drag-region />
+    <img
+      src={`${assets}/favicon.svg`}
+      alt="ShelfLife"
+      class="size-8 flex-shrink-0 object-contain"
+      draggable="false"
+      data-tauri-drag-region
+    />
     <span
       class="hidden md:inline text-lg font-bold tracking-wide whitespace-nowrap"
       data-tauri-drag-region>ShelfLife</span

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="folder-back" x1="131" x2="363" y1="116" y2="239" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffd948" />
+      <stop offset="1" stop-color="#f9ad08" />
+    </linearGradient>
+    <linearGradient id="folder-front" x1="116" x2="394" y1="180" y2="376" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffdc26" />
+      <stop offset=".52" stop-color="#ffc40d" />
+      <stop offset="1" stop-color="#f09b06" />
+    </linearGradient>
+    <linearGradient id="folder-lip" x1="118" x2="389" y1="160" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff16a" />
+      <stop offset="1" stop-color="#ffc21b" />
+    </linearGradient>
+    <linearGradient id="shelf" x1="52" x2="460" y1="382" y2="382" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a4511f" />
+      <stop offset=".54" stop-color="#8d431c" />
+      <stop offset="1" stop-color="#6f3417" />
+    </linearGradient>
+    <linearGradient id="clock" x1="216" x2="317" y1="211" y2="314" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f47b20" />
+      <stop offset="1" stop-color="#e85e08" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(256 256) scale(1.245) translate(-256 -256)">
+    <path
+      d="M52 390c0-9 7-16 16-16h376c9 0 16 7 16 16s-7 16-16 16H68c-9 0-16-7-16-16Z"
+      fill="url(#shelf)"
+    />
+    <path
+      d="M112 154c0-19 15-34 34-34h76c10 0 19 4 26 11l20 20h104c19 0 34 15 34 34v37H112v-68Z"
+      fill="url(#folder-back)"
+    />
+    <path
+      d="M130 165c0-9 7-16 16-16h80c8 0 15 3 21 8l20 20h104c8 0 15 6 16 14H130v-26Z"
+      fill="url(#folder-lip)"
+    />
+    <path
+      d="M88 202c-2-20 14-38 34-38h268c21 0 36 18 34 38l-24 143c-4 21-22 37-44 37H156c-22 0-40-16-44-37L88 202Z"
+      fill="url(#folder-front)"
+    />
+    <path
+      d="M104 208c-1-13 9-24 22-24h260c13 0 23 11 22 24l-2 13H106l-2-13Z"
+      fill="#ffe25d"
+      opacity=".78"
+    />
+
+    <circle cx="254" cy="276" r="69" fill="#fff" />
+    <path
+      d="M254 222c30 0 53 24 53 55 0 16-7 29-18 37"
+      fill="none"
+      stroke="url(#clock)"
+      stroke-linecap="round"
+      stroke-width="11"
+    />
+    <path
+      d="M256 236v36l25 25"
+      fill="none"
+      stroke="url(#clock)"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="11"
+    />
+  </g>
+</svg>

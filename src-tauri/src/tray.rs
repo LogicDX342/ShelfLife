@@ -208,14 +208,7 @@ fn run_reconciliation(app_handle: &AppHandle) {
 
 pub fn update_tray_icon(app_handle: &AppHandle) {
     let runtime = app_handle.state::<AppRuntime>();
-    let is_watching = if runtime.is_watching_paused() {
-        false
-    } else {
-        match crate::storage::get_config(&runtime.db) {
-            Ok(config) => config.watch_targets.iter().any(|t| t.enabled),
-            Err(_) => false,
-        }
-    };
+    let is_paused = runtime.is_watching_paused();
 
     if let Some(tray) = app_handle.tray_by_id("shelflife") {
         let labels = app_handle
@@ -224,13 +217,13 @@ pub fn update_tray_icon(app_handle: &AppHandle) {
             .unwrap_or_default();
 
         if let Some(icon) = app_handle.default_window_icon() {
-            if is_watching {
-                let _ = tray.set_icon(Some(icon.clone()));
-                let _ = tray.set_tooltip(Some(labels.tooltip));
-            } else {
+            if is_paused {
                 let gray_icon = to_grayscale(icon);
                 let _ = tray.set_icon(Some(gray_icon));
                 let _ = tray.set_tooltip(Some(labels.tooltip_paused));
+            } else {
+                let _ = tray.set_icon(Some(icon.clone()));
+                let _ = tray.set_tooltip(Some(labels.tooltip));
             }
         }
     }
