@@ -41,7 +41,7 @@
     "@sveltejs/kit": "^2.68.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.1",
-    "@tauri-apps/cli": "^2.11.3",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^26.0.1",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
