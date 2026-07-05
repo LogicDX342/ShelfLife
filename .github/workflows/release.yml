@@ -88,9 +88,9 @@ jobs:
           releaseBody: 'See the assets below to download this version.'
           generateReleaseNotes: true
           prerelease: false
-          includeUpdaterJson: true
+          uploadUpdaterJson: true
           updaterJsonPreferNsis: true
-          assetNamePattern: '[name]_[version]_[arch][setup][ext]'
+          releaseAssetNamePattern: '[name]_[version]_[arch][setup][ext]'
 
       - name: Stage MSIX contents
         shell: pwsh
