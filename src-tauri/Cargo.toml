@@ -49,4 +49,4 @@ panic = "abort"
 strip = true
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61.2", features = ["ApplicationModel"] }
+windows = { version = "0.61.3", features = ["ApplicationModel"] }

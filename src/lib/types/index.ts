@@ -32,9 +32,7 @@ export type TrackedFile = {
 
 export type RuleMode = 'PreviewOnly' | 'AskFirst' | 'Automatic';
 export type RuleAction =
-  | 'Trash'
-  | { Move: { destination_folder: string; rename_template: string | null } }
-  | 'Ignore';
+  'Trash' | { Move: { destination_folder: string; rename_template: string | null } } | 'Ignore';
 
 export type SizeCondition =
   | 'Any'
@@ -79,10 +77,7 @@ export type RuleMatchExplanation = {
 };
 
 export type UndoStatus =
-  | 'Available'
-  | 'Completed'
-  | { Unavailable: { reason: string } }
-  | { Failed: { reason: string } };
+  'Available' | 'Completed' | { Unavailable: { reason: string } } | { Failed: { reason: string } };
 
 export type AuditActionKind = 'Trash' | 'Move' | 'Pin' | 'Snooze' | 'Ignore' | 'RulePreview';
 
