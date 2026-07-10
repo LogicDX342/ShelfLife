@@ -11,6 +11,7 @@
   "status": {
     "active": "监控中",
     "paused": "已暂停",
+    "syncing": "同步中",
     "watchStatus": "监控状态",
     "review": "待处理",
     "tracked": "监控中",
@@ -198,6 +199,7 @@
     "errorSelectFolder": "选择文件夹失败。",
     "reconcileScan": "立即重新扫描",
     "reconcileScanning": "扫描中…",
+    "reconcileProcessingProgress": "正在处理 {current} / {total}",
     "errorReconcileScan": "手动扫描失败。"
   },
   "about": {

@@ -440,10 +440,17 @@
                 disabled={filesState.syncing}
               >
                 {#if filesState.syncing}
-                  <Spinner class="w-3.5 h-3.5 text-primary" />
-                  <span>{i18n.t('settings.reconcileScanning')}</span>
+                  <Spinner data-icon="inline-start" />
+                  <span>
+                    {filesState.filesToProcess > 0
+                      ? i18n.t('settings.reconcileProcessingProgress', {
+                          current: filesState.filesProcessed.toLocaleString(),
+                          total: filesState.filesToProcess.toLocaleString(),
+                        })
+                      : i18n.t('settings.reconcileScanning')}
+                  </span>
                 {:else}
-                  <IconArrowSync class="w-3.5 h-3.5 text-primary" />
+                  <IconArrowSync data-icon="inline-start" />
                   <span>{i18n.t('settings.reconcileScan')}</span>
                 {/if}
               </Button>

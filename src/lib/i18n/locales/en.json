@@ -11,6 +11,7 @@
   "status": {
     "active": "Active",
     "paused": "Paused",
+    "syncing": "Syncing",
     "watchStatus": "Watch Status",
     "review": "Review",
     "tracked": "Tracked",
@@ -198,6 +199,7 @@
     "errorSelectFolder": "Could not select folder.",
     "reconcileScan": "Re-scan Now",
     "reconcileScanning": "Scanning...",
+    "reconcileProcessingProgress": "Processing {current} of {total}",
     "errorReconcileScan": "Manual scan failed."
   },
   "about": {

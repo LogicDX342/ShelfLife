@@ -25,11 +25,8 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
 
     tauri::async_runtime::spawn(async move {
         let app = app_handle_clone.clone();
-        let progress_emitter = move |path: &str, current: usize, total: usize| {
-            let _ = app.emit(
-                "reconciliation_progress",
-                (path.to_string(), current, total),
-            );
+        let progress_emitter = move |current: usize, total: usize| {
+            let _ = app.emit("reconciliation_progress", (current, total));
         };
 
         let result = engine::reconciliation::reconcile_with_report_with_progress(

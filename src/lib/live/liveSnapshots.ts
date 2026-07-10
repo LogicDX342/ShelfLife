@@ -88,9 +88,9 @@ export function startLiveSnapshots(): () => void {
     filesState.beginSync();
   });
 
-  register<[string, number, number]>('reconciliation_progress', ({ payload }) => {
-    const [path, current, total] = payload;
-    filesState.updateSyncProgress(path, current, total);
+  register<[number, number]>('reconciliation_progress', ({ payload }) => {
+    const [current, total] = payload;
+    filesState.updateProcessingProgress(current, total);
   });
 
   register('reconciliation_completed', () => {

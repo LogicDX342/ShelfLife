@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 enum PathResult {
@@ -27,10 +26,9 @@ use crate::engine::{project_watched_file, tracked_file_from_metadata};
 use crate::models::{AppError, FileDecayState, ReconciliationReport, TrackedFile};
 use crate::storage::{self, Database};
 
-#[allow(clippy::type_complexity)]
 pub fn reconcile_with_report_with_progress(
     db: &Database,
-    progress_cb: Option<&(dyn Fn(&str, usize, usize) + Send + Sync)>,
+    progress_cb: Option<&(dyn Fn(usize, usize) + Send + Sync)>,
 ) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
@@ -65,35 +63,9 @@ pub fn reconcile_with_report_with_progress(
             ignore_set.as_ref(),
             hidden_whitelist.as_ref(),
         )?;
-        let total_files = paths.len();
-        let current_count = AtomicUsize::new(0);
-        let last_emit = Mutex::new(std::time::Instant::now());
-
         let path_results: Result<Vec<Option<PathResult>>, AppError> = paths
             .into_par_iter()
             .map(|path| {
-                if let Some(cb) = progress_cb {
-                    let current = current_count.fetch_add(1, Ordering::Relaxed) + 1;
-                    let is_first = current == 1;
-                    let is_last = current == total_files;
-
-                    let should_emit = if is_first || is_last {
-                        true
-                    } else {
-                        let mut last = last_emit.lock().unwrap();
-                        if last.elapsed() >= std::time::Duration::from_millis(100) {
-                            *last = std::time::Instant::now();
-                            true
-                        } else {
-                            false
-                        }
-                    };
-
-                    if should_emit {
-                        cb(&target.path, current, total_files);
-                    }
-                }
-
                 if is_transient_path(&path) {
                     return Ok(None);
                 }
@@ -198,7 +170,37 @@ pub fn reconcile_with_report_with_progress(
 
     to_upsert.extend(to_mark_missing);
 
-    storage::tracked::update_tracked_files_batch(db, to_upsert, to_remove)?;
+    if let Some(cb) = progress_cb {
+        let total_changes = to_upsert.len() + to_remove.len();
+        let last_emit = Mutex::new(std::time::Instant::now());
+        let progress_emitter = |current| {
+            let is_first = current == 1;
+            let is_last = current == total_changes;
+            let should_emit = if is_first || is_last {
+                true
+            } else {
+                let mut last = last_emit.lock().unwrap();
+                if last.elapsed() >= std::time::Duration::from_millis(100) {
+                    *last = std::time::Instant::now();
+                    true
+                } else {
+                    false
+                }
+            };
+
+            if should_emit {
+                cb(current, total_changes);
+            }
+        };
+        storage::tracked::update_tracked_files_batch_with_progress(
+            db,
+            to_upsert,
+            to_remove,
+            Some(&progress_emitter),
+        )?;
+    } else {
+        storage::tracked::update_tracked_files_batch(db, to_upsert, to_remove)?;
+    }
 
     Ok(report)
 }
@@ -442,6 +444,7 @@ fn tracked_file_changed(existing: &TrackedFile, next: &TrackedFile) -> bool {
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::{Arc, Mutex};
 
     use uuid::Uuid;
 
@@ -474,6 +477,30 @@ mod tests {
             .expect("tracked lookup should work")
             .expect("tracked row should remain for missing state");
         assert_eq!(tracked.state, FileDecayState::Missing);
+    }
+
+    #[test]
+    fn reconcile_reports_processed_file_progress() {
+        let fixture = Fixture::new();
+        fixture.write_watch_file("first.txt", "first");
+        fixture.write_watch_file("second.txt", "second");
+        fixture.save_config();
+
+        let progress = Arc::new(Mutex::new(Vec::new()));
+        let progress_for_callback = Arc::clone(&progress);
+        let processing_progress = move |current, total| {
+            progress_for_callback
+                .lock()
+                .expect("progress lock should work")
+                .push((current, total));
+        };
+
+        reconcile_with_report_with_progress(&fixture.db, Some(&processing_progress))
+            .expect("reconciliation should succeed");
+
+        let progress = progress.lock().expect("progress lock should work");
+        assert_eq!(progress.last(), Some(&(2, 2)));
+        assert!(progress.windows(2).all(|window| window[0].0 < window[1].0));
     }
 
     #[test]

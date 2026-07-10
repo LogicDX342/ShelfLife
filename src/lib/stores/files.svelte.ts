@@ -7,56 +7,28 @@ class FilesState {
   loading = $state(false);
   error = $state<string | null>(null);
   syncing = $state(false);
-  filesScanned = $state(0);
-  filesTotal = $state(0);
-  currentPath = $state('');
-  syncDuration = $state(0);
+  filesProcessed = $state(0);
+  filesToProcess = $state(0);
 
   private hasLoadedOnce = false;
   private loadingTimeout: ReturnType<typeof setTimeout> | null = null;
-  private timerInterval: ReturnType<typeof setInterval> | null = null;
-  private syncStartTime = 0;
-
-  private startTimer() {
-    this.stopTimer();
-    this.syncStartTime = Date.now();
-    this.syncDuration = 0;
-    this.timerInterval = setInterval(() => {
-      this.syncDuration = (Date.now() - this.syncStartTime) / 1000;
-    }, 100);
-  }
-
-  private stopTimer() {
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
-  }
 
   beginSync() {
     this.syncing = true;
-    this.filesScanned = 0;
-    this.filesTotal = 0;
-    this.currentPath = '';
-    this.startTimer();
+    this.filesProcessed = 0;
+    this.filesToProcess = 0;
   }
 
-  updateSyncProgress(path: string, current: number, total: number) {
+  updateProcessingProgress(current: number, total: number) {
     this.syncing = true;
-    this.currentPath = path;
-    this.filesScanned = current;
-    this.filesTotal = total;
-    if (!this.timerInterval) {
-      this.startTimer();
-    }
+    this.filesProcessed = current;
+    this.filesToProcess = total;
   }
 
   completeSync() {
     this.syncing = false;
-    this.filesScanned = 0;
-    this.filesTotal = 0;
-    this.currentPath = '';
-    this.stopTimer();
+    this.filesProcessed = 0;
+    this.filesToProcess = 0;
   }
 
   counts = $derived.by(() => {

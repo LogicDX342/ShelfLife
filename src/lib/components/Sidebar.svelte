@@ -12,7 +12,6 @@
   import { assets, resolve } from '$app/paths';
   import { page } from '$app/state';
   import { pauseWatching, resumeWatching } from '$lib/api/config';
-  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Separator } from '$lib/components/ui/separator';
@@ -159,63 +158,28 @@
     </nav>
 
     <Separator class="mb-4" />
-    <!-- Global Sync Indicator (Active only during scans lasting >= 1s) -->
-    {#if filesState.syncing && filesState.syncDuration >= 1}
-      <!-- Expanded Sidebar -->
-      <div class="mb-3 hidden md:block">
-        <Card.Root>
-          <Card.Content class="flex items-center gap-3">
-            <div class="flex items-center justify-center flex-shrink-0 w-5 h-5">
-              <Spinner class="w-5 h-5 text-primary" />
-            </div>
-            <div class="flex flex-col min-w-0 w-full gap-0.5">
-              <span class="text-[11px] font-semibold text-foreground">Syncing files...</span>
-              <span class="text-[9px] text-muted-foreground truncate">
-                {filesState.filesScanned.toLocaleString()} files ({Math.floor(
-                  filesState.syncDuration,
-                )}s)
-              </span>
-              {#if filesState.currentPath}
-                <span
-                  class="text-[8px] text-muted-foreground/70 truncate"
-                  title={filesState.currentPath}
-                >
-                  {filesState.currentPath}
-                </span>
-              {/if}
-            </div>
-          </Card.Content>
-        </Card.Root>
-      </div>
-
-      <!-- Collapsed Sidebar -->
-      <div
-        class="flex md:hidden justify-center mb-3 relative group"
-        title="Syncing {filesState.filesScanned} files ({Math.floor(filesState.syncDuration)}s)..."
-      >
-        <div class="relative flex size-10 items-center justify-center rounded-md border bg-card">
-          <Spinner class="w-4 h-4 text-primary" />
-          <div class="absolute -right-2 -top-1 scale-75 text-[8px]">
-            <Badge>{filesState.filesScanned > 999 ? '999+' : filesState.filesScanned}</Badge>
-          </div>
-        </div>
-      </div>
-    {/if}
-
     <!-- Watch Status Widget - Expanded -->
     <div class="hidden md:block">
       <Card.Root>
-        <Card.Content class="flex items-center justify-between">
-          <div class="flex flex-col">
+        <Card.Content class="flex items-center gap-3">
+          <div class="flex min-w-0 flex-1 flex-col">
             <span class="text-xs text-muted-foreground">{i18n.t('status.watchStatus')}</span>
-            <span class="text-sm font-medium">
-              {isPaused ? i18n.t('status.paused') : i18n.t('status.active')}
-            </span>
+            {#if filesState.syncing}
+              <span class="flex items-center gap-1.5 text-sm font-medium">
+                <Spinner class="size-3.5 text-primary" />
+                {i18n.t('status.syncing')}
+              </span>
+            {:else}
+              <span class="text-sm font-medium">
+                {isPaused ? i18n.t('status.paused') : i18n.t('status.active')}
+              </span>
+            {/if}
           </div>
           <Switch
             checked={!isPaused}
             onCheckedChange={toggleWatchStatus}
             aria-label={i18n.t('status.watchStatus')}
+            class="flex-shrink-0"
           />
         </Card.Content>
       </Card.Root>
@@ -226,9 +190,8 @@
       <Button
         onclick={toggleWatchStatus}
         variant="ghost"
-        title="{i18n.t('status.watchStatus')}: {isPaused
-          ? i18n.t('status.paused')
-          : i18n.t('status.active')}"
+        class="relative"
+        title={`${i18n.t('status.watchStatus')}: ${isPaused ? i18n.t('status.paused') : i18n.t('status.active')}`}
       >
         {#if isPaused}
           <IconPlayCircle
@@ -239,8 +202,13 @@
           <IconPauseCircle
             class="w-5 h-5 text-emerald-500 dark:text-emerald-400 transition-transform duration-150 group-hover:scale-105"
           />
-          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
-          ></span>
+          {#if filesState.syncing}
+            <Spinner class="absolute -right-0.5 -top-0.5 size-3.5 text-primary" />
+          {:else}
+            <span
+              class="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-500 animate-pulse"
+            ></span>
+          {/if}
         {/if}
       </Button>
     </div>

@@ -98,17 +98,35 @@ pub fn update_tracked_files_batch(
     upserts: Vec<TrackedFile>,
     removes: Vec<String>,
 ) -> Result<(), AppError> {
+    update_tracked_files_batch_with_progress(db, upserts, removes, None)
+}
+
+pub fn update_tracked_files_batch_with_progress(
+    db: &Database,
+    upserts: Vec<TrackedFile>,
+    removes: Vec<String>,
+    progress_cb: Option<&dyn Fn(usize)>,
+) -> Result<(), AppError> {
     if upserts.is_empty() && removes.is_empty() {
         return Ok(());
     }
 
     db.write(|conn| {
+        let mut completed = 0;
         for path in &removes {
             diesel::delete(tracked_files::table.filter(tracked_files::path.eq(path)))
                 .execute(conn)?;
+            completed += 1;
+            if let Some(cb) = progress_cb {
+                cb(completed);
+            }
         }
         for file in &upserts {
             upsert_tracked_file_tx(conn, file)?;
+            completed += 1;
+            if let Some(cb) = progress_cb {
+                cb(completed);
+            }
         }
         Ok(())
     })
