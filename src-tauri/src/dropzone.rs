@@ -81,6 +81,10 @@ fn monitor_cursor(app_handle: AppHandle, stop: Arc<AtomicBool>) {
     while !stop.load(Ordering::Relaxed) {
         let left_button_down =
             unsafe { (GetAsyncKeyState(VK_LBUTTON as i32) & 0x8000u16 as i16) != 0 };
+        let mut point = POINT { x: 0, y: 0 };
+        let has_point = unsafe { GetCursorPos(&mut point) != 0 };
+        let shake_eligible = left_button_down && shell_drag_image_is_visible();
+
         if left_button_down {
             release_started_at = None;
         } else if AWAITING_DROP.load(Ordering::Relaxed) {
@@ -93,11 +97,9 @@ fn monitor_cursor(app_handle: AppHandle, stop: Arc<AtomicBool>) {
             }
         }
 
-        let mut point = POINT { x: 0, y: 0 };
-        let has_point = unsafe { GetCursorPos(&mut point) != 0 };
         if has_point
             && detector.update(
-                left_button_down,
+                shake_eligible,
                 point.x,
                 point.y,
                 started.elapsed().as_millis() as u64,
@@ -108,6 +110,15 @@ fn monitor_cursor(app_handle: AppHandle, stop: Arc<AtomicBool>) {
 
         thread::sleep(Duration::from_millis(16));
     }
+}
+
+#[cfg(target_os = "windows")]
+fn shell_drag_image_is_visible() -> bool {
+    use windows::core::w;
+    use windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW;
+
+    // Explorer displays this top-level drag image only while a shell drag is active.
+    unsafe { !FindWindowW(w!("SysDragImage").as_ptr(), std::ptr::null()).is_null() }
 }
 
 #[cfg(not(target_os = "windows"))]

@@ -12,15 +12,8 @@ use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
 use crate::storage::{self, Database};
 
 pub const SHAKE_INTERVAL_MS: u64 = 1_000;
-pub const SHAKE_MINIMUM_DISTANCE: f64 = 1_000.0;
+pub const SHAKE_MINIMUM_DISTANCE: f64 = 900.0;
 pub const SHAKE_FACTOR: f64 = 4.0;
-
-#[derive(Debug, Clone, Copy)]
-struct PointerPoint {
-    x: i32,
-    y: i32,
-    time_ms: u64,
-}
 
 #[derive(Debug, Clone, Copy)]
 struct PointerMove {
@@ -31,8 +24,7 @@ struct PointerMove {
 
 #[derive(Debug, Default)]
 pub struct ShakeDetector {
-    last_point: Option<PointerPoint>,
-    points: VecDeque<PointerPoint>,
+    last_position: Option<(i32, i32)>,
     moves: VecDeque<PointerMove>,
 }
 
@@ -47,24 +39,21 @@ impl ShakeDetector {
             return false;
         }
 
-        let point = PointerPoint { x, y, time_ms };
-        let Some(previous) = self.last_point.replace(point) else {
-            self.points.push_back(point);
+        let Some((previous_x, previous_y)) = self.last_position.replace((x, y)) else {
             return false;
         };
 
-        let dx = x - previous.x;
-        let dy = y - previous.y;
+        let dx = x - previous_x;
+        let dy = y - previous_y;
         if dx == 0 && dy == 0 {
             self.prune(time_ms);
             return false;
         }
 
-        self.points.push_back(point);
-        self.push_move(PointerMove { dx, dy, time_ms });
+        let changed_direction = self.push_move(PointerMove { dx, dy, time_ms });
         self.prune(time_ms);
 
-        if self.is_shaking() {
+        if changed_direction && self.is_shaking() {
             self.reset();
             return true;
         }
@@ -73,34 +62,27 @@ impl ShakeDetector {
     }
 
     pub fn reset(&mut self) {
-        self.last_point = None;
-        self.points.clear();
+        self.last_position = None;
         self.moves.clear();
     }
 
-    fn push_move(&mut self, movement: PointerMove) {
+    fn push_move(&mut self, movement: PointerMove) -> bool {
         if let Some(last) = self.moves.back_mut() {
-            let dot_product = last.dx * movement.dx + last.dy * movement.dy;
-            if dot_product > 0 {
+            if direction(last.dx) == direction(movement.dx)
+                && direction(last.dy) == direction(movement.dy)
+            {
                 last.dx += movement.dx;
                 last.dy += movement.dy;
-                last.time_ms = movement.time_ms;
-                return;
+                return false;
             }
         }
 
         self.moves.push_back(movement);
+        true
     }
 
     fn prune(&mut self, time_ms: u64) {
         let earliest = time_ms.saturating_sub(SHAKE_INTERVAL_MS);
-        while self
-            .points
-            .front()
-            .is_some_and(|point| point.time_ms < earliest)
-        {
-            self.points.pop_front();
-        }
         while self
             .moves
             .front()
@@ -111,7 +93,7 @@ impl ShakeDetector {
     }
 
     fn is_shaking(&self) -> bool {
-        if self.moves.is_empty() || self.points.len() < 2 {
+        if self.moves.len() < 2 {
             return false;
         }
 
@@ -124,14 +106,24 @@ impl ShakeDetector {
             return false;
         }
 
-        let min_x = self.points.iter().map(|point| point.x).min().unwrap_or(0);
-        let max_x = self.points.iter().map(|point| point.x).max().unwrap_or(0);
-        let min_y = self.points.iter().map(|point| point.y).min().unwrap_or(0);
-        let max_y = self.points.iter().map(|point| point.y).max().unwrap_or(0);
+        let (mut x, mut y) = (0, 0);
+        let (mut min_x, mut max_x, mut min_y, mut max_y) = (0, 0, 0, 0);
+        for movement in &self.moves {
+            x += movement.dx;
+            y += movement.dy;
+            min_x = min_x.min(x);
+            max_x = max_x.max(x);
+            min_y = min_y.min(y);
+            max_y = max_y.max(y);
+        }
         let diagonal = distance(max_x - min_x, max_y - min_y).max(1.0);
 
         total_distance >= diagonal * SHAKE_FACTOR
     }
+}
+
+fn direction(value: i32) -> i8 {
+    value.signum() as i8
 }
 
 fn distance(dx: i32, dy: i32) -> f64 {
