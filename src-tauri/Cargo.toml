@@ -44,7 +44,9 @@ tauri-plugin-single-instance = "2.4.2"
 incremental = true
 
 [profile.release]
+codegen-units = 1
 lto = true
+opt-level = 3
 panic = "abort"
 strip = true
 
