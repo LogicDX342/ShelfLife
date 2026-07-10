@@ -46,6 +46,11 @@ pub fn record_dropzone_drop() {
 fn start_monitor(app_handle: AppHandle) {
     let monitor = MONITOR.get_or_init(|| Mutex::new(None));
     let Ok(mut current) = monitor.lock() else {
+        crate::runtime::diagnostics::record_failure(
+            "dropzone",
+            "DROPZONE_MONITOR_LOCK_FAILED",
+            "Dropzone monitor state could not be locked.",
+        );
         return;
     };
     if current.is_some() {
@@ -61,6 +66,11 @@ fn start_monitor(app_handle: AppHandle) {
 fn stop_monitor() {
     let monitor = MONITOR.get_or_init(|| Mutex::new(None));
     let Ok(mut current) = monitor.lock() else {
+        crate::runtime::diagnostics::record_failure(
+            "dropzone",
+            "DROPZONE_MONITOR_LOCK_FAILED",
+            "Dropzone monitor state could not be locked.",
+        );
         return;
     };
     if let Some(monitor) = current.take() {
@@ -86,7 +96,9 @@ fn monitor_cursor(app_handle: AppHandle, stop: Arc<AtomicBool>) {
         } else if AWAITING_DROP.load(Ordering::Relaxed) {
             let released_at = release_started_at.get_or_insert_with(Instant::now);
             if released_at.elapsed() >= Duration::from_millis(350) {
-                let _ = hide_dropzone(&app_handle);
+                if let Err(error) = hide_dropzone(&app_handle) {
+                    crate::runtime::diagnostics::record_error("dropzone", &error);
+                }
                 AWAITING_DROP.store(false, Ordering::Relaxed);
                 detector.reset();
                 release_started_at = None;
@@ -128,9 +140,30 @@ fn show_dropzone_near_cursor(app_handle: &AppHandle, cursor_x: i32, cursor_y: i3
         cursor_x + CURSOR_OFFSET_X,
         cursor_y + CURSOR_OFFSET_Y,
     );
-    let _ = window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
-    let _ = window.show();
-    let _ = window.set_focus();
+    if window
+        .set_position(Position::Physical(PhysicalPosition::new(x, y)))
+        .is_err()
+    {
+        crate::runtime::diagnostics::record_failure(
+            "dropzone",
+            "DROPZONE_POSITION_FAILED",
+            "Dropzone window could not be positioned.",
+        );
+    }
+    if window.show().is_err() {
+        crate::runtime::diagnostics::record_failure(
+            "dropzone",
+            "DROPZONE_SHOW_FAILED",
+            "Dropzone window could not be shown.",
+        );
+    }
+    if window.set_focus().is_err() {
+        crate::runtime::diagnostics::record_failure(
+            "dropzone",
+            "DROPZONE_FOCUS_FAILED",
+            "Dropzone window could not be focused.",
+        );
+    }
 }
 
 fn hide_dropzone(app_handle: &AppHandle) -> Result<(), AppError> {

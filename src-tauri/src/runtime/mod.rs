@@ -1,3 +1,4 @@
+pub mod diagnostics;
 #[cfg(debug_assertions)]
 pub mod mock;
 pub mod reconciliation;
@@ -83,29 +84,46 @@ impl AppRuntime {
     }
 
     pub fn sync_after_config_change(&self, app_handle: &AppHandle) -> Result<(), AppError> {
-        let config = storage::get_config(&self.db)?;
-        crate::dropzone::sync_dropzone_monitor(app_handle, config.dropzone_enabled)?;
+        let config = storage::get_config(&self.db).inspect_err(|error| {
+            diagnostics::record_error("configuration", error);
+        })?;
+        crate::dropzone::sync_dropzone_monitor(app_handle, config.dropzone_enabled).inspect_err(
+            |error| {
+                diagnostics::record_error("dropzone", error);
+            },
+        )?;
         self.restart_watcher(app_handle)?;
         crate::tray::update_tray_icon(app_handle);
         reconciliation::run_async_reconciliation(app_handle.clone(), self.clone());
+        diagnostics::record_event("runtime", "configuration synchronized");
         Ok(())
     }
 
     pub fn restart_watcher(&self, app_handle: &AppHandle) -> Result<(), AppError> {
-        let config = storage::get_config(&self.db)?;
+        let config = storage::get_config(&self.db).inspect_err(|error| {
+            diagnostics::record_error("watcher", error);
+        })?;
         let mut watcher = self.watcher.lock().map_err(|_| {
-            AppError::new("WATCHER_ERROR", "Watcher state could not be locked.", true)
+            let error = AppError::new("WATCHER_ERROR", "Watcher state could not be locked.", true);
+            diagnostics::record_error("watcher", &error);
+            error
         })?;
 
         *watcher = None;
         if self.is_watching_paused() {
+            diagnostics::record_event("watcher", "restart skipped while paused");
             return Ok(());
         }
 
-        *watcher = Some(engine::watcher::start_watcher(
+        let started_watcher = engine::watcher::start_watcher(
             &config.watch_targets,
             reconciliation::watcher_event_sink(app_handle.clone(), self.clone()),
-        )?);
+        )
+        .inspect_err(|error| {
+            diagnostics::record_error("watcher", error);
+        })?;
+        *watcher = Some(started_watcher);
+        diagnostics::record_event("watcher", "started");
         Ok(())
     }
 
@@ -113,10 +131,13 @@ impl AppRuntime {
         self.watching_paused.store(true, Ordering::Relaxed);
         self.wake_rule_scheduler();
         let mut watcher = self.watcher.lock().map_err(|_| {
-            AppError::new("WATCHER_ERROR", "Watcher state could not be locked.", true)
+            let error = AppError::new("WATCHER_ERROR", "Watcher state could not be locked.", true);
+            diagnostics::record_error("watcher", &error);
+            error
         })?;
         *watcher = None;
         crate::tray::update_tray_icon(app_handle);
+        diagnostics::record_event("watcher", "paused");
         Ok(())
     }
 
@@ -125,21 +146,35 @@ impl AppRuntime {
         self.wake_rule_scheduler();
         self.restart_watcher(app_handle)?;
         crate::tray::update_tray_icon(app_handle);
+        diagnostics::record_event("watcher", "resumed");
         Ok(())
     }
 }
 
 pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
+    diagnostics::record_event("runtime", "startup initiated");
     engine::executor::init_trash_support();
-    let db = open_runtime_database(app)?;
+    let db = open_runtime_database(app).map_err(|error| {
+        diagnostics::record_error("startup", &error);
+        Box::new(error) as Box<dyn std::error::Error>
+    })?;
     let runtime = AppRuntime::new(db);
     app.manage(runtime.clone());
 
-    let config = storage::get_config(&runtime.db)
-        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
-    crate::dropzone::sync_dropzone_monitor(app.handle(), config.dropzone_enabled)
-        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
-    crate::tray::setup(app).map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
+    let config = storage::get_config(&runtime.db).map_err(|error| {
+        diagnostics::record_error("startup", &error);
+        Box::new(error) as Box<dyn std::error::Error>
+    })?;
+    crate::dropzone::sync_dropzone_monitor(app.handle(), config.dropzone_enabled).map_err(
+        |error| {
+            diagnostics::record_error("dropzone", &error);
+            Box::new(error) as Box<dyn std::error::Error>
+        },
+    )?;
+    crate::tray::setup(app).map_err(|error| {
+        diagnostics::record_failure("tray", "TRAY_SETUP_FAILED", "System tray setup failed.");
+        Box::new(error) as Box<dyn std::error::Error>
+    })?;
     runtime
         .restart_watcher(app.handle())
         .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
@@ -147,19 +182,40 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     reconciliation::run_async_reconciliation(app.handle().clone(), runtime.clone());
     reconciliation::start_periodic_reconciliation(app.handle().clone(), runtime.clone());
     rule_scheduler::start_periodic_rule_execution(app.handle().clone(), runtime);
+    diagnostics::record_event("runtime", "startup completed");
     Ok(())
 }
 
-fn open_runtime_database(app: &App) -> Result<Arc<Database>, Box<dyn std::error::Error>> {
+fn open_runtime_database(app: &App) -> Result<Arc<Database>, AppError> {
     #[cfg(debug_assertions)]
     if mock::is_mock_mode() {
-        let workspace = mock::reset_mock_workspace(app)?;
-        let db = storage::open_database(&workspace.db_path)
-            .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
-        mock::seed_mock_workspace(&db, &workspace)?;
+        let workspace = mock::reset_mock_workspace(app).map_err(|error| {
+            AppError::with_details(
+                "DATABASE_ERROR",
+                "Mock workspace could not be prepared.",
+                false,
+                error.to_string(),
+            )
+        })?;
+        let db = storage::open_database(&workspace.db_path)?;
+        mock::seed_mock_workspace(&db, &workspace).map_err(|error| {
+            AppError::with_details(
+                "DATABASE_ERROR",
+                "Mock workspace could not be seeded.",
+                false,
+                error.to_string(),
+            )
+        })?;
         return Ok(db);
     }
 
-    let db_path = app.path().app_data_dir()?.join("shelflife.sqlite");
-    storage::open_database(db_path).map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+    let app_data_dir = app.path().app_data_dir().map_err(|error| {
+        AppError::with_details(
+            "APP_DATA_PATH_ERROR",
+            "The application data directory could not be accessed.",
+            false,
+            error.to_string(),
+        )
+    })?;
+    storage::open_database(app_data_dir.join("shelflife.sqlite"))
 }

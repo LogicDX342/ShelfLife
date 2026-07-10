@@ -219,8 +219,11 @@
     "installWarning": "ShelfLife exits while Windows installs the update.",
     "github": "GitHub",
     "reportBug": "Report a bug",
+    "openDiagnosticLogs": "Open diagnostic logs",
+    "diagnosticLogsDescription": "Review and attach relevant logs when reporting a problem.",
     "linksTitle": "Project links",
-    "errorOpenLink": "Could not open link."
+    "errorOpenLink": "Could not open link.",
+    "errorOpenLogs": "Could not open diagnostic logs."
   },
   "dialog": {
     "confirmTitle": "Confirm Action",

@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::engine;
 use crate::models::ReconciliationReport;
+use crate::runtime::diagnostics;
 use crate::runtime::AppRuntime;
 
 const PERIODIC_RECONCILIATION_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
@@ -14,8 +15,11 @@ const MAX_PATH_EVENT_EMITS: usize = 256;
 
 pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
     if runtime.reconciliation_active.swap(true, Ordering::SeqCst) {
+        diagnostics::record_event("reconciliation", "start skipped while active");
         return;
     }
+
+    diagnostics::record_event("reconciliation", "started");
 
     let db = runtime.db.clone();
     let app_handle_clone = app_handle.clone();
@@ -43,6 +47,15 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
 
         match result {
             Ok(report) => {
+                diagnostics::record_event(
+                    "reconciliation",
+                    &format!(
+                        "completed indexed={} updated={} removed={}",
+                        report.indexed.len(),
+                        report.updated.len(),
+                        report.removed.len()
+                    ),
+                );
                 emit_reconciliation_report(&app_handle_clone, &report);
                 runtime_clone.wake_rule_scheduler();
                 crate::runtime::rule_scheduler::run_async_expired_rule_execution(
@@ -51,6 +64,7 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
                 );
             }
             Err(error) => {
+                diagnostics::record_error("reconciliation", &error);
                 let _ = app_handle_clone.emit("action_failed", error);
             }
         }
@@ -107,11 +121,13 @@ pub fn watcher_event_sink(
                     );
                 }
                 Err(error) => {
+                    diagnostics::record_error("watcher_reconciliation", &error);
                     let _ = app_handle.emit("action_failed", error);
                 }
             }
         }
         engine::watcher::WatcherEvent::Error(error) => {
+            diagnostics::record_error("watcher", &error);
             let _ = app_handle.emit("action_failed", error);
         }
     })

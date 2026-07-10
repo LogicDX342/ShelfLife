@@ -37,8 +37,10 @@ tokio = { version = "1", features = ["full"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 rfd = { version = "0.17.2", features = ["common-controls-v6"] }
 rayon = "1.12.0"
-tauri-plugin-autostart = "2.5.1"
-tauri-plugin-single-instance = "2.4.2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-log = "2"
+log = "0.4"
 
 [profile.dev]
 incremental = true

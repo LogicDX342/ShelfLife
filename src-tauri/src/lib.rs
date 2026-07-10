@@ -10,8 +10,20 @@ mod tray;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri::Manager;
+    use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .target(Target::new(TargetKind::LogDir {
+                    file_name: Some(String::from("shelflife")),
+                }))
+                .rotation_strategy(RotationStrategy::KeepOne)
+                .max_file_size(1_048_576)
+                .timezone_strategy(TimezoneStrategy::UseLocal)
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -55,6 +67,7 @@ pub fn run() {
             commands::update_tray_labels,
             commands::select_directory,
             commands::open_external_url,
+            commands::open_diagnostic_logs,
             commands::check_for_update,
             commands::install_update
         ])

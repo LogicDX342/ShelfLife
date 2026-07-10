@@ -5,18 +5,23 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 use crate::engine::{self, RuleExecutionReport};
+use crate::runtime::diagnostics;
 use crate::runtime::AppRuntime;
 
 const MIN_AUTO_RULE_EXECUTION_INTERVAL: Duration = Duration::from_secs(5);
 
 pub fn run_async_expired_rule_execution(app_handle: AppHandle, runtime: AppRuntime) {
     if runtime.rule_execution_active.swap(true, Ordering::SeqCst) {
+        diagnostics::record_event("rule_scheduler", "execution skipped while active");
         return;
     }
     if runtime.reconciliation_active.load(Ordering::Relaxed) {
         runtime.rule_execution_active.store(false, Ordering::SeqCst);
+        diagnostics::record_event("rule_scheduler", "execution deferred during reconciliation");
         return;
     }
+
+    diagnostics::record_event("rule_scheduler", "execution started");
 
     let db = runtime.db.clone();
     let app_handle_clone = app_handle.clone();
@@ -31,12 +36,21 @@ pub fn run_async_expired_rule_execution(app_handle: AppHandle, runtime: AppRunti
 
         match result {
             Ok(report) => {
+                diagnostics::record_event(
+                    "rule_scheduler",
+                    &format!(
+                        "execution completed entries={} failures={}",
+                        report.entries.len(),
+                        report.failures.len()
+                    ),
+                );
                 emit_rule_execution_report(&app_handle_clone, &report);
                 if !report.entries.is_empty() && report.failures.is_empty() {
                     runtime_clone.wake_rule_scheduler();
                 }
             }
             Err(error) => {
+                diagnostics::record_error("rule_scheduler", &error);
                 let _ = app_handle_clone.emit("action_failed", error);
             }
         }
@@ -56,6 +70,7 @@ pub fn start_periodic_rule_execution(app_handle: AppHandle, runtime: AppRuntime)
         ) {
             Ok(delay) => delay,
             Err(error) => {
+                diagnostics::record_error("rule_scheduler", &error);
                 let _ = app_handle.emit("action_failed", error);
                 Some(MIN_AUTO_RULE_EXECUTION_INTERVAL)
             }
@@ -82,6 +97,7 @@ pub fn emit_rule_execution_report(app_handle: &AppHandle, report: &RuleExecution
     }
 
     for error in &report.failures {
+        diagnostics::record_error("automatic_rule", error);
         let _ = app_handle.emit("action_failed", error);
     }
 }

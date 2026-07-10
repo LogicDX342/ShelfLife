@@ -2,10 +2,12 @@
   import IconBug from '@lucide/svelte/icons/bug';
   import IconDownload from '@lucide/svelte/icons/download';
   import IconExternalLink from '@lucide/svelte/icons/external-link';
+  import IconFolderOpen from '@lucide/svelte/icons/folder-open';
   import IconGitBranch from '@lucide/svelte/icons/git-branch';
   import IconRefreshCw from '@lucide/svelte/icons/refresh-cw';
 
   import { type ExternalUrl, externalUrls, openExternalUrl } from '$lib/api/external';
+  import { openDiagnosticLogs } from '$lib/api/support';
   import { checkForUpdate, installUpdate } from '$lib/api/updates';
   import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
@@ -41,6 +43,21 @@
 
     event.preventDefault();
     void openLink(url);
+  }
+
+  async function openDiagnosticLogsFolder() {
+    try {
+      await openDiagnosticLogs();
+    } catch (reason) {
+      notifications.error(getErrorMessage(reason, i18n.t('about.errorOpenLogs')));
+    }
+  }
+
+  function openDiagnosticLogsFromKey(event: KeyboardEvent) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+
+    event.preventDefault();
+    void openDiagnosticLogsFolder();
   }
 
   async function checkForUpdates() {
@@ -215,6 +232,36 @@
                 }}
               >
                 <IconExternalLink />
+              </Button>
+            </Item.Actions>
+          </Item.Root>
+          <Item.Root
+            role="button"
+            tabindex={0}
+            class="cursor-pointer transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            onclick={openDiagnosticLogsFolder}
+            onkeydown={openDiagnosticLogsFromKey}
+          >
+            <Item.Media>
+              <IconFolderOpen />
+            </Item.Media>
+            <Item.Content>
+              <Item.Title>{i18n.t('about.openDiagnosticLogs')}</Item.Title>
+              <Item.Description>{i18n.t('about.diagnosticLogsDescription')}</Item.Description>
+            </Item.Content>
+            <Item.Actions>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                title={i18n.t('about.openDiagnosticLogs')}
+                aria-label={i18n.t('about.openDiagnosticLogs')}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  void openDiagnosticLogsFolder();
+                }}
+              >
+                <IconFolderOpen />
               </Button>
             </Item.Actions>
           </Item.Root>

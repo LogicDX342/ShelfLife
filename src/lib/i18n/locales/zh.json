@@ -219,8 +219,11 @@
     "installWarning": "Windows 安装更新时 ShelfLife 会退出。",
     "github": "GitHub",
     "reportBug": "报告问题",
+    "openDiagnosticLogs": "打开诊断日志",
+    "diagnosticLogsDescription": "报告问题时，请查看并附上相关日志。",
     "linksTitle": "项目链接",
-    "errorOpenLink": "无法打开链接。"
+    "errorOpenLink": "无法打开链接。",
+    "errorOpenLogs": "无法打开诊断日志。"
   },
   "dialog": {
     "confirmTitle": "确认操作",
