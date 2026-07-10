@@ -1579,7 +1579,7 @@ Deliverables:
 
 - Transparent dropzone window with drag-and-drop file ingestion.
 - ZIP archiving action within rules and triage flow.
-- CPU and battery level checking using `sysinfo` to throttle scans.
+- CPU usage checking using `sysinfo` to throttle scans. Battery-specific throttling remains planned.
 
 Exit criteria:
 
@@ -1634,7 +1634,8 @@ Current codebase:
 ```text
 Implemented: dropzone window, shake monitor, preview grouping, watch-target ingest, rule-group execution.
 Not implemented: ZIP archive RuleAction/AuditActionKind/executor behavior.
-Not implemented: CPU/battery resource throttling or sysinfo dependency.
+Implemented: CPU-aware periodic reconciliation defers scans above 70% system usage and retries after five minutes.
+Not implemented: battery resource throttling.
 ```
 
 Validation commands:

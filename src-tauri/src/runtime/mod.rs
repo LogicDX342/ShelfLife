@@ -1,6 +1,7 @@
 #[cfg(debug_assertions)]
 pub mod mock;
 pub mod reconciliation;
+pub mod resource_limits;
 pub mod rule_scheduler;
 
 use std::sync::atomic::{AtomicBool, Ordering};

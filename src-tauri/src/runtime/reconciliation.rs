@@ -10,6 +10,7 @@ use crate::models::ReconciliationReport;
 use crate::runtime::AppRuntime;
 
 const PERIODIC_RECONCILIATION_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const RESOURCE_LIMIT_RETRY_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const MAX_PATH_EVENT_EMITS: usize = 256;
 
 pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
@@ -55,13 +56,24 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
 }
 
 pub fn start_periodic_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
-    thread::spawn(move || loop {
-        thread::sleep(PERIODIC_RECONCILIATION_INTERVAL);
-        if runtime.is_watching_paused() {
-            continue;
-        }
+    thread::spawn(move || {
+        let mut wait_for = PERIODIC_RECONCILIATION_INTERVAL;
 
-        run_async_reconciliation(app_handle.clone(), runtime.clone());
+        loop {
+            thread::sleep(wait_for);
+            if runtime.is_watching_paused() {
+                wait_for = PERIODIC_RECONCILIATION_INTERVAL;
+                continue;
+            }
+
+            if crate::runtime::resource_limits::is_system_cpu_usage_high() {
+                wait_for = RESOURCE_LIMIT_RETRY_INTERVAL;
+                continue;
+            }
+
+            run_async_reconciliation(app_handle.clone(), runtime.clone());
+            wait_for = PERIODIC_RECONCILIATION_INTERVAL;
+        }
     });
 }
 
