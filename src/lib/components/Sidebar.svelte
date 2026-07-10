@@ -65,14 +65,12 @@
       icon: IconFlash,
     },
     { path: '/audit', labelKey: 'nav.audit', icon: IconHistory },
-    {
-      path: '/settings',
-      labelKey: 'nav.settings',
-      icon: IconSettings,
-    },
   ];
 
-  const secondaryNavItems: NavItem[] = [{ path: '/about', labelKey: 'nav.about', icon: IconInfo }];
+  const secondaryNavItems: NavItem[] = [
+    { path: '/settings', labelKey: 'nav.settings', icon: IconSettings },
+    { path: '/about', labelKey: 'nav.about', icon: IconInfo },
+  ];
 
   function isActive(path: AppRoute) {
     if (path === '/') {
