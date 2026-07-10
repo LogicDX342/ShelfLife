@@ -141,7 +141,11 @@
   "audit": {
     "title": "审计日志与历史",
     "subtitle": "跟踪文件操作历史并支持撤销。",
+    "search": "搜索审计日志…",
+    "results": "{count} 条结果",
     "noLogs": "暂无审计日志记录。",
+    "noSearchResults": "没有匹配的审计条目。",
+    "noSearchResultsDesc": "请尝试其他文件名、路径、操作或规则。",
     "undo": "撤销",
     "loading": "正在加载审计日志…",
     "noLogsDesc": "对文件执行的操作将显示在此处，方便查看或撤销。",

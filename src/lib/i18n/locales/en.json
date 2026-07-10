@@ -141,7 +141,11 @@
   "audit": {
     "title": "Audit Log & History",
     "subtitle": "Track file management history and undo actions.",
+    "search": "Search audit log...",
+    "results": "{count} results",
     "noLogs": "No audit log entries recorded.",
+    "noSearchResults": "No matching audit entries.",
+    "noSearchResultsDesc": "Try a different file name, path, action, or rule.",
     "undo": "Undo",
     "loading": "Loading audit entries...",
     "noLogsDesc": "Actions performed on files will be shown here, allowing you to review or revert them.",

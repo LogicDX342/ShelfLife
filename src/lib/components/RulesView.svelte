@@ -87,9 +87,6 @@
 
 <PageHeader title={i18n.t('rules.title')} subtitle={i18n.t('rules.subtitle')}>
   {#snippet actions()}
-    <Button variant="outline" onclick={() => rulesState.refresh()}>
-      {i18n.t('rules.refresh')}
-    </Button>
     <Button
       onclick={() => {
         showNewEditor = true;
