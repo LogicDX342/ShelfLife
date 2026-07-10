@@ -22,6 +22,7 @@
   import * as Select from '$lib/components/ui/select';
   import { Spinner } from '$lib/components/ui/spinner';
   import { Switch } from '$lib/components/ui/switch';
+  import * as Tooltip from '$lib/components/ui/tooltip';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
@@ -282,9 +283,11 @@
                     </span>
                   </Select.Trigger>
                   <Select.Content>
-                    {#each i18n.languages as language (language)}
-                      <Select.Item value={language} label={i18n.t(`lang.${language}`)} />
-                    {/each}
+                    <Select.Group>
+                      {#each i18n.languages as language (language)}
+                        <Select.Item value={language} label={i18n.t(`lang.${language}`)} />
+                      {/each}
+                    </Select.Group>
                   </Select.Content>
                 </Select.Root>
               </div>
@@ -306,9 +309,11 @@
                     </span>
                   </Select.Trigger>
                   <Select.Content>
-                    <Select.Item value="light" label={i18n.t('theme.light')} />
-                    <Select.Item value="dark" label={i18n.t('theme.dark')} />
-                    <Select.Item value="system" label={i18n.t('theme.system')} />
+                    <Select.Group>
+                      <Select.Item value="light" label={i18n.t('theme.light')} />
+                      <Select.Item value="dark" label={i18n.t('theme.dark')} />
+                      <Select.Item value="system" label={i18n.t('theme.system')} />
+                    </Select.Group>
                   </Select.Content>
                 </Select.Root>
               </div>
@@ -327,9 +332,11 @@
                     <span data-slot="select-value">{closeBehaviorLabel(closeBehavior)}</span>
                   </Select.Trigger>
                   <Select.Content>
-                    <Select.Item value="Ask" label={i18n.t('settings.closeAsk')} />
-                    <Select.Item value="HideToTray" label={i18n.t('settings.closeHideToTray')} />
-                    <Select.Item value="Quit" label={i18n.t('settings.closeQuit')} />
+                    <Select.Group>
+                      <Select.Item value="Ask" label={i18n.t('settings.closeAsk')} />
+                      <Select.Item value="HideToTray" label={i18n.t('settings.closeHideToTray')} />
+                      <Select.Item value="Quit" label={i18n.t('settings.closeQuit')} />
+                    </Select.Group>
                   </Select.Content>
                 </Select.Root>
               </div>
@@ -387,11 +394,14 @@
                 <Item.Content class="flex flex-col gap-0.5">
                   <Item.Title class="text-xs font-semibold text-neutral-800 dark:text-neutral-200">
                     {i18n.t('settings.dropzone')}
-                    <IconCircleHelp
-                      title={i18n.t('settings.dropzoneDesc')}
-                      aria-label={i18n.t('settings.dropzoneDesc')}
-                      class="size-3.5 cursor-help text-muted-foreground transition-colors hover:text-foreground"
-                    />
+                    <Tooltip.Root>
+                      <Tooltip.Trigger>
+                        <IconCircleHelp class="size-3.5" />
+                      </Tooltip.Trigger>
+                      <Tooltip.Content>
+                        <p>{i18n.t('settings.dropzoneDesc')}</p>
+                      </Tooltip.Content>
+                    </Tooltip.Root>
                   </Item.Title>
                 </Item.Content>
                 <Item.Actions class="flex-shrink-0 ml-4">

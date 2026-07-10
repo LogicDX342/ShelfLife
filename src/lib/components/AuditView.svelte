@@ -6,6 +6,7 @@
   import LoadingState from '$lib/components/common/LoadingState.svelte';
   import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
+  import * as Alert from '$lib/components/ui/alert';
   import { Button } from '$lib/components/ui/button';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { auditState } from '$lib/stores/audit.svelte';
@@ -23,9 +24,9 @@
 <PageBody>
   <!-- Content -->
   {#if auditState.error}
-    <div class="p-4 rounded bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300">
-      {auditState.error}
-    </div>
+    <Alert.Root variant="destructive">
+      <Alert.Description>{auditState.error}</Alert.Description>
+    </Alert.Root>
   {:else if auditState.loading && auditState.entries.length === 0}
     <LoadingState label={i18n.t('audit.loading')} />
   {:else if auditState.entries.length === 0}
@@ -36,9 +37,7 @@
     />
   {:else}
     <!-- Timeline Container -->
-    <div
-      class="relative pl-6 border-l-2 border-fluent-border-light dark:border-fluent-border-dark space-y-6 ml-3"
-    >
+    <div class="relative ml-3 flex flex-col gap-6 border-l-2 pl-6">
       {#each auditState.entries as entry (entry.id)}
         <div class="relative">
           <!-- Timeline Node Circle -->

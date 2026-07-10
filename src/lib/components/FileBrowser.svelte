@@ -430,7 +430,7 @@
 <!-- Sticky Bulk Action Bar at Bottom -->
 {#if selectedPaths.length > 0}
   <div
-    class="fixed bottom-6 left-[88px] right-6 md:left-[264px] border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl flex items-center justify-between z-10 animate-slide-up"
+    class="fixed bottom-6 left-[88px] right-6 flex items-center justify-between border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl animate-slide-up md:left-[264px]"
   >
     <div class="flex items-center gap-4">
       <div class="flex flex-col">
@@ -452,11 +452,13 @@
           <span data-slot="select-value">{bulkAction}</span>
         </Select.Trigger>
         <Select.Content>
-          <Select.Item value="MoveToSafeFolder" label="MoveToSafeFolder" />
-          <Select.Item value="Pin" label="Pin" />
-          <Select.Item value="Ignore" label="Ignore" />
-          <Select.Item value="Snooze" label="Snooze" />
-          <Select.Item value="TrashNow" label="TrashNow" />
+          <Select.Group>
+            <Select.Item value="MoveToSafeFolder" label="MoveToSafeFolder" />
+            <Select.Item value="Pin" label="Pin" />
+            <Select.Item value="Ignore" label="Ignore" />
+            <Select.Item value="Snooze" label="Snooze" />
+            <Select.Item value="TrashNow" label="TrashNow" />
+          </Select.Group>
         </Select.Content>
       </Select.Root>
       {#if bulkAction === 'Snooze'}

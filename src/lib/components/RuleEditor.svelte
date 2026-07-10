@@ -3,8 +3,8 @@
   import { saveRule, testRule } from '$lib/api/rules';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
+  import * as Field from '$lib/components/ui/field';
   import { Input } from '$lib/components/ui/input';
-  import { Label } from '$lib/components/ui/label';
   import * as Select from '$lib/components/ui/select';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
@@ -227,7 +227,7 @@
 </script>
 
 <form
-  class="space-y-6 text-sm"
+  class="flex flex-col gap-6 text-sm"
   onsubmit={(event) => {
     event.preventDefault();
     submit();
@@ -235,25 +235,23 @@
 >
   <!-- Section 1: General Settings -->
   <Card.Root>
-    <Card.Content class="space-y-4">
-      <div class="flex items-center justify-between border-b pb-2">
-        <h3 class="text-sm font-semibold text-primary">
-          {i18n.t('rules.generalSettings')}
-        </h3>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="flex flex-col gap-1.5">
-          <Label for="rule-name">{i18n.t('rules.ruleName')}</Label>
+    <Card.Header>
+      <Card.Title>{i18n.t('rules.generalSettings')}</Card.Title>
+    </Card.Header>
+    <Card.Content>
+      <Field.FieldGroup class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Field.Field>
+          <Field.FieldLabel for="rule-name">{i18n.t('rules.ruleName')}</Field.FieldLabel>
           <Input
             id="rule-name"
             bind:value={name}
             required
             placeholder={i18n.t('rules.ruleNamePlaceholder')}
           />
-        </div>
+        </Field.Field>
 
-        <div class="flex flex-col gap-1.5">
-          <Label for="watch-path">{i18n.t('rules.watchTargetPath')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="watch-path">{i18n.t('rules.watchTargetPath')}</Field.FieldLabel>
           <div class="flex gap-2 w-full">
             <Input
               id="watch-path"
@@ -265,100 +263,103 @@
               {i18n.t('settings.browse')}
             </Button>
           </div>
-        </div>
+        </Field.Field>
 
-        <div class="flex flex-col gap-1.5">
-          <Label for="rule-priority">{i18n.t('rules.priority')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="rule-priority">{i18n.t('rules.priority')}</Field.FieldLabel>
           <Input id="rule-priority" type="number" bind:value={priority} />
-        </div>
+        </Field.Field>
 
-        <div class="flex flex-col gap-1.5">
-          <Label for="rule-mode">{i18n.t('rules.mode')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="rule-mode">{i18n.t('rules.mode')}</Field.FieldLabel>
           <Select.Root type="single" bind:value={mode}>
             <Select.Trigger id="rule-mode" class="w-full">
               <span data-slot="select-value">{modeLabel(mode)}</span>
             </Select.Trigger>
             <Select.Content>
-              <Select.Item value="PreviewOnly" label={i18n.t('rules.modePreviewOnly')} />
-              <Select.Item
-                value="AskFirst"
-                label={i18n.t('rules.modeAskFirst')}
-                disabled={actionKind === 'Ignore'}
-              />
-              <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
+              <Select.Group>
+                <Select.Item value="PreviewOnly" label={i18n.t('rules.modePreviewOnly')} />
+                <Select.Item
+                  value="AskFirst"
+                  label={i18n.t('rules.modeAskFirst')}
+                  disabled={actionKind === 'Ignore'}
+                />
+                <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
+              </Select.Group>
             </Select.Content>
           </Select.Root>
-        </div>
-      </div>
+        </Field.Field>
+      </Field.FieldGroup>
     </Card.Content>
   </Card.Root>
 
   <!-- Section 2: Match Conditions -->
   <Card.Root>
-    <Card.Content class="space-y-4">
-      <div class="flex items-center justify-between border-b pb-2">
-        <h3 class="text-sm font-semibold text-primary">
-          {i18n.t('rules.matchConditions')}
-        </h3>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="flex flex-col gap-1.5">
-          <Label for="extensions">{i18n.t('rules.extensions')}</Label>
+    <Card.Header><Card.Title>{i18n.t('rules.matchConditions')}</Card.Title></Card.Header>
+    <Card.Content>
+      <Field.FieldGroup class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Field.Field>
+          <Field.FieldLabel for="extensions">{i18n.t('rules.extensions')}</Field.FieldLabel>
           <Input
             id="extensions"
             bind:value={extensions}
             placeholder={i18n.t('rules.extensionsPlaceholder')}
           />
-        </div>
+        </Field.Field>
 
-        <div class="flex flex-col gap-1.5">
-          <Label for="filename-globs">{i18n.t('rules.filenameGlobs')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="filename-globs">{i18n.t('rules.filenameGlobs')}</Field.FieldLabel>
           <Input
             id="filename-globs"
             bind:value={filenameGlobs}
             placeholder={i18n.t('rules.filenameGlobsPlaceholder')}
           />
-        </div>
+        </Field.Field>
 
-        <div class="flex flex-col gap-1.5">
-          <Label for="filename-regexes">{i18n.t('rules.filenameRegexes')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="filename-regexes"
+            >{i18n.t('rules.filenameRegexes')}</Field.FieldLabel
+          >
           <Input
             id="filename-regexes"
             bind:value={filenameRegexes}
             placeholder={i18n.t('rules.filenameRegexesPlaceholder')}
           />
-        </div>
+        </Field.Field>
 
-        <div class="flex flex-col gap-1.5">
-          <Label for="source-domains">{i18n.t('rules.sourceDomains')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="source-domains">{i18n.t('rules.sourceDomains')}</Field.FieldLabel>
           <Input
             id="source-domains"
             bind:value={sourceDomains}
             placeholder={i18n.t('rules.sourceDomainsPlaceholder')}
           />
-        </div>
+        </Field.Field>
         <!-- </div> -->
 
         <!-- Size Match Grid -->
         <!-- <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2"> -->
-        <div class="flex flex-col gap-1.5">
-          <Label for="size-criteria">{i18n.t('rules.fileSizeCriteria')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="size-criteria">{i18n.t('rules.fileSizeCriteria')}</Field.FieldLabel
+          >
           <Select.Root type="single" bind:value={sizeKind}>
             <Select.Trigger id="size-criteria" class="w-full">
               <span data-slot="select-value">{sizeKindLabel(sizeKind)}</span>
             </Select.Trigger>
             <Select.Content>
-              <Select.Item value="Any" label={i18n.t('rules.anySize')} />
-              <Select.Item value="LessThan" label={i18n.t('rules.lessThan')} />
-              <Select.Item value="GreaterThan" label={i18n.t('rules.greaterThan')} />
-              <Select.Item value="Between" label={i18n.t('rules.between')} />
+              <Select.Group>
+                <Select.Item value="Any" label={i18n.t('rules.anySize')} />
+                <Select.Item value="LessThan" label={i18n.t('rules.lessThan')} />
+                <Select.Item value="GreaterThan" label={i18n.t('rules.greaterThan')} />
+                <Select.Item value="Between" label={i18n.t('rules.between')} />
+              </Select.Group>
             </Select.Content>
           </Select.Root>
-        </div>
+        </Field.Field>
 
-        <div class="grid grid-cols-2 gap-2">
-          <div class="flex flex-col gap-1.5">
-            <Label for="min-size-mb">{i18n.t('rules.minSizeMb')}</Label>
+        <Field.FieldGroup class="grid grid-cols-2 gap-2">
+          <Field.Field>
+            <Field.FieldLabel for="min-size-mb">{i18n.t('rules.minSizeMb')}</Field.FieldLabel>
             <Input
               id="min-size-mb"
               min="0"
@@ -366,10 +367,10 @@
               bind:value={sizeMinMb}
               disabled={sizeKind === 'LessThan' || sizeKind === 'Any'}
             />
-          </div>
+          </Field.Field>
 
-          <div class="flex flex-col gap-1.5">
-            <Label for="max-size-mb">{i18n.t('rules.maxSizeMb')}</Label>
+          <Field.Field>
+            <Field.FieldLabel for="max-size-mb">{i18n.t('rules.maxSizeMb')}</Field.FieldLabel>
             <Input
               id="max-size-mb"
               min="0"
@@ -377,37 +378,35 @@
               bind:value={sizeMaxMb}
               disabled={sizeKind === 'GreaterThan' || sizeKind === 'Any'}
             />
-          </div>
-        </div>
-      </div>
+          </Field.Field>
+        </Field.FieldGroup>
+      </Field.FieldGroup>
     </Card.Content>
   </Card.Root>
 
   <!-- Section 3: Action Execution -->
   <Card.Root>
-    <Card.Content class="space-y-4">
-      <div class="flex items-center justify-between border-b pb-2">
-        <h3 class="text-sm font-semibold text-primary">
-          {i18n.t('rules.action')}
-        </h3>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="flex flex-col gap-1.5">
-          <Label for="action-kind">{i18n.t('rules.action')}</Label>
+    <Card.Header><Card.Title>{i18n.t('rules.action')}</Card.Title></Card.Header>
+    <Card.Content>
+      <Field.FieldGroup class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Field.Field>
+          <Field.FieldLabel for="action-kind">{i18n.t('rules.action')}</Field.FieldLabel>
           <Select.Root type="single" bind:value={actionKind}>
             <Select.Trigger id="action-kind" class="w-full">
               <span data-slot="select-value">{actionKindLabel(actionKind)}</span>
             </Select.Trigger>
             <Select.Content>
-              <Select.Item value="Ignore" label={i18n.t('rules.actionIgnoreLabel')} />
-              <Select.Item value="Trash" label={i18n.t('file.trash')} />
-              <Select.Item value="Move" label={i18n.t('rules.actionMoveLabel')} />
+              <Select.Group>
+                <Select.Item value="Ignore" label={i18n.t('rules.actionIgnoreLabel')} />
+                <Select.Item value="Trash" label={i18n.t('file.trash')} />
+                <Select.Item value="Move" label={i18n.t('rules.actionMoveLabel')} />
+              </Select.Group>
             </Select.Content>
           </Select.Root>
-        </div>
+        </Field.Field>
 
-        <div class="flex flex-col gap-1.5">
-          <Label for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Field.FieldLabel>
           <Input
             id="ttl-days"
             min="1"
@@ -415,10 +414,12 @@
             bind:value={ttlDays}
             disabled={actionKind === 'Ignore'}
           />
-        </div>
+        </Field.Field>
 
-        <div class="flex flex-col gap-1.5">
-          <Label for="destination-path">{i18n.t('rules.destinationPath')}</Label>
+        <Field.Field>
+          <Field.FieldLabel for="destination-path"
+            >{i18n.t('rules.destinationPath')}</Field.FieldLabel
+          >
           <div class="flex gap-2 w-full">
             <Input
               id="destination-path"
@@ -436,17 +437,18 @@
               {i18n.t('settings.browse')}
             </Button>
           </div>
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <Label for="rename-template">{i18n.t('rules.renameTemplate')}</Label>
+        </Field.Field>
+        <Field.Field>
+          <Field.FieldLabel for="rename-template">{i18n.t('rules.renameTemplate')}</Field.FieldLabel
+          >
           <Input
             id="rename-template"
             bind:value={renameTemplate}
             placeholder={'{date}-{name}.{ext}'}
             disabled={actionKind !== 'Move'}
           />
-        </div>
-      </div>
+        </Field.Field>
+      </Field.FieldGroup>
     </Card.Content>
   </Card.Root>
 
@@ -470,15 +472,13 @@
   <!-- Live Test Panel -->
   {#if testResults.length > 0}
     <Card.Root>
-      <Card.Content class="space-y-4">
-        <h5 class="text-xs font-semibold">
-          {i18n.t('rules.testResultsCount', { count: testResults.length })}
-        </h5>
+      <Card.Header>
+        <Card.Title>{i18n.t('rules.testResultsCount', { count: testResults.length })}</Card.Title>
+      </Card.Header>
+      <Card.Content>
         <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
           {#each testResults as result (result.file_path)}
-            <div
-              class="p-2.5 bg-black/5 dark:bg-white/5 rounded text-xs flex justify-between items-center gap-2"
-            >
+            <div class="flex items-center justify-between gap-2 rounded bg-muted p-2.5 text-xs">
               <span class="truncate font-medium flex-1" title={result.file_path}
                 >{result.file_path.split('\\').pop() || result.file_path}</span
               >

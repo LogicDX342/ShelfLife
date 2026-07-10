@@ -12,9 +12,9 @@
 
 <div
 	bind:this={ref}
-	data-slot="card-header"
+	data-slot="field-group"
 	class={cn(
-		"gap-1 rounded-t-xl px-(--card-spacing) [.border-b]:pb-(--card-spacing) group/card-header @container/card-header grid auto-rows-min items-start has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]",
+		"gap-5 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4 group/field-group @container/field-group flex w-full flex-col",
 		className
 	)}
 	{...restProps}

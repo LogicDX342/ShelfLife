@@ -13,6 +13,7 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { AuditEntry } from '$lib/types';
+  import { cn } from '$lib/utils';
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
 
   let { entry } = $props<{ entry: AuditEntry }>();
@@ -49,17 +50,17 @@
   function getActionColors(kind: string) {
     switch (kind) {
       case 'Trash':
-        return 'text-red-500 bg-red-100 dark:bg-red-950/30';
+        return 'bg-destructive/10 text-destructive';
       case 'Move':
-        return 'text-blue-500 bg-blue-100 dark:bg-blue-950/30';
+        return 'bg-primary/10 text-primary';
       case 'Pin':
-        return 'text-green-500 bg-green-100 dark:bg-green-950/30';
+        return 'bg-chart-2/10 text-chart-2';
       case 'Snooze':
-        return 'text-amber-500 bg-amber-100 dark:bg-amber-950/30';
+        return 'bg-chart-4/10 text-chart-4';
       case 'Ignore':
-        return 'text-neutral-500 bg-neutral-100 dark:bg-neutral-850';
+        return 'bg-muted text-muted-foreground';
       default:
-        return 'text-indigo-500 bg-indigo-100 dark:bg-indigo-950/30';
+        return 'bg-secondary text-secondary-foreground';
     }
   }
 </script>
@@ -68,7 +69,7 @@
   <Card.Header class="items-center">
     <div class="flex items-start gap-3 min-w-0 flex-1">
       <!-- Action icon badge -->
-      <div class="p-2.5 rounded-lg flex-shrink-0 {getActionColors(entry.action_kind)}">
+      <div class={cn('flex shrink-0 rounded-lg p-2.5', getActionColors(entry.action_kind))}>
         {#if entry.action_kind === 'Trash'}
           <IconDelete class="w-5 h-5" />
         {:else if entry.action_kind === 'Move'}
@@ -83,7 +84,7 @@
       </div>
 
       <!-- Info details -->
-      <div class="min-w-0 flex-1 space-y-0.5">
+      <div class="min-w-0 flex flex-1 flex-col gap-0.5">
         <div class="flex items-center gap-2">
           <Card.Title class="text-sm font-semibold tracking-tight">
             {entry.file_name}
@@ -127,14 +128,10 @@
           {/if}
         </Button>
       {:else if entry.undo_status === 'Completed'}
-        <Button
-          variant="outline"
-          disabled
-          class="border-green-200 dark:border-green-900/40 bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 disabled:opacity-100 disabled:bg-green-50 dark:disabled:bg-green-950/20 disabled:text-green-600 dark:disabled:text-green-400 disabled:border-green-200 dark:disabled:border-green-900/40"
-        >
-          <IconCheckmark class="w-4 h-4" />
+        <Badge variant="secondary">
+          <IconCheckmark data-icon="inline-start" />
           {i18n.t('audit.undone')}
-        </Button>
+        </Badge>
       {:else}
         <span
           class="text-[10px] max-w-[150px] text-right text-muted-foreground italic truncate"

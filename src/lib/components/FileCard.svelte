@@ -289,9 +289,11 @@
                 <span data-slot="select-value">{snoozeLabel(snoozeDays)}</span>
               </Select.Trigger>
               <Select.Content>
-                {#each snoozeOptions as days (days)}
-                  <Select.Item value={days} label={snoozeLabel(days)} />
-                {/each}
+                <Select.Group>
+                  {#each snoozeOptions as days (days)}
+                    <Select.Item value={days} label={snoozeLabel(days)} />
+                  {/each}
+                </Select.Group>
               </Select.Content>
             </Select.Root>
             {#if snoozeDays === '-1'}

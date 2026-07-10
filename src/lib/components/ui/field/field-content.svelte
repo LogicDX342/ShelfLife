@@ -12,11 +12,8 @@
 
 <div
 	bind:this={ref}
-	data-slot="card-header"
-	class={cn(
-		"gap-1 rounded-t-xl px-(--card-spacing) [.border-b]:pb-(--card-spacing) group/card-header @container/card-header grid auto-rows-min items-start has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]",
-		className
-	)}
+	data-slot="field-content"
+	class={cn("gap-0.5 group/field-content flex flex-1 flex-col leading-snug", className)}
 	{...restProps}
 >
 	{@render children?.()}
