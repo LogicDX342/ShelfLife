@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export const externalUrls = {
   github: 'https://github.com/LogicDX342/ShelfLife',
-  bugReport: 'https://github.com/LogicDX342/ShelfLife/issues/new',
+  bugReport: 'https://github.com/LogicDX342/ShelfLife/issues/new/choose',
 } as const;
 
 export type ExternalUrl = (typeof externalUrls)[keyof typeof externalUrls];

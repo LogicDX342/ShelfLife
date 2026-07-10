@@ -2,7 +2,7 @@ use crate::models::AppError;
 
 const ALLOWED_EXTERNAL_URLS: [&str; 2] = [
     "https://github.com/LogicDX342/ShelfLife",
-    "https://github.com/LogicDX342/ShelfLife/issues/new",
+    "https://github.com/LogicDX342/ShelfLife/issues/new/choose",
 ];
 
 #[tauri::command]

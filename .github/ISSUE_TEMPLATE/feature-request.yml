@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an improvement to ShelfLife.
+title: '[Feature]: '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the workflow or limitation you are experiencing.
+      placeholder: It is difficult to...
+    validations:
+      required: true
+  - type: textarea
+    id: requested-outcome
+    attributes:
+      label: Requested outcome
+      description: Describe the behavior you would like ShelfLife to provide.
+      placeholder: ShelfLife could...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain any workarounds or other approaches you have tried.
+  - type: textarea
+    id: examples
+    attributes:
+      label: Screenshots or examples (optional)
+      description: Drag screenshots here or provide a brief example. Do not include sensitive file information.

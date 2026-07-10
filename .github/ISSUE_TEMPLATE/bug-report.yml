@@ -1,0 +1,69 @@
+name: Bug report
+description: Tell us about a reproducible ShelfLife problem.
+title: '[Bug]: '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Please do not include file contents or private paths. You can attach relevant diagnostic logs after reviewing them.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Briefly describe the problem and its impact.
+      placeholder: ShelfLife did...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest sequence of actions that consistently shows the issue.
+      placeholder: |
+        1. Open...
+        2. Configure...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: I expected ShelfLife to...
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: Instead, ShelfLife...
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: ShelfLife version
+      description: Find this in About.
+      placeholder: '0.7.1'
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version and build
+      description: For example, Windows 11 24H2 (build 26100.x).
+      placeholder: Windows 11 24H2 (build 26100.x)
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostic-logs
+    attributes:
+      label: Diagnostic logs (optional)
+      description: In ShelfLife, choose About → Open diagnostic logs. Review the files, remove private information if necessary, then drag relevant logs into this issue after it is created.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I reviewed any attachments and removed private paths, filenames, and file contents.
+          required: true
