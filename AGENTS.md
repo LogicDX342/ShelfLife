@@ -104,7 +104,7 @@ src/
     │   ├── rules.ts
     │   └── triage.ts
     ├── components/               # Product UI modules
-    │   ├── common/               # Shared shell states: PageHeader, EmptyState, LoadingState, HelpTooltip
+    │   ├── common/               # Shared shell states: PageHeader, EmptyState, LoadingState
     │   ├── ui/                   # shadcn-svelte primitives; keep product logic out of these files
     │   ├── AuditRow.svelte
     │   ├── AuditView.svelte

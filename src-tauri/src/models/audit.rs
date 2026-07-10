@@ -9,7 +9,6 @@ pub enum AuditActionKind {
     Pin,
     Snooze,
     Ignore,
-    RulePreview,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

@@ -25,15 +25,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 diesel = { version = "2.3.10", features = ["sqlite"] }
 libsqlite3-sys = { version = "0.37", features = ["bundled"] }
-notify = "8"
 notify-debouncer-full = "0.7"
 trash = "5"
 regex = "1"
 globset = "0.4"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-thiserror = "2"
-tokio = { version = "1", features = ["full"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 rfd = { version = "0.17.2", features = ["common-controls-v6"] }
 rayon = "1.12.0"
@@ -50,6 +47,3 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = ["ApplicationModel"] }

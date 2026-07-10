@@ -1,5 +1,6 @@
 <script lang="ts">
   import IconCheckmark from '@lucide/svelte/icons/check';
+  import IconCircleHelp from '@lucide/svelte/icons/circle-help';
   import IconArrowSync from '@lucide/svelte/icons/refresh-cw';
   import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
   import { onMount } from 'svelte';
@@ -11,7 +12,6 @@
     updateWatchTargets,
   } from '$lib/api/config';
   import { selectDirectory } from '$lib/api/files';
-  import HelpTooltip from '$lib/components/common/HelpTooltip.svelte';
   import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
@@ -387,7 +387,11 @@
                 <Item.Content class="flex flex-col gap-0.5">
                   <Item.Title class="text-xs font-semibold text-neutral-800 dark:text-neutral-200">
                     {i18n.t('settings.dropzone')}
-                    <HelpTooltip content={i18n.t('settings.dropzoneDesc')} />
+                    <IconCircleHelp
+                      title={i18n.t('settings.dropzoneDesc')}
+                      aria-label={i18n.t('settings.dropzoneDesc')}
+                      class="size-3.5 cursor-help text-muted-foreground transition-colors hover:text-foreground"
+                    />
                   </Item.Title>
                 </Item.Content>
                 <Item.Actions class="flex-shrink-0 ml-4">

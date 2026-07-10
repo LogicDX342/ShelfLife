@@ -165,7 +165,6 @@ fn audit_action_kind_label(action_kind: &AuditActionKind) -> &'static str {
         AuditActionKind::Pin => "Pin",
         AuditActionKind::Snooze => "Snooze",
         AuditActionKind::Ignore => "Ignore",
-        AuditActionKind::RulePreview => "Rule preview",
     }
 }
 

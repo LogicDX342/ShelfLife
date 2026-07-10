@@ -16,7 +16,7 @@ use crate::storage::{self, Database};
 
 #[derive(Clone)]
 pub struct AppRuntime {
-    pub db: Arc<Database>,
+    pub db: Database,
     watcher: Arc<Mutex<Option<engine::watcher::ShelflifeDebouncer>>>,
     watching_paused: Arc<AtomicBool>,
     pub(crate) reconciliation_active: Arc<AtomicBool>,
@@ -25,7 +25,7 @@ pub struct AppRuntime {
 }
 
 impl AppRuntime {
-    pub fn new(db: Arc<Database>) -> Self {
+    pub fn new(db: Database) -> Self {
         Self {
             db,
             watcher: Arc::new(Mutex::new(None)),
@@ -151,7 +151,7 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn open_runtime_database(app: &App) -> Result<Arc<Database>, Box<dyn std::error::Error>> {
+fn open_runtime_database(app: &App) -> Result<Database, Box<dyn std::error::Error>> {
     #[cfg(debug_assertions)]
     if mock::is_mock_mode() {
         let workspace = mock::reset_mock_workspace(app)?;

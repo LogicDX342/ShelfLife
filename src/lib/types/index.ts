@@ -79,7 +79,7 @@ export type RuleMatchExplanation = {
 export type UndoStatus =
   'Available' | 'Completed' | { Unavailable: { reason: string } } | { Failed: { reason: string } };
 
-export type AuditActionKind = 'Trash' | 'Move' | 'Pin' | 'Snooze' | 'Ignore' | 'RulePreview';
+export type AuditActionKind = 'Trash' | 'Move' | 'Pin' | 'Snooze' | 'Ignore';
 
 export type AuditEntry = {
   id: string;

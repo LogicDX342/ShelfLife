@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use uuid::Uuid;
 
@@ -16,7 +15,7 @@ pub struct Fixture {
     pub watch: PathBuf,
     pub outside: PathBuf,
     pub safe: PathBuf,
-    pub db: Arc<storage::Database>,
+    pub db: storage::Database,
 }
 
 impl Fixture {

@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use notify::RecursiveMode;
+use notify_debouncer_full::notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
 
 use crate::models::{AppError, WatchTarget};
 
-pub type ShelflifeDebouncer = Debouncer<notify::RecommendedWatcher, FileIdMap>;
+pub type ShelflifeDebouncer = Debouncer<RecommendedWatcher, FileIdMap>;
 pub type WatcherEventSink = Arc<dyn Fn(WatcherEvent) + Send + Sync + 'static>;
 
 #[derive(Debug, Clone)]

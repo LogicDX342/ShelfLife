@@ -77,51 +77,13 @@ pub fn execute_triage_action(
     path: &str,
     action: UserTriageAction,
 ) -> Result<AuditEntry, AppError> {
-    let config = storage::get_config(db)?;
-    let source = PathBuf::from(path);
-    if !source.exists() {
-        return Err(AppError::path_not_found(path));
-    }
-    PathScope::new(&config).ensure_source_scope(&source)?;
-
-    let mut tracked = load_or_create_tracked(db, &source, &config)?;
-    let original_tracked_path = tracked.path.clone();
-    let timestamp = now_seconds();
-    let action = match action {
-        UserTriageAction::Pin => FileAction::Pin,
-        UserTriageAction::Snooze { seconds } => FileAction::Snooze { seconds },
-        UserTriageAction::Ignore => FileAction::Ignore,
-        UserTriageAction::MoveToSafeFolder => FileAction::Move {
-            destination_folder: PathBuf::from(&config.safe_folder_path),
-            rename_template: None,
-        },
-        UserTriageAction::Move { destination_folder } => FileAction::Move {
-            destination_folder: PathBuf::from(destination_folder),
-            rename_template: None,
-        },
-        UserTriageAction::TrashNow => FileAction::Trash,
-    };
-    let applied = apply_file_action(&source, &mut tracked, &config, timestamp, action)?;
-
-    tracked.last_user_action_at = Some(timestamp);
-    storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
-
-    let entry = AuditEntry {
-        id: Uuid::new_v4().to_string(),
-        sequence: storage::audit::next_audit_sequence(db)?,
-        timestamp,
-        action_kind: applied.action_kind,
-        source_path: path.to_string(),
-        destination_path: applied.destination_path,
-        file_name: tracked.file_name.clone(),
-        size_bytes: tracked.size_bytes,
-        rule_id: None,
-        rule_name: None,
-        explanation: None,
-        undo_status: applied.undo_status,
-    };
-    storage::audit::append_audit_entry(db, &entry)?;
-    Ok(entry)
+    execute_file_action(
+        db,
+        path,
+        RequestedFileAction::User(action),
+        SourcePolicy::Watched,
+        ActionAuditContext::default(),
+    )
 }
 
 pub fn execute_automation_rule_action(
@@ -138,43 +100,17 @@ pub fn execute_automation_rule_action(
         ));
     }
 
-    let config = storage::get_config(db)?;
-    let source = PathBuf::from(path);
-    if !source.exists() {
-        return Err(AppError::path_not_found(path));
-    }
-    PathScope::new(&config).ensure_source_scope(&source)?;
-
-    let mut tracked = load_or_create_tracked(db, &source, &config)?;
-    let original_tracked_path = tracked.path.clone();
-    let timestamp = now_seconds();
-    let applied = apply_file_action(
-        &source,
-        &mut tracked,
-        &config,
-        timestamp,
-        file_action_from_rule_action(&rule.action),
-    )?;
-
-    tracked.last_user_action_at = Some(timestamp);
-    storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
-
-    let entry = AuditEntry {
-        id: Uuid::new_v4().to_string(),
-        sequence: storage::audit::next_audit_sequence(db)?,
-        timestamp,
-        action_kind: applied.action_kind,
-        source_path: path.to_string(),
-        destination_path: applied.destination_path,
-        file_name: tracked.file_name.clone(),
-        size_bytes: tracked.size_bytes,
-        rule_id: Some(rule.id.clone()),
-        rule_name: Some(rule.name.clone()),
-        explanation: Some(explanation),
-        undo_status: applied.undo_status,
-    };
-    storage::audit::append_audit_entry(db, &entry)?;
-    Ok(entry)
+    execute_file_action(
+        db,
+        path,
+        RequestedFileAction::Rule(&rule.action),
+        SourcePolicy::Watched,
+        ActionAuditContext {
+            rule_id: Some(rule.id.clone()),
+            rule_name: Some(rule.name.clone()),
+            explanation: Some(explanation),
+        },
+    )
 }
 
 pub fn execute_dropzone_rule_action(
@@ -191,33 +127,77 @@ pub fn execute_dropzone_rule_action(
         ));
     }
 
+    execute_file_action(
+        db,
+        path,
+        RequestedFileAction::Rule(&rule.action),
+        SourcePolicy::Dropzone,
+        ActionAuditContext {
+            rule_id: Some(format!("{DROPZONE_RULE_AUDIT_ID_PREFIX}{}", rule.id)),
+            rule_name: Some(rule.name.clone()),
+            explanation: Some(explanation),
+        },
+    )
+}
+
+enum RequestedFileAction<'a> {
+    User(UserTriageAction),
+    Rule(&'a RuleAction),
+}
+
+enum SourcePolicy {
+    Watched,
+    Dropzone,
+}
+
+#[derive(Default)]
+struct ActionAuditContext {
+    rule_id: Option<String>,
+    rule_name: Option<String>,
+    explanation: Option<RuleMatchExplanation>,
+}
+
+struct AppliedFileAction {
+    action_kind: AuditActionKind,
+    destination_path: Option<String>,
+    undo_status: UndoStatus,
+}
+
+fn execute_file_action(
+    db: &Database,
+    path: &str,
+    requested_action: RequestedFileAction<'_>,
+    source_policy: SourcePolicy,
+    audit: ActionAuditContext,
+) -> Result<AuditEntry, AppError> {
     let config = storage::get_config(db)?;
     let source = PathBuf::from(path);
     if !source.exists() {
         return Err(AppError::path_not_found(path));
     }
-    if !source.is_file() {
-        return Err(AppError::with_details(
-            "PATH_OUT_OF_SCOPE",
-            "Only files can be changed from the dropzone. No file was changed.",
-            true,
-            path,
-        ));
+
+    let action = file_action_from_request(requested_action, &config);
+    match source_policy {
+        SourcePolicy::Watched => PathScope::new(&config).ensure_source_scope(&source)?,
+        SourcePolicy::Dropzone => {
+            if !source.is_file() {
+                return Err(AppError::with_details(
+                    "PATH_OUT_OF_SCOPE",
+                    "Only files can be changed from the dropzone. No file was changed.",
+                    true,
+                    path,
+                ));
+            }
+            if matches!(&action, FileAction::Ignore) {
+                PathScope::new(&config).ensure_source_scope(&source)?;
+            }
+        }
     }
 
     let mut tracked = load_or_create_tracked(db, &source, &config)?;
     let original_tracked_path = tracked.path.clone();
     let timestamp = now_seconds();
-    if matches!(rule.action, RuleAction::Ignore) {
-        PathScope::new(&config).ensure_source_scope(&source)?;
-    }
-    let applied = apply_file_action(
-        &source,
-        &mut tracked,
-        &config,
-        timestamp,
-        file_action_from_rule_action(&rule.action),
-    )?;
+    let applied = apply_file_action(&source, &mut tracked, &config, timestamp, action)?;
 
     tracked.last_user_action_at = Some(timestamp);
     storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
@@ -231,9 +211,9 @@ pub fn execute_dropzone_rule_action(
         destination_path: applied.destination_path,
         file_name: tracked.file_name.clone(),
         size_bytes: tracked.size_bytes,
-        rule_id: Some(format!("{DROPZONE_RULE_AUDIT_ID_PREFIX}{}", rule.id)),
-        rule_name: Some(rule.name.clone()),
-        explanation: Some(explanation),
+        rule_id: audit.rule_id,
+        rule_name: audit.rule_name,
+        explanation: audit.explanation,
         undo_status: applied.undo_status,
     };
     storage::audit::append_audit_entry(db, &entry)?;
@@ -253,10 +233,27 @@ enum FileAction<'a> {
     Trash,
 }
 
-struct AppliedFileAction {
-    action_kind: AuditActionKind,
-    destination_path: Option<String>,
-    undo_status: UndoStatus,
+fn file_action_from_request<'a>(
+    requested_action: RequestedFileAction<'a>,
+    config: &AppConfig,
+) -> FileAction<'a> {
+    match requested_action {
+        RequestedFileAction::User(action) => match action {
+            UserTriageAction::Pin => FileAction::Pin,
+            UserTriageAction::Snooze { seconds } => FileAction::Snooze { seconds },
+            UserTriageAction::Ignore => FileAction::Ignore,
+            UserTriageAction::MoveToSafeFolder => FileAction::Move {
+                destination_folder: PathBuf::from(&config.safe_folder_path),
+                rename_template: None,
+            },
+            UserTriageAction::Move { destination_folder } => FileAction::Move {
+                destination_folder: PathBuf::from(destination_folder),
+                rename_template: None,
+            },
+            UserTriageAction::TrashNow => FileAction::Trash,
+        },
+        RequestedFileAction::Rule(action) => file_action_from_rule_action(action),
+    }
 }
 
 fn file_action_from_rule_action(action: &RuleAction) -> FileAction<'_> {
@@ -434,11 +431,6 @@ pub fn undo_audit_entry(db: &Database, audit_id: &str) -> Result<AuditEntry, App
             undo_state_only(db, &entry)
         }
         AuditActionKind::Trash => undo_trash(db, &entry),
-        AuditActionKind::RulePreview => Err(AppError::new(
-            "UNDO_UNAVAILABLE",
-            "This audit entry has no reliable filesystem undo path.",
-            true,
-        )),
     };
 
     match result {

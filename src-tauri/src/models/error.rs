@@ -1,14 +1,20 @@
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Error)]
-#[error("{code}: {message}")]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct AppError {
     pub code: String,
     pub message: String,
     pub recoverable: bool,
     pub details: Option<String>,
 }
+
+impl std::fmt::Display for AppError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for AppError {}
 
 impl AppError {
     pub fn new(code: impl Into<String>, message: impl Into<String>, recoverable: bool) -> Self {

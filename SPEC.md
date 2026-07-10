@@ -140,11 +140,10 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 
 - Tauri v2.
 - Rust.
-- notify for filesystem event watching.
-- notify-debouncer-full or equivalent debouncing layer for event normalization.
-- SQLite via rusqlite for embedded storage.
+- notify-debouncer-full for filesystem watching and event normalization; it re-exports notify.
+- SQLite via Diesel for embedded storage.
 - Normalized SQLite tables for internal records.
-- serde and serde_json for IPC/config serialization.
+- serde for IPC model serialization and serde_json for Tauri context generation.
 - trash crate or platform-specific equivalent for OS Trash/Recycle Bin behavior.
 - regex and globset for pattern matching.
 
@@ -671,7 +670,6 @@ pub enum AuditActionKind {
     Pin,
     Snooze,
     Ignore,
-    RulePreview,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -744,11 +742,10 @@ This is a breaking storage change from the earlier redb prototype. Existing `.re
 Runtime state:
 
 ```rust
-use std::sync::Arc;
 use crate::storage::Database;
 
 pub struct AppRuntime {
-    pub db: Arc<Database>,
+    pub db: Database,
     // watcher handle, pause flag, reconciliation flag,
     // rule execution flag, scheduler wake condition
 }
@@ -777,11 +774,7 @@ Schema versioning:
 PRAGMA user_version
 ```
 
-Config export/import:
-
-```text
-serde_json
-```
+Config export/import is not implemented.
 
 IPC payloads:
 

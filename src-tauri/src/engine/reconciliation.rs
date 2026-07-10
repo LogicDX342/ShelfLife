@@ -693,7 +693,7 @@ mod tests {
     struct Fixture {
         root: PathBuf,
         watch: PathBuf,
-        db: std::sync::Arc<Database>,
+        db: Database,
     }
 
     impl Fixture {

@@ -309,7 +309,6 @@ fn audit_action_kind_label(kind: &AuditActionKind) -> &'static str {
         AuditActionKind::Pin => "pin",
         AuditActionKind::Snooze => "snooze",
         AuditActionKind::Ignore => "ignore",
-        AuditActionKind::RulePreview => "rule_preview",
     }
 }
 
@@ -320,7 +319,6 @@ fn audit_action_kind_from_label(value: &str) -> Result<AuditActionKind, AppError
         "pin" => Ok(AuditActionKind::Pin),
         "snooze" => Ok(AuditActionKind::Snooze),
         "ignore" => Ok(AuditActionKind::Ignore),
-        "rule_preview" => Ok(AuditActionKind::RulePreview),
         other => Err(storage_data_error(
             "Stored audit action kind is not recognized.",
             other,

@@ -7,7 +7,6 @@ pub mod tracked;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use diesel::prelude::*;
 use diesel::sql_query;
@@ -45,12 +44,12 @@ impl Database {
     }
 }
 
-pub fn open_database(path: impl AsRef<Path>) -> Result<Arc<Database>, AppError> {
+pub fn open_database(path: impl AsRef<Path>) -> Result<Database, AppError> {
     if let Some(parent) = path.as_ref().parent() {
         std::fs::create_dir_all(parent)?;
     }
 
-    let db = Arc::new(Database::new(path.as_ref().to_path_buf()));
+    let db = Database::new(path.as_ref().to_path_buf());
     initialize_database(&db)?;
     Ok(db)
 }
@@ -225,7 +224,7 @@ CREATE TABLE IF NOT EXISTS audit_entries (
     sequence INTEGER PRIMARY KEY,
     id TEXT NOT NULL UNIQUE,
     timestamp INTEGER NOT NULL,
-    action_kind TEXT NOT NULL CHECK (action_kind IN ('trash', 'move', 'pin', 'snooze', 'ignore', 'rule_preview')),
+    action_kind TEXT NOT NULL CHECK (action_kind IN ('trash', 'move', 'pin', 'snooze', 'ignore')),
     source_path TEXT NOT NULL,
     destination_path TEXT,
     file_name TEXT NOT NULL,

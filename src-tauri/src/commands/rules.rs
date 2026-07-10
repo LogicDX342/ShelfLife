@@ -3,8 +3,7 @@ use uuid::Uuid;
 
 use crate::engine::paths::PathScope;
 use crate::models::{
-    AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, RuleAction,
-    RuleMatchExplanation, RuleMode, SizeCondition, UndoStatus,
+    AppConfig, AppError, AutomationRule, RuleAction, RuleMatchExplanation, RuleMode, SizeCondition,
 };
 use crate::rules::explain_file_against_rules;
 use crate::runtime::AppRuntime;
@@ -50,53 +49,32 @@ pub async fn test_rule(
     rule: AutomationRule,
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
     validate_rule(&rule, &storage::get_config(&state.db)?)?;
-    let (explanations, _entries) = build_rule_preview_entries(&state.db, &rule)?;
-    let matched_explanations = explanations
+    let matched_explanations = build_rule_preview_explanations(&state.db, &rule)?
         .into_iter()
         .filter(|exp| exp.proposed_action.is_some())
         .collect();
     Ok(matched_explanations)
 }
 
-fn build_rule_preview_entries(
+fn build_rule_preview_explanations(
     db: &Database,
     rule: &AutomationRule,
-) -> Result<(Vec<RuleMatchExplanation>, Vec<AuditEntry>), AppError> {
+) -> Result<Vec<RuleMatchExplanation>, AppError> {
     let config = storage::get_config(db)?;
-
     let files = storage::tracked::list_tracked_files(db)?;
     let mut explanations = Vec::new();
-    let mut entries = Vec::new();
     let mut test_rule = rule.clone();
     test_rule.enabled = true;
+
     for file in files {
-        let file_explanations =
-            explain_file_against_rules(&file, &config, std::slice::from_ref(&test_rule))?;
-        for explanation in &file_explanations {
-            if explanation.proposed_action.is_some() {
-                let entry = AuditEntry {
-                    id: Uuid::new_v4().to_string(),
-                    sequence: 0,
-                    timestamp: crate::engine::now_seconds(),
-                    action_kind: AuditActionKind::RulePreview,
-                    source_path: file.path.clone(),
-                    destination_path: None,
-                    file_name: file.file_name.clone(),
-                    size_bytes: file.size_bytes,
-                    rule_id: Some(rule.id.clone()),
-                    rule_name: Some(rule.name.clone()),
-                    explanation: Some(explanation.clone()),
-                    undo_status: UndoStatus::Unavailable {
-                        reason: String::from("Preview did not change the file."),
-                    },
-                };
-                entries.push(entry);
-            }
-        }
-        explanations.extend(file_explanations);
+        explanations.extend(explain_file_against_rules(
+            &file,
+            &config,
+            std::slice::from_ref(&test_rule),
+        )?);
     }
 
-    Ok((explanations, entries))
+    Ok(explanations)
 }
 
 #[tauri::command]
@@ -171,10 +149,10 @@ mod tests {
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
 
-    use super::{build_rule_preview_entries, validate_rule};
+    use super::{build_rule_preview_explanations, validate_rule};
 
     #[test]
-    fn rule_preview_creates_audit_rows_without_changing_files() {
+    fn rule_preview_returns_explanations_without_writing_audit_rows() {
         let fixture = Fixture::new("shelflife-rule");
         let file = fixture.write_watch_file("download.zip", "body");
         fixture.save_config();
@@ -182,11 +160,10 @@ mod tests {
 
         let rule = fixture.rule();
 
-        let (explanations, entries) =
-            build_rule_preview_entries(&fixture.db, &rule).expect("preview should build");
+        let explanations =
+            build_rule_preview_explanations(&fixture.db, &rule).expect("preview should build");
 
         assert!(file.exists());
-        assert_eq!(entries.len(), 1);
         assert_eq!(explanations.len(), 1);
         assert_eq!(
             storage::audit::list_audit_entries(&fixture.db)
