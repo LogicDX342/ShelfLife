@@ -21,6 +21,7 @@ pub struct AppRuntime {
     watching_paused: Arc<AtomicBool>,
     pub(crate) reconciliation_active: Arc<AtomicBool>,
     pub(crate) rule_execution_active: Arc<AtomicBool>,
+    engine_operation_gate: Arc<Mutex<()>>,
     rule_scheduler_wake: Arc<(Mutex<bool>, Condvar)>,
 }
 
@@ -32,6 +33,7 @@ impl AppRuntime {
             watching_paused: Arc::new(AtomicBool::new(false)),
             reconciliation_active: Arc::new(AtomicBool::new(false)),
             rule_execution_active: Arc::new(AtomicBool::new(false)),
+            engine_operation_gate: Arc::new(Mutex::new(())),
             rule_scheduler_wake: Arc::new((Mutex::new(false), Condvar::new())),
         }
     }
@@ -42,6 +44,17 @@ impl AppRuntime {
 
     pub fn is_reconciliation_active(&self) -> bool {
         self.reconciliation_active.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn run_exclusive_engine_operation<T>(
+        &self,
+        operation: impl FnOnce() -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        let _guard = self
+            .engine_operation_gate
+            .lock()
+            .expect("engine operation gate should not be poisoned");
+        operation()
     }
 
     pub fn wake_rule_scheduler(&self) {

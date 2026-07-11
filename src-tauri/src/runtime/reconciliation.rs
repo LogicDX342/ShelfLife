@@ -30,10 +30,12 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
             let _ = app.emit("reconciliation_progress", (current, total));
         };
 
-        let result = engine::reconciliation::reconcile_with_report_with_progress(
-            &db,
-            Some(&progress_emitter),
-        );
+        let result = runtime_clone.run_exclusive_engine_operation(|| {
+            engine::reconciliation::reconcile_with_report_with_progress(
+                &db,
+                Some(&progress_emitter),
+            )
+        });
 
         runtime_clone
             .reconciliation_active
@@ -106,7 +108,9 @@ pub fn watcher_event_sink(
 ) -> engine::watcher::WatcherEventSink {
     Arc::new(move |event| match event {
         engine::watcher::WatcherEvent::PathsReady(paths) => {
-            match engine::reconciliation::reconcile_paths(&runtime.db, paths) {
+            match runtime.run_exclusive_engine_operation(|| {
+                engine::reconciliation::reconcile_paths(&runtime.db, paths)
+            }) {
                 Ok(report) => {
                     emit_reconciliation_report(&app_handle, &report);
                     runtime.wake_rule_scheduler();

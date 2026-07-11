@@ -13,17 +13,14 @@ pub fn run_async_expired_rule_execution(app_handle: AppHandle, runtime: AppRunti
     if runtime.rule_execution_active.swap(true, Ordering::SeqCst) {
         return;
     }
-    if runtime.reconciliation_active.load(Ordering::Relaxed) {
-        runtime.rule_execution_active.store(false, Ordering::SeqCst);
-        return;
-    }
 
     let db = runtime.db.clone();
     let app_handle_clone = app_handle.clone();
     let runtime_clone = runtime.clone();
 
     tauri::async_runtime::spawn(async move {
-        let result = engine::execute_expired_automatic_rules(&db);
+        let result = runtime_clone
+            .run_exclusive_engine_operation(|| engine::execute_expired_automatic_rules(&db));
 
         runtime_clone
             .rule_execution_active

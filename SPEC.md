@@ -755,7 +755,8 @@ use crate::storage::Database;
 pub struct AppRuntime {
     pub db: Database,
     // watcher handle, pause flag, reconciliation flag,
-    // rule execution flag, scheduler wake condition
+    // rule execution flag, exclusive engine-operation gate,
+    // scheduler wake condition
 }
 ```
 
@@ -769,6 +770,10 @@ startup, manual, and periodic reconciliation
 automatic rule execution scheduling
 runtime event emission
 ```
+
+Full reconciliation, watcher-driven incremental reconciliation, and automatic rule execution
+share one exclusive runtime gate. Their snapshot-and-write phases must not overlap, so a rule
+action cannot move a file while reconciliation is preparing to persist stale tracked-file state.
 
 `lib.rs` only declares modules and builds the Tauri app. Command modules validate input, persist requested config/model changes, and delegate lifecycle effects to `AppRuntime`.
 
