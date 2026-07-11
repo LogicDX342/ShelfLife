@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use chrono::Local;
@@ -399,7 +400,7 @@ fn apply_prepared_file_action(
                 )
             })?;
             fs::create_dir_all(destination_folder)?;
-            fs::rename(source, destination)?;
+            move_file(source, destination)?;
             apply_tracked_destination(tracked, destination);
             Ok(UndoStatus::Available)
         }
@@ -490,7 +491,7 @@ pub(crate) fn ingest_dropzone_file_audited(
     if let Err(error) = fs::create_dir_all(&destination_folder).map_err(AppError::from) {
         return Err(fail_audited(db, entry, error));
     }
-    if let Err(error) = fs::rename(&source, &destination).map_err(AppError::from) {
+    if let Err(error) = move_file(&source, &destination) {
         return Err(fail_audited(db, entry, error));
     }
 
@@ -589,7 +590,7 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
         ));
     }
 
-    fs::rename(&from, &to)?;
+    move_file(&from, &to)?;
     if let Some(mut tracked) = storage::tracked::get_tracked_file(db, destination)? {
         tracked.path = entry.source_path.clone();
         tracked.file_name = to
@@ -734,6 +735,179 @@ fn apply_tracked_destination(tracked: &mut TrackedFile, destination: &Path) {
         .and_then(|value| value.to_str())
         .unwrap_or(&tracked.file_name)
         .to_string();
+}
+
+fn move_file(source: &Path, destination: &Path) -> Result<(), AppError> {
+    match rename_without_replace(source, destination) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::CrossesDevices => {
+            move_file_across_devices(source, destination)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn rename_without_replace(source: &Path, destination: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
+
+    let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+    let destination: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let moved = unsafe { MoveFileExW(source.as_ptr(), destination.as_ptr(), 0) };
+    if moved == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn rename_without_replace(source: &Path, destination: &Path) -> io::Result<()> {
+    if destination.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "move destination already exists",
+        ));
+    }
+    fs::rename(source, destination)
+}
+
+fn move_file_across_devices(source: &Path, destination: &Path) -> Result<(), AppError> {
+    let destination_parent = destination.parent().ok_or_else(|| {
+        AppError::new(
+            "ACTION_FAILED",
+            "Move destination has no parent folder. No file was changed.",
+            true,
+        )
+    })?;
+    let temporary_path = destination_parent.join(format!(
+        ".shelflife-move-{}.tmp",
+        Uuid::new_v4().as_hyphenated()
+    ));
+
+    let result = (|| {
+        fs::copy(source, &temporary_path)?;
+        sync_copied_file(&temporary_path)?;
+        rename_without_replace(&temporary_path, destination)?;
+
+        if let Err(source_error) = remove_file_for_move(source) {
+            return match remove_file_for_move(destination) {
+                Ok(()) => Err(AppError::with_details(
+                    "ACTION_FAILED",
+                    "Cross-volume move could not remove the source. The destination copy was cleaned up.",
+                    true,
+                    source_error.to_string(),
+                )),
+                Err(rollback_error) => Err(AppError::with_details(
+                    "ACTION_FAILED",
+                    "Cross-volume move copied the file but could not remove the source or roll back the destination.",
+                    true,
+                    format!(
+                        "source_remove={source_error}; destination_cleanup={rollback_error}; destination={}",
+                        destination.to_string_lossy()
+                    ),
+                )),
+            };
+        }
+
+        Ok(())
+    })();
+
+    if result.is_err() {
+        match remove_file_for_move(&temporary_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(cleanup_error) => {
+                return Err(AppError::with_details(
+                    "ACTION_FAILED",
+                    "Cross-volume move failed and its temporary file could not be removed.",
+                    true,
+                    format!(
+                        "temporary_cleanup={cleanup_error}; temporary={}",
+                        temporary_path.to_string_lossy()
+                    ),
+                ));
+            }
+        }
+    }
+
+    result
+}
+
+#[cfg(target_os = "windows")]
+fn sync_copied_file(path: &Path) -> io::Result<()> {
+    let original_permissions = fs::metadata(path)?.permissions();
+    if original_permissions.readonly() {
+        clear_readonly(path)?;
+    }
+
+    let sync_result = fs::File::options()
+        .write(true)
+        .open(path)
+        .and_then(|file| file.sync_all());
+    let restore_result = if original_permissions.readonly() {
+        fs::set_permissions(path, original_permissions)
+    } else {
+        Ok(())
+    };
+    restore_result.and(sync_result)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn sync_copied_file(path: &Path) -> io::Result<()> {
+    fs::File::options().write(true).open(path)?.sync_all()
+}
+
+#[cfg(target_os = "windows")]
+fn remove_file_for_move(path: &Path) -> io::Result<()> {
+    let original_permissions = fs::metadata(path)?.permissions();
+    if original_permissions.readonly() {
+        clear_readonly(path)?;
+    }
+
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            if original_permissions.readonly() {
+                let _ = fs::set_permissions(path, original_permissions);
+            }
+            Err(error)
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn clear_readonly(path: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_READONLY, INVALID_FILE_ATTRIBUTES,
+    };
+
+    let path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let attributes = unsafe { GetFileAttributesW(path.as_ptr()) };
+    if attributes == INVALID_FILE_ATTRIBUTES {
+        return Err(io::Error::last_os_error());
+    }
+
+    let updated =
+        unsafe { SetFileAttributesW(path.as_ptr(), attributes & !FILE_ATTRIBUTE_READONLY) };
+    if updated == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn remove_file_for_move(path: &Path) -> io::Result<()> {
+    fs::remove_file(path)
 }
 
 pub fn move_destination(
@@ -947,7 +1121,8 @@ mod tests {
     use crate::storage::Database;
 
     use super::{
-        execute_triage_action_audited, ingest_dropzone_file_audited, render_rename_template,
+        execute_triage_action_audited, ingest_dropzone_file_audited, move_file_across_devices,
+        render_rename_template,
     };
 
     fn execute_triage_action(
@@ -1003,6 +1178,79 @@ mod tests {
                 .expect("tracked lookup should work")
                 .is_some()
         );
+    }
+
+    #[test]
+    fn cross_device_fallback_copies_flushes_and_removes_source() {
+        let fixture = Fixture::new("shelflife-cross-device-move");
+        let source = fixture.write_outside_file("source.txt", "cross-volume body");
+        let destination = fixture.safe.join("destination.txt");
+
+        move_file_across_devices(&source, &destination)
+            .expect("cross-device fallback should succeed");
+
+        assert!(!source.exists());
+        assert_eq!(
+            std::fs::read_to_string(&destination).expect("destination should be readable"),
+            "cross-volume body"
+        );
+        assert!(std::fs::read_dir(&fixture.safe)
+            .expect("safe folder should be readable")
+            .all(|entry| {
+                !entry
+                    .expect("directory entry should be readable")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".shelflife-move-")
+            }));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn cross_device_fallback_preserves_read_only_files() {
+        let fixture = Fixture::new("shelflife-cross-device-read-only");
+        let source = fixture.write_outside_file("source.txt", "read-only body");
+        let destination = fixture.safe.join("destination.txt");
+        let mut permissions = std::fs::metadata(&source)
+            .expect("source metadata should load")
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&source, permissions).expect("source should become read-only");
+
+        move_file_across_devices(&source, &destination)
+            .expect("read-only cross-device fallback should succeed");
+
+        assert!(!source.exists());
+        assert!(std::fs::metadata(&destination)
+            .expect("destination metadata should load")
+            .permissions()
+            .readonly());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn cross_device_fallback_does_not_overwrite_a_racing_destination() {
+        let fixture = Fixture::new("shelflife-cross-device-collision");
+        let source = fixture.write_outside_file("source.txt", "source body");
+        let destination = fixture.write_file(&fixture.safe.join("destination.txt"), "existing");
+
+        move_file_across_devices(&source, &destination)
+            .expect_err("existing destination should reject the fallback");
+
+        assert!(source.exists());
+        assert_eq!(
+            std::fs::read_to_string(&destination).expect("destination should be readable"),
+            "existing"
+        );
+        assert!(std::fs::read_dir(&fixture.safe)
+            .expect("safe folder should be readable")
+            .all(|entry| {
+                !entry
+                    .expect("directory entry should be readable")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".shelflife-move-")
+            }));
     }
 
     #[test]
