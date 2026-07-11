@@ -6,7 +6,7 @@ use crate::engine::freshness::tracked_file_from_metadata;
 use crate::engine::paths::PathScope;
 use crate::models::{
     AppConfig, AppError, AutomationRule, DropzoneFile, DropzonePreview, DropzoneRejectedFile,
-    DropzoneRuleGroup, OriginEvidence, RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
+    DropzoneRuleGroup, RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
 };
 use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
 use crate::storage::{self, Database};
@@ -195,8 +195,7 @@ pub fn build_dropzone_file(
         .and_then(|value| value.to_str())
         .unwrap_or(path)
         .to_string();
-    let mut tracked = tracked_file_from_metadata(&source, &metadata, None, config, "");
-    tracked.origin = OriginEvidence::Unknown;
+    let tracked = tracked_file_from_metadata(&source, &metadata, None, config, "");
 
     Ok((
         DropzoneFile {
@@ -397,6 +396,33 @@ mod tests {
         assert!(result.rule_groups.is_empty());
         assert!(result.preview_only.is_empty());
         assert_eq!(result.unmatched_files, vec![path_string(&file)]);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn preview_uses_zone_identifier_for_source_domain_rules() {
+        let fixture = Fixture::new("shelflife-dropzone-origin");
+        let file = fixture.write_outside_file("download.zip", "body");
+        let ads_path = format!("{}:Zone.Identifier:$DATA", file.to_string_lossy());
+        std::fs::write(
+            ads_path,
+            "[ZoneTransfer]\nZoneId=3\nHostUrl=https://downloads.example.com/download.zip\n",
+        )
+        .expect("Zone.Identifier should be written");
+        fixture.save_config();
+
+        let mut rule = fixture.rule();
+        rule.mode = RuleMode::AskFirst;
+        rule.conditions.source_domains = vec![String::from("example.com")];
+        storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
+
+        let result = preview_dropzone_files(&fixture.db, &[path_string(&file)])
+            .expect("preview should work");
+
+        assert_eq!(result.rule_groups.len(), 1);
+        assert_eq!(result.rule_groups[0].rule_id, rule.id);
+        assert!(result.preview_only.is_empty());
+        assert!(result.unmatched_files.is_empty());
     }
 
     #[test]
