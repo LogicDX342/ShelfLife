@@ -115,6 +115,10 @@ fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppErr
         })?;
     }
 
+    for domain in &rule.conditions.source_domains {
+        crate::rules::conditions::validate_source_domain_pattern(domain)?;
+    }
+
     if let SizeCondition::Between { min, max } = &rule.conditions.size {
         if min > max {
             return Err(AppError::new(

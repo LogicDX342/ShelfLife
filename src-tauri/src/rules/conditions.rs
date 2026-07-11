@@ -1,4 +1,5 @@
 use globset::{Glob, GlobSetBuilder};
+use url::Url;
 
 use crate::models::{AppError, OriginEvidence, RuleConditions, SizeCondition};
 use crate::rules::regex_cache::cached_regex_is_match;
@@ -134,14 +135,106 @@ fn matches_origin(origin: &OriginEvidence, domains: &[String]) -> Option<String>
     };
 
     for candidate in candidates {
-        let normalized = candidate.to_lowercase();
-        for domain in domains {
-            let domain = domain.to_lowercase();
-            if normalized.contains(&domain) {
-                return Some(domain);
+        let Some(host) = Url::parse(candidate)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_owned))
+        else {
+            continue;
+        };
+
+        for pattern in domains {
+            if matches_pattern(pattern, &host) {
+                return Some(pattern.trim().to_lowercase());
             }
         }
     }
 
     None
+}
+
+fn matches_pattern(pattern: &str, host: &str) -> bool {
+    let pattern = pattern.trim();
+    if pattern == "*" {
+        return true;
+    }
+    let pattern = pattern.strip_suffix('.').unwrap_or(pattern);
+    let host = host.trim_end_matches('.').to_lowercase();
+    let (domain, include_apex) = match pattern.strip_prefix("*.") {
+        Some(domain) => (domain.to_lowercase(), false),
+        None => (pattern.to_lowercase(), true),
+    };
+    (include_apex && host == domain)
+        || (host.ends_with(&domain)
+            && host.len() > domain.len()
+            && host.as_bytes()[host.len() - domain.len() - 1] == b'.')
+}
+
+pub fn validate_source_domain_pattern(pattern: &str) -> Result<(), AppError> {
+    let pattern = pattern.trim();
+    if pattern == "*" {
+        return Ok(());
+    }
+    let pattern = pattern.strip_suffix('.').unwrap_or(pattern);
+    let domain = pattern.strip_prefix("*.").unwrap_or(pattern);
+    if domain.is_empty() || domain.contains('*') || !domain.contains('.') {
+        return Err(AppError::with_details(
+            "RULE_INVALID_SOURCE_DOMAIN",
+            "Source domain must be a domain, *.domain wildcard, or *.",
+            true,
+            pattern.to_owned(),
+        ));
+    }
+    for part in domain.split('.') {
+        if part.is_empty()
+            || part.starts_with('-')
+            || part.ends_with('-')
+            || part.chars().any(|c| !c.is_ascii_alphanumeric() && c != '-')
+        {
+            return Err(AppError::with_details(
+                "RULE_INVALID_SOURCE_DOMAIN",
+                "Source domain must be a domain, *.domain wildcard, or *.",
+                true,
+                pattern.to_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_matches_pattern() {
+        assert!(matches_pattern("*", "example.com"));
+        assert!(matches_pattern("example.com", "example.com"));
+        assert!(matches_pattern("example.com", "sub.example.com"));
+        assert!(matches_pattern("example.com", "sub.sub.example.com"));
+        assert!(matches_pattern("example.com.", "example.com"));
+        assert!(!matches_pattern("example.com", "otherexample.com"));
+        assert!(!matches_pattern("example.com", "example.com.org"));
+
+        assert!(!matches_pattern("*.example.com", "example.com"));
+        assert!(matches_pattern("*.example.com", "sub.example.com"));
+        assert!(matches_pattern("*.example.com", "sub.sub.example.com"));
+        assert!(!matches_pattern("*.example.com", "otherexample.com"));
+    }
+
+    #[test]
+    fn test_validate_source_domain_pattern() {
+        assert!(validate_source_domain_pattern("*").is_ok());
+        assert!(validate_source_domain_pattern("example.com").is_ok());
+        assert!(validate_source_domain_pattern("*.example.com").is_ok());
+        assert!(validate_source_domain_pattern("example.com.").is_ok());
+
+        assert!(validate_source_domain_pattern("").is_err());
+        assert!(validate_source_domain_pattern("example").is_err());
+        assert!(validate_source_domain_pattern("*.example").is_err());
+        assert!(validate_source_domain_pattern("example*").is_err());
+        assert!(validate_source_domain_pattern("example..com").is_err());
+        assert!(validate_source_domain_pattern("example.com..").is_err());
+        assert!(validate_source_domain_pattern("ex_ample.com").is_err());
+        assert!(validate_source_domain_pattern("-example.com").is_err());
+    }
 }
