@@ -23,7 +23,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-diesel = { version = "2.3.10", features = ["sqlite"] }
+diesel = { version = "2.3.11", features = ["sqlite"] }
 libsqlite3-sys = { version = "0.37", features = ["bundled"] }
 notify-debouncer-full = "0.7"
 trash = "5"
