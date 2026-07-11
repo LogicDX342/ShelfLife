@@ -153,7 +153,11 @@ pub fn tracked_file_from_metadata(
         // syscall per file on every scan. A replaced file will have a changed mtime
         // which causes a full re-evaluation including a fresh origin read.
         origin: match existing {
-            Some(file) if !matches!(file.origin, crate::models::OriginEvidence::Unknown) => {
+            Some(file)
+                if file.size_bytes == metadata.len()
+                    && file.last_observed_mtime == last_observed_mtime
+                    && !matches!(file.origin, crate::models::OriginEvidence::Unknown) =>
+            {
                 file.origin.clone()
             }
             _ => read_origin_evidence(path),
@@ -192,4 +196,64 @@ pub fn read_origin_evidence(path: &Path) -> OriginEvidence {
 #[cfg(not(target_os = "windows"))]
 pub fn read_origin_evidence(_path: &Path) -> OriginEvidence {
     OriginEvidence::Unknown
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use crate::models::OriginEvidence;
+    use crate::storage::test_util::Fixture;
+
+    use super::tracked_file_from_metadata;
+
+    fn known_origin() -> OriginEvidence {
+        OriginEvidence::WindowsZoneIdentifier {
+            zone_id: Some(3),
+            host_url: Some(String::from("https://example.com/file")),
+            referrer_url: None,
+        }
+    }
+
+    #[test]
+    fn unchanged_file_reuses_known_origin() {
+        let fixture = Fixture::new("shelflife-origin-reuse");
+        let path = fixture.write_watch_file("download.txt", "body");
+        let metadata = fs::metadata(&path).expect("metadata should exist");
+        let mut existing =
+            tracked_file_from_metadata(&path, &metadata, None, &fixture.config(), "watch");
+        existing.origin = known_origin();
+
+        let refreshed = tracked_file_from_metadata(
+            &path,
+            &metadata,
+            Some(&existing),
+            &fixture.config(),
+            "watch",
+        );
+
+        assert_eq!(refreshed.origin, known_origin());
+    }
+
+    #[test]
+    fn changed_file_does_not_reuse_stale_origin() {
+        let fixture = Fixture::new("shelflife-origin-refresh");
+        let path = fixture.write_watch_file("download.txt", "body");
+        let metadata = fs::metadata(&path).expect("metadata should exist");
+        let mut existing =
+            tracked_file_from_metadata(&path, &metadata, None, &fixture.config(), "watch");
+        existing.origin = known_origin();
+
+        fs::write(&path, "different-sized body").expect("file should be replaced");
+        let changed_metadata = fs::metadata(&path).expect("metadata should exist");
+        let refreshed = tracked_file_from_metadata(
+            &path,
+            &changed_metadata,
+            Some(&existing),
+            &fixture.config(),
+            "watch",
+        );
+
+        assert_ne!(refreshed.origin, known_origin());
+    }
 }
