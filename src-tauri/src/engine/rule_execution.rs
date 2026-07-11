@@ -44,14 +44,18 @@ pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionRep
             Ok(entry) => {
                 entries.push(entry);
             }
-            Err(error) => {
-                let failure_entry = append_failed_rule_execution_audit_entry(
-                    db,
-                    &file,
-                    &candidate.rule,
-                    candidate.explanation,
-                    &error,
-                )?;
+            Err(failure) => {
+                let error = failure.error;
+                let failure_entry = match failure.audit_entry {
+                    Some(entry) => *entry,
+                    None => append_failed_rule_execution_audit_entry(
+                        db,
+                        &file,
+                        &candidate.rule,
+                        candidate.explanation,
+                        &error,
+                    )?,
+                };
                 entries.push(failure_entry);
                 failures.push(error);
                 failed_attempts.insert((file.path.clone(), candidate.rule.id));
@@ -249,13 +253,14 @@ mod tests {
         let fixture = Fixture::new("shelflife-rule-execution");
         fixture.save_config();
         let file = fixture.write_watch_file("download.zip", "body");
+        let blocked_destination = fixture.write_outside_file("not-a-folder", "blocking file");
         fixture.track_file(&file);
         expire_tracked_file(&fixture, &file);
 
         let mut rule = fixture.rule();
         rule.mode = RuleMode::Automatic;
         rule.action = RuleAction::Move {
-            destination_folder: path_string(&fixture.watch),
+            destination_folder: path_string(&blocked_destination),
             rename_template: None,
         };
         storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");

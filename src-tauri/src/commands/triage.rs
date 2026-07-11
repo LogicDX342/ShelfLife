@@ -16,7 +16,7 @@ pub async fn execute_triage_action(
     path: String,
     action: UserTriageAction,
 ) -> Result<AuditEntry, AppError> {
-    match engine::execute_triage_action(&state.db, &path, action) {
+    match engine::executor::execute_triage_action_audited(&state.db, &path, action) {
         Ok(entry) => {
             let _ = app_handle.emit("action_completed", &entry);
             let _ = app_handle.emit("audit_updated", &entry);
@@ -32,9 +32,16 @@ pub async fn execute_triage_action(
             );
             Ok(entry)
         }
-        Err(error) => {
+        Err(failure) => {
+            let error = failure.error;
+            if let Some(entry) = failure.audit_entry {
+                let _ = app_handle.emit("audit_updated", entry.as_ref());
+            }
             let _ = app_handle.emit("action_failed", &error);
-            let mut body = format!("{} No file was silently deleted.", error.message);
+            let mut body = format!(
+                "{} Review the audit log for the recorded action state.",
+                error.message
+            );
             if let Some(details) = &error.details {
                 body = format!("{} Details: {}", body, details);
             }
@@ -51,7 +58,7 @@ pub async fn execute_bulk_triage_action(
     paths: Vec<String>,
     action: UserTriageAction,
 ) -> Result<BulkTriageResult, AppError> {
-    let result = execute_bulk_triage(&state.db, paths, action)?;
+    let (result, failure_audits) = execute_bulk_triage_audited(&state.db, paths, action)?;
 
     for entry in &result.entries {
         let _ = app_handle.emit("action_completed", entry);
@@ -59,6 +66,9 @@ pub async fn execute_bulk_triage_action(
     }
     for failure in &result.failures {
         let _ = app_handle.emit("action_failed", &failure.error);
+    }
+    for entry in &failure_audits {
+        let _ = app_handle.emit("audit_updated", entry);
     }
 
     notify_if_enabled(
@@ -75,22 +85,31 @@ pub async fn execute_bulk_triage_action(
     Ok(result)
 }
 
-fn execute_bulk_triage(
+fn execute_bulk_triage_audited(
     db: &Database,
     paths: Vec<String>,
     action: UserTriageAction,
-) -> Result<BulkTriageResult, AppError> {
+) -> Result<(BulkTriageResult, Vec<AuditEntry>), AppError> {
     let mut entries = Vec::new();
     let mut failures = Vec::new();
+    let mut failure_audits = Vec::new();
 
     for path in paths {
-        match engine::execute_triage_action(db, &path, action.clone()) {
+        match engine::executor::execute_triage_action_audited(db, &path, action.clone()) {
             Ok(entry) => entries.push(entry),
-            Err(error) => failures.push(BulkTriageFailure { path, error }),
+            Err(failure) => {
+                if let Some(entry) = failure.audit_entry {
+                    failure_audits.push(*entry);
+                }
+                failures.push(BulkTriageFailure {
+                    path,
+                    error: failure.error,
+                });
+            }
         }
     }
 
-    Ok(BulkTriageResult { entries, failures })
+    Ok((BulkTriageResult { entries, failures }, failure_audits))
 }
 
 #[tauri::command]
@@ -183,7 +202,7 @@ mod tests {
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
 
-    use super::execute_bulk_triage;
+    use super::execute_bulk_triage_audited;
 
     #[test]
     fn bulk_triage_records_each_success_and_reports_failures() {
@@ -193,7 +212,7 @@ mod tests {
         let outside = fixture.write_outside_file("outside.txt", "outside");
         fixture.save_config();
 
-        let result = execute_bulk_triage(
+        let (result, _) = execute_bulk_triage_audited(
             &fixture.db,
             vec![
                 path_string(&first),

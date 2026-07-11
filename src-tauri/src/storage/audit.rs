@@ -104,7 +104,10 @@ pub fn update_audit_entry(db: &Database, entry: &AuditEntry) -> Result<(), AppEr
     })
 }
 
-fn upsert_audit_entry_tx(conn: &mut SqliteConnection, entry: &AuditEntry) -> Result<(), AppError> {
+pub(crate) fn upsert_audit_entry_tx(
+    conn: &mut SqliteConnection,
+    entry: &AuditEntry,
+) -> Result<(), AppError> {
     let (undo_status_kind, undo_status_reason) = undo_status_parts(&entry.undo_status);
     let explanation = entry.explanation.as_ref();
     let (proposed_action_kind, proposed_action_destination_folder, proposed_action_rename_template) =

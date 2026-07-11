@@ -93,7 +93,6 @@
     "disabled": "Disabled",
     "testRule": "Test Rule",
     "testResults": "Test Results",
-    "refresh": "Refresh",
     "editRule": "Edit Rule: {name}",
     "errorDelete": "Could not delete rule.",
     "errorUpdateStatus": "Could not update rule status.",
@@ -294,6 +293,7 @@
   "error": {
     "details": "Details",
     "ACTION_FAILED": "The action failed.",
+    "ACTION_FINALIZATION_FAILED": "The file changed, but its final database state could not be saved. Check the audit log.",
     "DATABASE_ERROR": "Database operation failed.",
     "PATH_NOT_FOUND": "The file path does not exist. No file was changed.",
     "PATH_OUT_OF_SCOPE": "The path is outside configured watch targets or the safe folder. No file was changed.",

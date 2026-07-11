@@ -723,6 +723,14 @@ Name collision prevents restoring original path.
 Permission denied.
 ```
 
+### 10.5 Write-ahead action auditing
+
+Every file-changing action writes an audit intent before touching the file. The intent records the
+source, planned destination when applicable, action kind, and rule explanation. After the
+filesystem step, the tracked-file update and final audit status are committed in one database
+transaction. A failed filesystem step marks the intent as failed; interruption or persistence
+failure therefore leaves a durable audit record instead of an unlogged file change.
+
 ---
 
 ## 11. Storage Layer

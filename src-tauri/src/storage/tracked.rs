@@ -79,13 +79,19 @@ pub fn replace_tracked_file(
     original_path: &str,
     file: &TrackedFile,
 ) -> Result<(), AppError> {
-    let removes = if original_path == file.path {
-        Vec::new()
-    } else {
-        vec![original_path.to_string()]
-    };
+    db.write(|conn| replace_tracked_file_tx(conn, original_path, file))
+}
 
-    update_tracked_files_batch(db, vec![file.clone()], removes)
+pub(crate) fn replace_tracked_file_tx(
+    conn: &mut SqliteConnection,
+    original_path: &str,
+    file: &TrackedFile,
+) -> Result<(), AppError> {
+    if original_path != file.path {
+        diesel::delete(tracked_files::table.filter(tracked_files::path.eq(original_path)))
+            .execute(conn)?;
+    }
+    upsert_tracked_file_tx(conn, file)
 }
 
 /// Write all file changes in a single transaction.
@@ -132,7 +138,10 @@ pub fn update_tracked_files_batch_with_progress(
     })
 }
 
-fn upsert_tracked_file_tx(conn: &mut SqliteConnection, file: &TrackedFile) -> Result<(), AppError> {
+pub(crate) fn upsert_tracked_file_tx(
+    conn: &mut SqliteConnection,
+    file: &TrackedFile,
+) -> Result<(), AppError> {
     let (expiry_kind, expires_at) = expiry_parts(&file.expiry)?;
     let origin = origin_parts(&file.origin)?;
     let row = TrackedWriteRow {

@@ -13,7 +13,9 @@ use diesel::sql_query;
 use diesel::sql_types::{BigInt, Integer, Text};
 use diesel::sqlite::SqliteConnection;
 
-use crate::models::{AppConfig, AppError, CloseBehavior, RuleAction, RuleMode, WatchTarget};
+use crate::models::{
+    AppConfig, AppError, AuditEntry, CloseBehavior, RuleAction, RuleMode, TrackedFile, WatchTarget,
+};
 use crate::storage::schema::{app_config, watch_targets};
 
 const SCHEMA_VERSION: i64 = 1;
@@ -52,6 +54,18 @@ pub fn open_database(path: impl AsRef<Path>) -> Result<Database, AppError> {
     let db = Database::new(path.as_ref().to_path_buf());
     initialize_database(&db)?;
     Ok(db)
+}
+
+pub(crate) fn finalize_file_action(
+    db: &Database,
+    original_path: &str,
+    file: &TrackedFile,
+    audit_entry: &AuditEntry,
+) -> Result<(), AppError> {
+    db.write(|conn| {
+        tracked::replace_tracked_file_tx(conn, original_path, file)?;
+        audit::upsert_audit_entry_tx(conn, audit_entry)
+    })
 }
 
 fn configure_connection(conn: &mut SqliteConnection) -> Result<(), AppError> {

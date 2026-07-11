@@ -93,7 +93,6 @@
     "disabled": "已禁用",
     "testRule": "测试规则",
     "testResults": "测试结果",
-    "refresh": "刷新",
     "editRule": "编辑规则：{name}",
     "errorDelete": "删除规则失败。",
     "errorUpdateStatus": "更新规则状态失败。",
@@ -294,6 +293,7 @@
   "error": {
     "details": "详细信息",
     "ACTION_FAILED": "操作失败。",
+    "ACTION_FINALIZATION_FAILED": "文件已更改，但最终数据库状态无法保存。请检查审计日志。",
     "DATABASE_ERROR": "数据库操作失败。",
     "PATH_NOT_FOUND": "文件路径不存在，未更改任何文件。",
     "PATH_OUT_OF_SCOPE": "该路径不在已配置的监控目标或安全文件夹内，未更改任何文件。",

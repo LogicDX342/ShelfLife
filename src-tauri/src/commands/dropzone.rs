@@ -33,7 +33,7 @@ pub async fn execute_dropzone_ingest(
     };
 
     for path in paths {
-        match engine::ingest_dropzone_file(&state.db, &path, &watch_target_id) {
+        match engine::executor::ingest_dropzone_file_audited(&state.db, &path, &watch_target_id) {
             Ok(entry) => {
                 let _ = app_handle.emit("action_completed", &entry);
                 let _ = app_handle.emit("audit_updated", &entry);
@@ -42,7 +42,15 @@ pub async fn execute_dropzone_ingest(
                 }
                 result.entries.push(entry);
             }
-            Err(error) => result.failures.push(DropzoneActionFailure { path, error }),
+            Err(failure) => {
+                if let Some(entry) = failure.audit_entry {
+                    let _ = app_handle.emit("audit_updated", entry.as_ref());
+                }
+                result.failures.push(DropzoneActionFailure {
+                    path,
+                    error: failure.error,
+                });
+            }
         }
     }
 
@@ -90,7 +98,7 @@ pub async fn execute_dropzone_rule_group(
     };
 
     for path in paths {
-        let execution = (|| {
+        let execution: Result<_, engine::executor::FileActionFailure> = (|| {
             let (_, tracked) = engine::dropzone::build_dropzone_file(&path, &config)?;
             let decision =
                 decide_file_against_rules(&tracked, &config, &rules, RuleDecisionScope::Dropzone)?;
@@ -104,21 +112,22 @@ pub async fn execute_dropzone_rule_group(
                         "RULE_NOT_MATCHED",
                         "The selected rule is no longer the effective match for this file. No file was changed.",
                         true,
-                    ));
+                    ).into());
             };
             if effective_rule.id != rule_id {
                 return Err(AppError::new(
                         "RULE_NOT_MATCHED",
                         "The selected rule is no longer the effective match for this file. No file was changed.",
                         true,
-                    ));
+                    ).into());
             }
             if matches!(effective_rule.mode, RuleMode::PreviewOnly) {
                 return Err(AppError::new(
                     "RULE_NOT_EXECUTABLE",
                     "PreviewOnly rules cannot change files from the dropzone.",
                     true,
-                ));
+                )
+                .into());
             }
             if matches!(effective_rule.action, RuleAction::Ignore)
                 && !scope.is_in_enabled_watch_target(Path::new(&path))
@@ -127,12 +136,18 @@ pub async fn execute_dropzone_rule_group(
                     "RULE_NOT_EXECUTABLE",
                     "Ignore rules can only change files inside watch targets from the dropzone.",
                     true,
-                ));
+                )
+                .into());
             }
 
             let mut explanation = *effective_explanation;
             explanation.message = format!("Dropzone: {}", explanation.message);
-            engine::execute_dropzone_rule_action(&state.db, &path, &effective_rule, explanation)
+            engine::executor::execute_dropzone_rule_action_audited(
+                &state.db,
+                &path,
+                &effective_rule,
+                explanation,
+            )
         })();
 
         match execution {
@@ -141,7 +156,15 @@ pub async fn execute_dropzone_rule_group(
                 let _ = app_handle.emit("audit_updated", &entry);
                 result.entries.push(entry);
             }
-            Err(error) => result.failures.push(DropzoneActionFailure { path, error }),
+            Err(failure) => {
+                if let Some(entry) = failure.audit_entry {
+                    let _ = app_handle.emit("audit_updated", entry.as_ref());
+                }
+                result.failures.push(DropzoneActionFailure {
+                    path,
+                    error: failure.error,
+                });
+            }
         }
     }
 

@@ -72,11 +72,11 @@ fn check_trash_support() -> bool {
     }
 }
 
-pub fn execute_triage_action(
+pub(crate) fn execute_triage_action_audited(
     db: &Database,
     path: &str,
     action: UserTriageAction,
-) -> Result<AuditEntry, AppError> {
+) -> Result<AuditEntry, FileActionFailure> {
     execute_file_action(
         db,
         path,
@@ -86,18 +86,19 @@ pub fn execute_triage_action(
     )
 }
 
-pub fn execute_automation_rule_action(
+pub(crate) fn execute_automation_rule_action(
     db: &Database,
     path: &str,
     rule: &AutomationRule,
     explanation: RuleMatchExplanation,
-) -> Result<AuditEntry, AppError> {
+) -> Result<AuditEntry, FileActionFailure> {
     if !matches!(rule.mode, RuleMode::Automatic) {
         return Err(AppError::new(
             "RULE_NOT_AUTOMATIC",
             "Only automatic rules can execute without user confirmation.",
             true,
-        ));
+        )
+        .into());
     }
 
     execute_file_action(
@@ -113,18 +114,19 @@ pub fn execute_automation_rule_action(
     )
 }
 
-pub fn execute_dropzone_rule_action(
+pub(crate) fn execute_dropzone_rule_action_audited(
     db: &Database,
     path: &str,
     rule: &AutomationRule,
     explanation: RuleMatchExplanation,
-) -> Result<AuditEntry, AppError> {
+) -> Result<AuditEntry, FileActionFailure> {
     if matches!(rule.mode, RuleMode::PreviewOnly) {
         return Err(AppError::new(
             "RULE_NOT_EXECUTABLE",
             "PreviewOnly rules cannot change files from the dropzone.",
             true,
-        ));
+        )
+        .into());
     }
 
     execute_file_action(
@@ -157,10 +159,18 @@ struct ActionAuditContext {
     explanation: Option<RuleMatchExplanation>,
 }
 
-struct AppliedFileAction {
-    action_kind: AuditActionKind,
-    destination_path: Option<String>,
-    undo_status: UndoStatus,
+pub(crate) struct FileActionFailure {
+    pub error: AppError,
+    pub audit_entry: Option<Box<AuditEntry>>,
+}
+
+impl From<AppError> for FileActionFailure {
+    fn from(error: AppError) -> Self {
+        Self {
+            error,
+            audit_entry: None,
+        }
+    }
 }
 
 fn execute_file_action(
@@ -169,14 +179,13 @@ fn execute_file_action(
     requested_action: RequestedFileAction<'_>,
     source_policy: SourcePolicy,
     audit: ActionAuditContext,
-) -> Result<AuditEntry, AppError> {
+) -> Result<AuditEntry, FileActionFailure> {
     let config = storage::get_config(db)?;
     let source = PathBuf::from(path);
     if !source.exists() {
-        return Err(AppError::path_not_found(path));
+        return Err(AppError::path_not_found(path).into());
     }
 
-    let action = file_action_from_request(requested_action, &config);
     match source_policy {
         SourcePolicy::Watched => PathScope::new(&config).ensure_source_scope(&source)?,
         SourcePolicy::Dropzone => {
@@ -186,9 +195,14 @@ fn execute_file_action(
                     "Only files can be changed from the dropzone. No file was changed.",
                     true,
                     path,
-                ));
+                )
+                .into());
             }
-            if matches!(&action, FileAction::Ignore) {
+            if matches!(
+                &requested_action,
+                RequestedFileAction::User(UserTriageAction::Ignore)
+                    | RequestedFileAction::Rule(RuleAction::Ignore)
+            ) {
                 PathScope::new(&config).ensure_source_scope(&source)?;
             }
         }
@@ -197,124 +211,199 @@ fn execute_file_action(
     let mut tracked = load_or_create_tracked(db, &source, &config)?;
     let original_tracked_path = tracked.path.clone();
     let timestamp = now_seconds();
-    let applied = apply_file_action(&source, &mut tracked, &config, timestamp, action)?;
-
-    tracked.last_user_action_at = Some(timestamp);
-    storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
-
-    let entry = AuditEntry {
+    let prepared = prepare_file_action(&source, &config, timestamp, requested_action)?;
+    let (destination_path, file_name) = match &prepared {
+        PreparedFileAction::Move { destination } => (
+            Some(destination.to_string_lossy().to_string()),
+            destination
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&tracked.file_name)
+                .to_string(),
+        ),
+        _ => (None, tracked.file_name.clone()),
+    };
+    let mut entry = AuditEntry {
         id: Uuid::new_v4().to_string(),
         sequence: storage::audit::next_audit_sequence(db)?,
         timestamp,
-        action_kind: applied.action_kind,
+        action_kind: prepared.action_kind(),
         source_path: path.to_string(),
-        destination_path: applied.destination_path,
-        file_name: tracked.file_name.clone(),
+        destination_path,
+        file_name,
         size_bytes: tracked.size_bytes,
         rule_id: audit.rule_id,
         rule_name: audit.rule_name,
         explanation: audit.explanation,
-        undo_status: applied.undo_status,
+        undo_status: unavailable_pending_status(),
     };
     storage::audit::append_audit_entry(db, &entry)?;
+
+    let undo_status = match apply_prepared_file_action(&source, &mut tracked, &prepared) {
+        Ok(status) => status,
+        Err(error) => return Err(fail_audited(db, entry, error)),
+    };
+
+    tracked.last_user_action_at = Some(timestamp);
+    entry.undo_status = undo_status;
+    if let Err(error) = finalize_recorded_action(db, &original_tracked_path, &tracked, &entry) {
+        return Err(fail_audited(db, entry, error));
+    }
+
     Ok(entry)
 }
 
-enum FileAction<'a> {
+fn unavailable_pending_status() -> UndoStatus {
+    UndoStatus::Unavailable {
+        reason: String::from("Action is recorded and awaiting finalization."),
+    }
+}
+
+fn fail_audited(db: &Database, mut entry: AuditEntry, error: AppError) -> FileActionFailure {
+    let reason = match &error.details {
+        Some(details) => format!("{} Details: {}", error.message, details),
+        None => error.message.clone(),
+    };
+    entry.undo_status = UndoStatus::Failed { reason };
+    let _ = storage::audit::update_audit_entry(db, &entry);
+    FileActionFailure {
+        error,
+        audit_entry: Some(Box::new(entry)),
+    }
+}
+
+fn finalize_recorded_action(
+    db: &Database,
+    original_tracked_path: &str,
+    tracked: &TrackedFile,
+    entry: &AuditEntry,
+) -> Result<(), AppError> {
+    storage::finalize_file_action(db, original_tracked_path, tracked, entry).map_err(|error| {
+        let AppError {
+            code,
+            message,
+            details,
+            ..
+        } = error;
+        let cause = details.unwrap_or(message);
+        AppError::with_details(
+            "ACTION_FINALIZATION_FAILED",
+            "The file action completed, but its final database state could not be saved. The audit intent remains recorded.",
+            true,
+            format!("{code}: {cause}"),
+        )
+    })
+}
+
+enum PreparedFileAction {
     Pin,
-    Snooze {
-        seconds: u64,
-    },
+    Snooze { until: u64 },
     Ignore,
-    Move {
-        destination_folder: PathBuf,
-        rename_template: Option<&'a str>,
-    },
+    Move { destination: PathBuf },
     Trash,
 }
 
-fn file_action_from_request<'a>(
-    requested_action: RequestedFileAction<'a>,
-    config: &AppConfig,
-) -> FileAction<'a> {
-    match requested_action {
-        RequestedFileAction::User(action) => match action {
-            UserTriageAction::Pin => FileAction::Pin,
-            UserTriageAction::Snooze { seconds } => FileAction::Snooze { seconds },
-            UserTriageAction::Ignore => FileAction::Ignore,
-            UserTriageAction::MoveToSafeFolder => FileAction::Move {
-                destination_folder: PathBuf::from(&config.safe_folder_path),
-                rename_template: None,
-            },
-            UserTriageAction::Move { destination_folder } => FileAction::Move {
-                destination_folder: PathBuf::from(destination_folder),
-                rename_template: None,
-            },
-            UserTriageAction::TrashNow => FileAction::Trash,
-        },
-        RequestedFileAction::Rule(action) => file_action_from_rule_action(action),
+impl PreparedFileAction {
+    fn action_kind(&self) -> AuditActionKind {
+        match self {
+            Self::Pin => AuditActionKind::Pin,
+            Self::Snooze { .. } => AuditActionKind::Snooze,
+            Self::Ignore => AuditActionKind::Ignore,
+            Self::Move { .. } => AuditActionKind::Move,
+            Self::Trash => AuditActionKind::Trash,
+        }
     }
 }
 
-fn file_action_from_rule_action(action: &RuleAction) -> FileAction<'_> {
-    match action {
-        RuleAction::Ignore => FileAction::Ignore,
-        RuleAction::Move {
-            destination_folder,
-            rename_template,
-        } => FileAction::Move {
-            destination_folder: PathBuf::from(destination_folder),
-            rename_template: rename_template.as_deref(),
-        },
-        RuleAction::Trash => FileAction::Trash,
-    }
-}
-
-fn apply_file_action(
+fn prepare_file_action(
     source: &Path,
-    tracked: &mut TrackedFile,
     config: &AppConfig,
     timestamp: u64,
-    action: FileAction<'_>,
-) -> Result<AppliedFileAction, AppError> {
-    let mut destination_path = None;
-    let action_kind;
-    let undo_status;
-
+    action: RequestedFileAction<'_>,
+) -> Result<PreparedFileAction, AppError> {
     match action {
-        FileAction::Pin => {
-            tracked.state = FileDecayState::Pinned;
-            tracked.expiry = Expiry::Permanent;
-            action_kind = AuditActionKind::Pin;
-            undo_status = UndoStatus::Available;
+        RequestedFileAction::User(UserTriageAction::Pin) => Ok(PreparedFileAction::Pin),
+        RequestedFileAction::User(UserTriageAction::Snooze { seconds }) => {
+            let until = timestamp.checked_add(seconds).ok_or_else(|| {
+                AppError::new(
+                    "ACTION_FAILED",
+                    "Snooze duration is too large. No file was changed.",
+                    true,
+                )
+            })?;
+            Ok(PreparedFileAction::Snooze { until })
         }
-        FileAction::Snooze { seconds } => {
-            let until = timestamp + seconds;
-            tracked.freshness_at = until;
-            tracked.expiry = Expiry::SnoozedUntil(until);
-            tracked.state = FileDecayState::Fresh;
-            action_kind = AuditActionKind::Snooze;
-            undo_status = UndoStatus::Available;
+        RequestedFileAction::User(UserTriageAction::Ignore) => Ok(PreparedFileAction::Ignore),
+        RequestedFileAction::User(UserTriageAction::MoveToSafeFolder) => prepare_move_action(
+            source,
+            config,
+            PathBuf::from(&config.safe_folder_path),
+            None,
+        ),
+        RequestedFileAction::User(UserTriageAction::Move { destination_folder }) => {
+            prepare_move_action(source, config, PathBuf::from(destination_folder), None)
         }
-        FileAction::Ignore => {
-            tracked.state = FileDecayState::Ignored;
-            action_kind = AuditActionKind::Ignore;
-            undo_status = UndoStatus::Available;
-        }
-        FileAction::Move {
+        RequestedFileAction::User(UserTriageAction::TrashNow) => Ok(PreparedFileAction::Trash),
+        RequestedFileAction::Rule(RuleAction::Ignore) => Ok(PreparedFileAction::Ignore),
+        RequestedFileAction::Rule(RuleAction::Move {
             destination_folder,
             rename_template,
-        } => {
-            PathScope::new(config).validate_move_destination(&destination_folder)?;
-            fs::create_dir_all(&destination_folder)?;
-            let destination = move_destination(source, &destination_folder, rename_template)?;
-            fs::rename(source, &destination)?;
-            destination_path = Some(destination.to_string_lossy().to_string());
-            apply_tracked_destination(tracked, &destination);
-            action_kind = AuditActionKind::Move;
-            undo_status = UndoStatus::Available;
+        }) => prepare_move_action(
+            source,
+            config,
+            PathBuf::from(destination_folder),
+            rename_template.as_deref(),
+        ),
+        RequestedFileAction::Rule(RuleAction::Trash) => Ok(PreparedFileAction::Trash),
+    }
+}
+
+fn prepare_move_action(
+    source: &Path,
+    config: &AppConfig,
+    destination_folder: PathBuf,
+    rename_template: Option<&str>,
+) -> Result<PreparedFileAction, AppError> {
+    PathScope::new(config).validate_move_destination(&destination_folder)?;
+    let destination = move_destination(source, &destination_folder, rename_template)?;
+    Ok(PreparedFileAction::Move { destination })
+}
+
+fn apply_prepared_file_action(
+    source: &Path,
+    tracked: &mut TrackedFile,
+    action: &PreparedFileAction,
+) -> Result<UndoStatus, AppError> {
+    match action {
+        PreparedFileAction::Pin => {
+            tracked.state = FileDecayState::Pinned;
+            tracked.expiry = Expiry::Permanent;
+            Ok(UndoStatus::Available)
         }
-        FileAction::Trash => {
+        PreparedFileAction::Snooze { until } => {
+            tracked.freshness_at = *until;
+            tracked.expiry = Expiry::SnoozedUntil(*until);
+            tracked.state = FileDecayState::Fresh;
+            Ok(UndoStatus::Available)
+        }
+        PreparedFileAction::Ignore => {
+            tracked.state = FileDecayState::Ignored;
+            Ok(UndoStatus::Available)
+        }
+        PreparedFileAction::Move { destination } => {
+            let destination_folder = destination.parent().ok_or_else(|| {
+                AppError::new(
+                    "ACTION_FAILED",
+                    "Move destination has no parent folder. No file was changed.",
+                    true,
+                )
+            })?;
+            fs::create_dir_all(destination_folder)?;
+            fs::rename(source, destination)?;
+            apply_tracked_destination(tracked, destination);
+            Ok(UndoStatus::Available)
+        }
+        PreparedFileAction::Trash => {
             trash::delete(source).map_err(|error| {
                 AppError::with_details(
                     "ACTION_FAILED",
@@ -324,16 +413,9 @@ fn apply_file_action(
                 )
             })?;
             tracked.state = FileDecayState::Missing;
-            action_kind = AuditActionKind::Trash;
-            undo_status = recycle_bin_undo_status();
+            Ok(recycle_bin_undo_status())
         }
     }
-
-    Ok(AppliedFileAction {
-        action_kind,
-        destination_path,
-        undo_status,
-    })
 }
 
 fn recycle_bin_undo_status() -> UndoStatus {
@@ -348,11 +430,11 @@ fn recycle_bin_undo_status() -> UndoStatus {
     }
 }
 
-pub fn ingest_dropzone_file(
+pub(crate) fn ingest_dropzone_file_audited(
     db: &Database,
     path: &str,
     watch_target_id: &str,
-) -> Result<AuditEntry, AppError> {
+) -> Result<AuditEntry, FileActionFailure> {
     let config = storage::get_config(db)?;
     let target = config
         .watch_targets
@@ -368,7 +450,7 @@ pub fn ingest_dropzone_file(
 
     let source = PathBuf::from(path);
     if !source.exists() {
-        return Err(AppError::path_not_found(path));
+        return Err(AppError::path_not_found(path).into());
     }
     if !source.is_file() {
         return Err(AppError::with_details(
@@ -376,37 +458,55 @@ pub fn ingest_dropzone_file(
             "Only files can be moved into a watch target from the dropzone. No file was changed.",
             true,
             path,
-        ));
+        )
+        .into());
     }
 
     let destination_folder = PathBuf::from(&target.path);
-    fs::create_dir_all(&destination_folder)?;
     let destination = move_destination(&source, &destination_folder, None)?;
     let original_tracked_path = source.to_string_lossy().to_string();
-    fs::rename(&source, &destination)?;
-
-    let metadata = fs::metadata(&destination)?;
-    let mut tracked =
-        tracked_file_from_metadata(&destination, &metadata, None, &config, &target.id);
     let timestamp = now_seconds();
-    tracked.last_user_action_at = Some(timestamp);
-    storage::tracked::replace_tracked_file(db, &original_tracked_path, &tracked)?;
-
-    let entry = AuditEntry {
+    let source_metadata = fs::metadata(&source).map_err(AppError::from)?;
+    let mut entry = AuditEntry {
         id: Uuid::new_v4().to_string(),
         sequence: storage::audit::next_audit_sequence(db)?,
         timestamp,
         action_kind: AuditActionKind::Move,
         source_path: path.to_string(),
         destination_path: Some(destination.to_string_lossy().to_string()),
-        file_name: tracked.file_name.clone(),
-        size_bytes: tracked.size_bytes,
+        file_name: destination
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(path)
+            .to_string(),
+        size_bytes: source_metadata.len(),
         rule_id: Some(String::from(DROPZONE_INGEST_AUDIT_ID)),
         rule_name: Some(String::from("Dropzone ingest")),
         explanation: None,
-        undo_status: UndoStatus::Available,
+        undo_status: unavailable_pending_status(),
     };
     storage::audit::append_audit_entry(db, &entry)?;
+
+    if let Err(error) = fs::create_dir_all(&destination_folder).map_err(AppError::from) {
+        return Err(fail_audited(db, entry, error));
+    }
+    if let Err(error) = fs::rename(&source, &destination).map_err(AppError::from) {
+        return Err(fail_audited(db, entry, error));
+    }
+
+    let metadata = match fs::metadata(&destination).map_err(AppError::from) {
+        Ok(metadata) => metadata,
+        Err(error) => return Err(fail_audited(db, entry, error)),
+    };
+    let mut tracked =
+        tracked_file_from_metadata(&destination, &metadata, None, &config, &target.id);
+    tracked.last_user_action_at = Some(timestamp);
+
+    entry.undo_status = UndoStatus::Available;
+    if let Err(error) = finalize_recorded_action(db, &original_tracked_path, &tracked, &entry) {
+        return Err(fail_audited(db, entry, error));
+    }
+
     Ok(entry)
 }
 
@@ -839,11 +939,32 @@ fn unique_destination(path: &Path) -> PathBuf {
 mod tests {
     use std::path::Path;
 
-    use crate::models::{AuditActionKind, FileDecayState, UndoStatus, UserTriageAction};
+    use crate::models::{
+        AppError, AuditActionKind, AuditEntry, FileDecayState, UndoStatus, UserTriageAction,
+    };
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
+    use crate::storage::Database;
 
-    use super::{execute_triage_action, ingest_dropzone_file, render_rename_template};
+    use super::{
+        execute_triage_action_audited, ingest_dropzone_file_audited, render_rename_template,
+    };
+
+    fn execute_triage_action(
+        db: &Database,
+        path: &str,
+        action: UserTriageAction,
+    ) -> Result<AuditEntry, AppError> {
+        execute_triage_action_audited(db, path, action).map_err(|failure| failure.error)
+    }
+
+    fn ingest_dropzone_file(
+        db: &Database,
+        path: &str,
+        watch_target_id: &str,
+    ) -> Result<AuditEntry, AppError> {
+        ingest_dropzone_file_audited(db, path, watch_target_id).map_err(|failure| failure.error)
+    }
 
     #[test]
     fn manual_move_preserves_name_avoids_collision_and_updates_tracked_path() {
@@ -969,6 +1090,34 @@ mod tests {
         assert_eq!(error.code, "RULE_INVALID_DESTINATION");
         assert!(source.exists());
         assert!(!destination_folder.exists());
+    }
+
+    #[test]
+    fn failed_filesystem_action_keeps_write_ahead_audit() {
+        let fixture = Fixture::new("shelflife-test");
+        let source = fixture.write_watch_file("report.txt", "download");
+        fixture.save_config();
+        let destination_folder = fixture.outside.join("not-a-folder");
+        fixture.write_file(&destination_folder, "blocking file");
+
+        execute_triage_action(
+            &fixture.db,
+            &path_string(&source),
+            UserTriageAction::Move {
+                destination_folder: path_string(&destination_folder),
+            },
+        )
+        .expect_err("move into a file path should fail");
+
+        let entries =
+            storage::audit::list_audit_entries(&fixture.db).expect("write-ahead audit should load");
+        assert!(source.exists());
+        assert_eq!(entries.len(), 1);
+        assert!(matches!(entries[0].undo_status, UndoStatus::Failed { .. }));
+        assert_eq!(
+            entries[0].destination_path,
+            Some(path_string(&destination_folder.join("report.txt")))
+        );
     }
 
     #[test]
