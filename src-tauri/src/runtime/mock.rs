@@ -131,6 +131,12 @@ fn set_file_times(path: &Path, time: SystemTime) -> Result<(), std::io::Error> {
     file.set_times(times)
 }
 
+fn join_mock_path(root: &Path, relative: &str) -> PathBuf {
+    relative
+        .split('/')
+        .fold(root.to_path_buf(), |path, component| path.join(component))
+}
+
 pub fn seed_mock_workspace(
     db: &Database,
     workspace: &MockWorkspace,
@@ -194,7 +200,7 @@ pub fn seed_mock_workspace(
     }
 
     for (relative_path, content, repeat, age_days, tracked) in MOCK_FILES {
-        let path = workspace.watch_dir.join(relative_path);
+        let path = join_mock_path(&workspace.watch_dir, relative_path);
         let observed_at = now_secs.saturating_sub(*age_days * SECONDS_PER_DAY);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -268,15 +274,11 @@ pub fn seed_mock_workspace(
                 sequence: storage::audit::next_audit_sequence(db)?,
                 timestamp: now_secs.saturating_sub(*age_days * SECONDS_PER_DAY),
                 action_kind: action_kind.clone(),
-                source_path: workspace
-                    .watch_dir
-                    .join(source)
+                source_path: join_mock_path(&workspace.watch_dir, source)
                     .to_string_lossy()
                     .into_owned(),
                 destination_path: (*destination).map(|relative_path| {
-                    workspace
-                        .safe_dir
-                        .join(relative_path)
+                    join_mock_path(&workspace.safe_dir, relative_path)
                         .to_string_lossy()
                         .into_owned()
                 }),
