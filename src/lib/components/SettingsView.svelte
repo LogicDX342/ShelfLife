@@ -2,7 +2,6 @@
   import IconCheckmark from '@lucide/svelte/icons/check';
   import IconCircleHelp from '@lucide/svelte/icons/circle-help';
   import IconArrowSync from '@lucide/svelte/icons/refresh-cw';
-  import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
   import { onMount } from 'svelte';
 
   import {
@@ -154,13 +153,6 @@
         dropzone_enabled: dropzoneEnabled,
         close_behavior: closeBehavior,
       });
-
-      const currentlyEnabled = await isEnabled();
-      if (startAtLogin && !currentlyEnabled) {
-        await enable();
-      } else if (!startAtLogin && currentlyEnabled) {
-        await disable();
-      }
 
       await refreshConfig();
 

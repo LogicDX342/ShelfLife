@@ -1,4 +1,5 @@
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_autostart::ManagerExt;
 
 use crate::engine::paths::validate_config_paths;
 use crate::models::{AppConfig, AppError, CloseBehavior, WatchTarget};
@@ -27,9 +28,33 @@ pub async fn save_config(
     config: AppConfig,
 ) -> Result<AppConfig, AppError> {
     validate_config_paths(&config)?;
+    let previous_config = storage::get_config(&state.db)?;
+    if config.start_at_login != previous_config.start_at_login {
+        set_autostart_enabled(&app_handle, config.start_at_login)?;
+    }
+
     storage::save_config(&state.db, &config)?;
     state.sync_after_config_change(&app_handle)?;
     Ok(config)
+}
+
+fn set_autostart_enabled(app_handle: &AppHandle, enabled: bool) -> Result<(), AppError> {
+    let autostart = app_handle.autolaunch();
+    let result = if enabled {
+        autostart.enable()
+    } else {
+        autostart.disable()
+    };
+    result.map_err(autostart_error)
+}
+
+fn autostart_error(error: tauri_plugin_autostart::Error) -> AppError {
+    AppError::with_details(
+        "AUTOSTART_ERROR",
+        "The Windows start-at-login setting could not be updated. No configuration was changed.",
+        true,
+        error.to_string(),
+    )
 }
 
 #[tauri::command]

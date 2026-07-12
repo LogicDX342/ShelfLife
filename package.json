@@ -30,8 +30,7 @@
   },
   "license": "GPL-3.0-only",
   "dependencies": {
-    "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-autostart": "^2.5.1"
+    "@tauri-apps/api": "^2.11.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

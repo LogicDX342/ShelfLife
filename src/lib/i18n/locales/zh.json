@@ -292,6 +292,7 @@
     "resultSummary": "{completed} 个完成，{failed} 个失败"
   },
   "error": {
+    "AUTOSTART_ERROR": "无法更新 Windows 开机自启动设置。",
     "details": "详细信息",
     "ACTION_FAILED": "操作失败。",
     "ACTION_FINALIZATION_FAILED": "文件已更改，但最终数据库状态无法保存。请检查审计日志。",

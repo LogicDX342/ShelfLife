@@ -292,6 +292,7 @@
     "resultSummary": "{completed} completed, {failed} failed"
   },
   "error": {
+    "AUTOSTART_ERROR": "The Windows start-at-login setting could not be updated.",
     "details": "Details",
     "ACTION_FAILED": "The action failed.",
     "ACTION_FINALIZATION_FAILED": "The file changed, but its final database state could not be saved. Check the audit log.",
