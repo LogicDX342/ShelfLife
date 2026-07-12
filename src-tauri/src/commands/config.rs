@@ -73,7 +73,9 @@ pub async fn resolve_close_request(
     match behavior {
         CloseBehavior::Ask | CloseBehavior::HideToTray => {
             if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.hide();
+                if window.hide().is_ok() {
+                    state.set_window_visible(false);
+                }
             }
         }
         CloseBehavior::Quit => {

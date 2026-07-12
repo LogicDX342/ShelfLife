@@ -165,6 +165,8 @@ pub fn hide_window_on_close(window: &Window, event: &WindowEvent) {
                 let _ = window.emit("close_behavior_requested", ());
             }
             CloseBehavior::HideToTray => {
+                let runtime = window.state::<AppRuntime>();
+                runtime.set_window_visible(false);
                 let _ = window.hide();
             }
             CloseBehavior::Quit => window.app_handle().exit(0),
@@ -173,6 +175,8 @@ pub fn hide_window_on_close(window: &Window, event: &WindowEvent) {
 }
 
 fn show_main_window(app_handle: &AppHandle, route: Option<&str>) {
+    let runtime = app_handle.state::<AppRuntime>();
+    runtime.set_window_visible(true);
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();

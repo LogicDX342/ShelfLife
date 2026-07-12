@@ -162,6 +162,9 @@ fn notify_if_enabled(
     title: &str,
     body: impl Into<String>,
 ) {
+    if state.is_window_visible() {
+        return;
+    }
     let Ok(config) = storage::get_config(&state.db) else {
         return;
     };

@@ -25,6 +25,7 @@ pub struct AppRuntime {
     pub(crate) rule_execution_active: Arc<AtomicBool>,
     engine_operation_gate: Arc<Mutex<()>>,
     rule_scheduler_wake: Arc<(Mutex<bool>, Condvar)>,
+    window_visible: Arc<AtomicBool>,
 }
 
 impl AppRuntime {
@@ -37,6 +38,7 @@ impl AppRuntime {
             rule_execution_active: Arc::new(AtomicBool::new(false)),
             engine_operation_gate: Arc::new(Mutex::new(())),
             rule_scheduler_wake: Arc::new((Mutex::new(false), Condvar::new())),
+            window_visible: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -46,6 +48,14 @@ impl AppRuntime {
 
     pub fn is_reconciliation_active(&self) -> bool {
         self.reconciliation_active.load(Ordering::Relaxed)
+    }
+
+    pub fn is_window_visible(&self) -> bool {
+        self.window_visible.load(Ordering::Relaxed)
+    }
+
+    pub fn set_window_visible(&self, visible: bool) {
+        self.window_visible.store(visible, Ordering::Relaxed);
     }
 
     pub(crate) fn run_exclusive_engine_operation<T>(
