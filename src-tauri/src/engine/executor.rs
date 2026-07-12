@@ -592,12 +592,17 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
 
     move_file(&from, &to)?;
     if let Some(mut tracked) = storage::tracked::get_tracked_file(db, destination)? {
+        let now = now_seconds();
         tracked.path = entry.source_path.clone();
         tracked.file_name = to
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or(&entry.file_name)
             .to_string();
+        tracked.last_user_action_at = Some(now);
+        tracked.freshness_at = now;
+        tracked.expiry = Expiry::At(now + config.default_ttl_seconds);
+        tracked.state = FileDecayState::Fresh;
         storage::tracked::replace_tracked_file(db, destination, &tracked)?;
     }
     Ok(())
@@ -613,9 +618,12 @@ fn is_dropzone_audit_entry(entry: &AuditEntry) -> bool {
 
 fn undo_state_only(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     if let Some(mut tracked) = storage::tracked::get_tracked_file(db, &entry.source_path)? {
+        let config = storage::get_config(db)?;
+        let now = now_seconds();
+        tracked.last_user_action_at = Some(now);
+        tracked.freshness_at = now;
+        tracked.expiry = Expiry::At(now + config.default_ttl_seconds);
         tracked.state = FileDecayState::Fresh;
-        tracked.expiry =
-            Expiry::At(tracked.freshness_at + storage::get_config(db)?.default_ttl_seconds);
         storage::tracked::upsert_tracked_file(db, &tracked)?;
     }
     Ok(())
@@ -695,9 +703,12 @@ fn undo_trash(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     })?;
 
     if let Some(mut tracked) = storage::tracked::get_tracked_file(db, &entry.source_path)? {
+        let config = storage::get_config(db)?;
+        let now = now_seconds();
+        tracked.last_user_action_at = Some(now);
+        tracked.freshness_at = now;
+        tracked.expiry = Expiry::At(now + config.default_ttl_seconds);
         tracked.state = FileDecayState::Fresh;
-        tracked.expiry =
-            Expiry::At(tracked.freshness_at + storage::get_config(db)?.default_ttl_seconds);
         storage::tracked::upsert_tracked_file(db, &tracked)?;
     }
 
@@ -1114,7 +1125,7 @@ mod tests {
     use std::path::Path;
 
     use crate::models::{
-        AppError, AuditActionKind, AuditEntry, FileDecayState, UndoStatus, UserTriageAction,
+        AppError, AuditActionKind, AuditEntry, Expiry, FileDecayState, UndoStatus, UserTriageAction,
     };
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
@@ -1269,11 +1280,35 @@ mod tests {
         assert_eq!(entry.action_kind, AuditActionKind::Move);
         assert!(matches!(entry.undo_status, UndoStatus::Available));
         assert!(!source.exists());
-        assert!(Path::new(entry.destination_path.as_ref().unwrap()).exists());
+        let destination = entry.destination_path.as_ref().unwrap();
+        assert!(Path::new(destination).exists());
+
+        let mut expired = storage::tracked::get_tracked_file(&fixture.db, destination)
+            .expect("tracked lookup should work")
+            .expect("moved file should remain tracked");
+        expired.last_user_action_at = None;
+        expired.freshness_at = 1;
+        expired.expiry = Expiry::At(1);
+        expired.state = FileDecayState::Decaying;
+        storage::tracked::upsert_tracked_file(&fixture.db, &expired)
+            .expect("expired tracked file should save");
 
         let undone = super::undo_audit_entry(&fixture.db, &entry.id).expect("undo should succeed");
         assert!(matches!(undone.undo_status, UndoStatus::Completed));
         assert!(source.exists());
+
+        let restored = storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
+            .expect("tracked lookup should work")
+            .expect("restored file should remain tracked");
+        let refreshed_at = restored
+            .last_user_action_at
+            .expect("undo should record a user action");
+        assert_eq!(restored.freshness_at, refreshed_at);
+        assert_eq!(
+            restored.expiry,
+            Expiry::At(refreshed_at + fixture.config().default_ttl_seconds)
+        );
+        assert!(matches!(restored.state, FileDecayState::Fresh));
     }
 
     #[test]
