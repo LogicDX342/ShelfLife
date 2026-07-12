@@ -8,10 +8,12 @@
   import IconClipboardList from '@lucide/svelte/icons/list-todo';
   import IconSettings from '@lucide/svelte/icons/settings';
   import IconFlash from '@lucide/svelte/icons/zap';
+  import { listen } from '@tauri-apps/api/event';
+  import { onMount } from 'svelte';
 
   import { assets, resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { pauseWatching, resumeWatching } from '$lib/api/config';
+  import { isWatchingPaused, pauseWatching, resumeWatching } from '$lib/api/config';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import { Separator } from '$lib/components/ui/separator';
@@ -19,6 +21,8 @@
   import { Switch } from '$lib/components/ui/switch';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
+  import { notifications } from '$lib/stores/notifications.svelte';
+  import { getErrorMessage } from '$lib/utils/format';
 
   type AppRoute = '/' | '/queue' | '/browser' | '/rules' | '/audit' | '/settings' | '/about';
   type NavItem = {
@@ -28,18 +32,60 @@
   };
 
   let isPaused = $state(false);
+  let watchStatusBusy = $state(true);
 
-  async function toggleWatchStatus() {
+  onMount(() => {
+    let active = true;
+    let receivedStateEvent = false;
+
+    const reportError = (reason: unknown) => {
+      if (active) {
+        notifications.error(getErrorMessage(reason, i18n.t('status.watchError')));
+      }
+    };
+    const unlistenTask = listen<boolean>('watching_paused_changed', ({ payload }) => {
+      if (!active) return;
+      receivedStateEvent = true;
+      isPaused = payload;
+    }).catch((reason) => {
+      reportError(reason);
+      return () => {};
+    });
+
+    void unlistenTask
+      .then(() => isWatchingPaused())
+      .then((paused) => {
+        if (active && !receivedStateEvent) {
+          isPaused = paused;
+        }
+      })
+      .catch(reportError)
+      .finally(() => {
+        if (active) {
+          watchStatusBusy = false;
+        }
+      });
+
+    return () => {
+      active = false;
+      void unlistenTask.then((unlisten) => unlisten());
+    };
+  });
+
+  async function setWatchingEnabled(enabled: boolean) {
+    if (watchStatusBusy) return;
+
+    watchStatusBusy = true;
     try {
-      if (isPaused) {
+      if (enabled) {
         await resumeWatching();
-        isPaused = false;
       } else {
         await pauseWatching();
-        isPaused = true;
       }
-    } catch (e) {
-      console.error(e);
+    } catch (reason) {
+      notifications.error(getErrorMessage(reason, i18n.t('status.watchError')));
+    } finally {
+      watchStatusBusy = false;
     }
   }
 
@@ -175,7 +221,8 @@
           </div>
           <Switch
             checked={!isPaused}
-            onCheckedChange={toggleWatchStatus}
+            onCheckedChange={setWatchingEnabled}
+            disabled={watchStatusBusy}
             aria-label={i18n.t('status.watchStatus')}
             class="flex-shrink-0"
           />
@@ -186,12 +233,15 @@
     <!-- Watch Status Button - Shrunk -->
     <div class="flex md:hidden justify-center">
       <Button
-        onclick={toggleWatchStatus}
+        onclick={() => setWatchingEnabled(isPaused)}
+        disabled={watchStatusBusy}
         variant="ghost"
         class="relative"
         title={`${i18n.t('status.watchStatus')}: ${isPaused ? i18n.t('status.paused') : i18n.t('status.active')}`}
       >
-        {#if isPaused}
+        {#if watchStatusBusy}
+          <Spinner />
+        {:else if isPaused}
           <IconPlayCircle
             class="w-5 h-5 text-amber-500 dark:text-amber-400 transition-transform duration-150 group-hover:scale-105"
           />

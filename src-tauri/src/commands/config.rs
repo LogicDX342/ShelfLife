@@ -16,6 +16,11 @@ pub async fn is_reconciliation_active(state: State<'_, AppRuntime>) -> Result<bo
 }
 
 #[tauri::command]
+pub async fn is_watching_paused(state: State<'_, AppRuntime>) -> Result<bool, AppError> {
+    Ok(state.is_watching_paused())
+}
+
+#[tauri::command]
 pub async fn save_config(
     app_handle: AppHandle,
     state: State<'_, AppRuntime>,

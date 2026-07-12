@@ -8,11 +8,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use tauri::{App, AppHandle, Manager};
+use tauri::{App, AppHandle, Emitter, Manager};
 
 use crate::engine;
 use crate::models::AppError;
 use crate::storage::{self, Database};
+
+const WATCHING_PAUSED_CHANGED_EVENT: &str = "watching_paused_changed";
 
 #[derive(Clone)]
 pub struct AppRuntime {
@@ -124,22 +126,30 @@ impl AppRuntime {
     }
 
     pub fn pause_watching(&self, app_handle: &AppHandle) -> Result<(), AppError> {
-        self.watching_paused.store(true, Ordering::Relaxed);
-        self.wake_rule_scheduler();
         let mut watcher = self.watcher.lock().map_err(|_| {
             AppError::new("WATCHER_ERROR", "Watcher state could not be locked.", true)
         })?;
         *watcher = None;
-        crate::tray::update_tray_icon(app_handle);
+        self.publish_watching_paused(app_handle, true);
         Ok(())
     }
 
     pub fn resume_watching(&self, app_handle: &AppHandle) -> Result<(), AppError> {
         self.watching_paused.store(false, Ordering::Relaxed);
         self.wake_rule_scheduler();
-        self.restart_watcher(app_handle)?;
-        crate::tray::update_tray_icon(app_handle);
+        if let Err(error) = self.restart_watcher(app_handle) {
+            self.publish_watching_paused(app_handle, true);
+            return Err(error);
+        }
+        self.publish_watching_paused(app_handle, false);
         Ok(())
+    }
+
+    fn publish_watching_paused(&self, app_handle: &AppHandle, paused: bool) {
+        self.watching_paused.store(paused, Ordering::Relaxed);
+        self.wake_rule_scheduler();
+        crate::tray::update_tray_icon(app_handle);
+        let _ = app_handle.emit(WATCHING_PAUSED_CHANGED_EVENT, paused);
     }
 }
 

@@ -26,6 +26,10 @@ export function isReconciliationActive() {
   return invoke<boolean>('is_reconciliation_active');
 }
 
+export function isWatchingPaused() {
+  return invoke<boolean>('is_watching_paused');
+}
+
 export function pauseWatching() {
   return invoke<void>('pause_watching');
 }

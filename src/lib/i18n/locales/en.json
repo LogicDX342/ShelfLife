@@ -15,7 +15,8 @@
     "watchStatus": "Watch Status",
     "review": "Review",
     "tracked": "Tracked",
-    "recoverableSize": "Recoverable Size"
+    "recoverableSize": "Recoverable Size",
+    "watchError": "Could not update the watch status."
   },
   "theme": {
     "title": "Theme",

@@ -50,6 +50,7 @@ pub fn run() {
             commands::update_watch_targets,
             commands::run_reconciliation_scan,
             commands::is_reconciliation_active,
+            commands::is_watching_paused,
             commands::pause_watching,
             commands::resume_watching,
             commands::update_tray_labels,

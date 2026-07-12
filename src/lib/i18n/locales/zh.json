@@ -15,7 +15,8 @@
     "watchStatus": "监控状态",
     "review": "待处理",
     "tracked": "监控中",
-    "recoverableSize": "可回收空间"
+    "recoverableSize": "可回收空间",
+    "watchError": "无法更新监控状态。"
   },
   "theme": {
     "title": "主题",
