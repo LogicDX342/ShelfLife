@@ -18,7 +18,6 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
         return;
     }
 
-    let db = runtime.db.clone();
     let app_handle_clone = app_handle.clone();
     let runtime_clone = runtime.clone();
 
@@ -30,11 +29,8 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
             let _ = app.emit("reconciliation_progress", (current, total));
         };
 
-        let result = runtime_clone.run_exclusive_engine_operation(|| {
-            engine::reconciliation::reconcile_with_report_with_progress(
-                &db,
-                Some(&progress_emitter),
-            )
+        let result = runtime_clone.run_exclusive_engine_operation(|db| {
+            engine::reconciliation::reconcile_with_report_with_progress(db, Some(&progress_emitter))
         });
 
         runtime_clone
@@ -108,8 +104,8 @@ pub fn watcher_event_sink(
 ) -> engine::watcher::WatcherEventSink {
     Arc::new(move |event| match event {
         engine::watcher::WatcherEvent::PathsReady(paths) => {
-            match runtime.run_exclusive_engine_operation(|| {
-                engine::reconciliation::reconcile_paths(&runtime.db, paths)
+            match runtime.run_exclusive_engine_operation(|db| {
+                engine::reconciliation::reconcile_paths(db, paths)
             }) {
                 Ok(report) => {
                     emit_reconciliation_report(&app_handle, &report);

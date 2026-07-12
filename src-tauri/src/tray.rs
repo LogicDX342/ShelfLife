@@ -153,7 +153,8 @@ pub fn hide_window_on_close(window: &Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
         let runtime = window.state::<AppRuntime>();
-        let behavior = crate::storage::get_config(&runtime.db)
+        let behavior = runtime
+            .with_database(crate::storage::get_config)
             .map(|config| config.close_behavior)
             .unwrap_or(CloseBehavior::Ask);
 

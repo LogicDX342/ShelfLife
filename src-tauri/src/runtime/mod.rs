@@ -18,7 +18,7 @@ const WATCHING_PAUSED_CHANGED_EVENT: &str = "watching_paused_changed";
 
 #[derive(Clone)]
 pub struct AppRuntime {
-    pub db: Database,
+    db: Database,
     watcher: Arc<Mutex<Option<engine::watcher::ShelflifeDebouncer>>>,
     watching_paused: Arc<AtomicBool>,
     pub(crate) reconciliation_active: Arc<AtomicBool>,
@@ -58,15 +58,21 @@ impl AppRuntime {
         self.window_visible.store(visible, Ordering::Relaxed);
     }
 
-    pub(crate) fn run_exclusive_engine_operation<T>(
+    /// Runs a storage read without exposing the runtime's database handle.
+    pub(crate) fn with_database<T>(&self, operation: impl FnOnce(&Database) -> T) -> T {
+        operation(&self.db)
+    }
+
+    /// Runs one state-changing engine operation while holding the runtime gate.
+    pub(crate) fn run_exclusive_engine_operation<T, E>(
         &self,
-        operation: impl FnOnce() -> Result<T, AppError>,
-    ) -> Result<T, AppError> {
+        operation: impl FnOnce(&Database) -> Result<T, E>,
+    ) -> Result<T, E> {
         let _guard = self
             .engine_operation_gate
             .lock()
             .expect("engine operation gate should not be poisoned");
-        operation()
+        operation(&self.db)
     }
 
     pub fn wake_rule_scheduler(&self) {
@@ -109,7 +115,7 @@ impl AppRuntime {
     }
 
     pub fn sync_after_config_change(&self, app_handle: &AppHandle) -> Result<(), AppError> {
-        let config = storage::get_config(&self.db)?;
+        let config = self.with_database(storage::get_config)?;
         crate::dropzone::sync_dropzone_monitor(app_handle, config.dropzone_enabled)?;
         self.restart_watcher(app_handle)?;
         crate::tray::update_tray_icon(app_handle);
@@ -118,7 +124,7 @@ impl AppRuntime {
     }
 
     pub fn restart_watcher(&self, app_handle: &AppHandle) -> Result<(), AppError> {
-        let config = storage::get_config(&self.db)?;
+        let config = self.with_database(storage::get_config)?;
         let mut watcher = self.watcher.lock().map_err(|_| {
             AppError::new("WATCHER_ERROR", "Watcher state could not be locked.", true)
         })?;
@@ -169,7 +175,8 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let runtime = AppRuntime::new(db);
     app.manage(runtime.clone());
 
-    let config = storage::get_config(&runtime.db)
+    let config = runtime
+        .with_database(storage::get_config)
         .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
     crate::dropzone::sync_dropzone_monitor(app.handle(), config.dropzone_enabled)
         .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;

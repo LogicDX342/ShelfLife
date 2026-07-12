@@ -16,7 +16,9 @@ pub async fn execute_triage_action(
     path: String,
     action: UserTriageAction,
 ) -> Result<AuditEntry, AppError> {
-    match engine::executor::execute_triage_action_audited(&state.db, &path, action) {
+    match state.run_exclusive_engine_operation(|db| {
+        engine::executor::execute_triage_action_audited(db, &path, action)
+    }) {
         Ok(entry) => {
             let _ = app_handle.emit("action_completed", &entry);
             let _ = app_handle.emit("audit_updated", &entry);
@@ -58,7 +60,8 @@ pub async fn execute_bulk_triage_action(
     paths: Vec<String>,
     action: UserTriageAction,
 ) -> Result<BulkTriageResult, AppError> {
-    let (result, failure_audits) = execute_bulk_triage_audited(&state.db, paths, action)?;
+    let (result, failure_audits) = state
+        .run_exclusive_engine_operation(|db| execute_bulk_triage_audited(db, paths, action))?;
 
     for entry in &result.entries {
         let _ = app_handle.emit("action_completed", entry);
@@ -118,7 +121,7 @@ pub async fn undo_audit_entry(
     state: State<'_, AppRuntime>,
     audit_id: String,
 ) -> Result<AuditEntry, AppError> {
-    match engine::undo_audit_entry(&state.db, &audit_id) {
+    match state.run_exclusive_engine_operation(|db| engine::undo_audit_entry(db, &audit_id)) {
         Ok(entry) => {
             let _ = app_handle.emit("audit_updated", &entry);
             notify_if_enabled(
@@ -153,7 +156,7 @@ pub async fn undo_audit_entry(
 
 #[tauri::command]
 pub async fn list_audit_entries(state: State<'_, AppRuntime>) -> Result<Vec<AuditEntry>, AppError> {
-    storage::audit::list_audit_entries(&state.db)
+    state.with_database(storage::audit::list_audit_entries)
 }
 
 fn notify_if_enabled(
@@ -165,7 +168,7 @@ fn notify_if_enabled(
     if state.is_window_visible() {
         return;
     }
-    let Ok(config) = storage::get_config(&state.db) else {
+    let Ok(config) = state.with_database(storage::get_config) else {
         return;
     };
     if !config.notifications_enabled {

@@ -11,7 +11,7 @@ use crate::storage::{self, Database};
 
 #[tauri::command]
 pub async fn list_rules(state: State<'_, AppRuntime>) -> Result<Vec<AutomationRule>, AppError> {
-    storage::rules::list_rules(&state.db)
+    state.with_database(storage::rules::list_rules)
 }
 
 #[tauri::command]
@@ -20,7 +20,6 @@ pub async fn save_rule(
     state: State<'_, AppRuntime>,
     mut rule: AutomationRule,
 ) -> Result<AutomationRule, AppError> {
-    let config = storage::get_config(&state.db)?;
     let now = crate::engine::now_seconds();
     if rule.id.trim().is_empty() {
         rule.id = Uuid::new_v4().to_string();
@@ -28,10 +27,13 @@ pub async fn save_rule(
         rule.mode = RuleMode::PreviewOnly;
     }
     rule.updated_at = now;
-    validate_rule(&rule, &config)?;
-    storage::rules::save_rule(&state.db, &rule)?;
 
-    let report = crate::engine::refresh_tracked_rule_state(&state.db)?;
+    let report = state.run_exclusive_engine_operation(|db| {
+        let config = storage::get_config(db)?;
+        validate_rule(&rule, &config)?;
+        storage::rules::save_rule(db, &rule)?;
+        crate::engine::refresh_tracked_rule_state(db)
+    })?;
     crate::runtime::reconciliation::emit_reconciliation_report(&app_handle, &report);
     state.wake_rule_scheduler();
     crate::runtime::rule_scheduler::run_async_expired_rule_execution(
@@ -48,12 +50,14 @@ pub async fn test_rule(
     state: State<'_, AppRuntime>,
     rule: AutomationRule,
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
-    validate_rule(&rule, &storage::get_config(&state.db)?)?;
-    let matched_explanations = build_rule_preview_explanations(&state.db, &rule)?
-        .into_iter()
-        .filter(|exp| exp.proposed_action.is_some())
-        .collect();
-    Ok(matched_explanations)
+    state.with_database(|db| {
+        validate_rule(&rule, &storage::get_config(db)?)?;
+        let matched_explanations = build_rule_preview_explanations(db, &rule)?
+            .into_iter()
+            .filter(|exp| exp.proposed_action.is_some())
+            .collect();
+        Ok(matched_explanations)
+    })
 }
 
 fn build_rule_preview_explanations(
@@ -83,9 +87,10 @@ pub async fn delete_rule(
     state: State<'_, AppRuntime>,
     id: String,
 ) -> Result<(), AppError> {
-    storage::rules::delete_rule(&state.db, &id)?;
-
-    let report = crate::engine::refresh_tracked_rule_state(&state.db)?;
+    let report = state.run_exclusive_engine_operation(|db| {
+        storage::rules::delete_rule(db, &id)?;
+        crate::engine::refresh_tracked_rule_state(db)
+    })?;
     crate::runtime::reconciliation::emit_reconciliation_report(&app_handle, &report);
     state.wake_rule_scheduler();
 

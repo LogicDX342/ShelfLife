@@ -14,13 +14,12 @@ pub fn run_async_expired_rule_execution(app_handle: AppHandle, runtime: AppRunti
         return;
     }
 
-    let db = runtime.db.clone();
     let app_handle_clone = app_handle.clone();
     let runtime_clone = runtime.clone();
 
     tauri::async_runtime::spawn(async move {
-        let result = runtime_clone
-            .run_exclusive_engine_operation(|| engine::execute_expired_automatic_rules(&db));
+        let result =
+            runtime_clone.run_exclusive_engine_operation(engine::execute_expired_automatic_rules);
 
         runtime_clone
             .rule_execution_active
@@ -47,10 +46,9 @@ pub fn start_periodic_rule_execution(app_handle: AppHandle, runtime: AppRuntime)
             continue;
         }
 
-        let wait_for = match engine::next_automatic_rule_execution_delay(
-            &runtime.db,
-            MIN_AUTO_RULE_EXECUTION_INTERVAL,
-        ) {
+        let wait_for = match runtime.with_database(|db| {
+            engine::next_automatic_rule_execution_delay(db, MIN_AUTO_RULE_EXECUTION_INTERVAL)
+        }) {
             Ok(delay) => delay,
             Err(error) => {
                 let _ = app_handle.emit("action_failed", error);

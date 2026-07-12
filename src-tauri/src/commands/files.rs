@@ -13,7 +13,7 @@ use crate::storage::{self, Database};
 
 #[tauri::command]
 pub async fn get_active_files(state: State<'_, AppRuntime>) -> Result<Vec<TrackedFile>, AppError> {
-    active_files(&state.db)
+    state.with_database(active_files)
 }
 
 fn active_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
@@ -34,11 +34,12 @@ pub async fn explain_file(
     path: String,
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
     validate_path_scope(&state, &path)?;
-    let Some(file) = storage::tracked::get_tracked_file(&state.db, &path)? else {
+    let Some(file) = state.with_database(|db| storage::tracked::get_tracked_file(db, &path))?
+    else {
         return Err(AppError::path_not_found(&path));
     };
-    let config = storage::get_config(&state.db)?;
-    let rules = storage::rules::list_rules(&state.db)?;
+    let config = state.with_database(storage::get_config)?;
+    let rules = state.with_database(storage::rules::list_rules)?;
     explain_file_against_rules(&file, &config, &rules)
 }
 
@@ -252,7 +253,7 @@ fn open_location(_path: &Path) -> Result<(), AppError> {
 }
 
 fn validate_path_scope(state: &State<'_, AppRuntime>, path: &str) -> Result<(), AppError> {
-    let config = storage::get_config(&state.db)?;
+    let config = state.with_database(storage::get_config)?;
     PathScope::new(&config).ensure_source_scope(Path::new(path))
 }
 

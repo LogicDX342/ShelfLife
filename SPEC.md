@@ -753,7 +753,7 @@ Runtime state:
 use crate::storage::Database;
 
 pub struct AppRuntime {
-    pub db: Database,
+    db: Database,
     // watcher handle, pause flag, reconciliation flag,
     // rule execution flag, exclusive engine-operation gate,
     // scheduler wake condition

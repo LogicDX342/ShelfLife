@@ -8,7 +8,7 @@ use crate::storage;
 
 #[tauri::command]
 pub async fn get_config(state: State<'_, AppRuntime>) -> Result<AppConfig, AppError> {
-    storage::get_config(&state.db)
+    state.with_database(storage::get_config)
 }
 
 #[tauri::command]
@@ -28,12 +28,12 @@ pub async fn save_config(
     config: AppConfig,
 ) -> Result<AppConfig, AppError> {
     validate_config_paths(&config)?;
-    let previous_config = storage::get_config(&state.db)?;
+    let previous_config = state.with_database(storage::get_config)?;
     if config.start_at_login != previous_config.start_at_login {
         set_autostart_enabled(&app_handle, config.start_at_login)?;
     }
 
-    storage::save_config(&state.db, &config)?;
+    state.run_exclusive_engine_operation(|db| storage::save_config(db, &config))?;
     state.sync_after_config_change(&app_handle)?;
     Ok(config)
 }
@@ -65,9 +65,11 @@ pub async fn resolve_close_request(
     remember: bool,
 ) -> Result<(), AppError> {
     if remember {
-        let mut config = storage::get_config(&state.db)?;
-        config.close_behavior = behavior.clone();
-        storage::save_config(&state.db, &config)?;
+        state.run_exclusive_engine_operation(|db| {
+            let mut config = storage::get_config(db)?;
+            config.close_behavior = behavior.clone();
+            storage::save_config(db, &config)
+        })?;
     }
 
     match behavior {
@@ -92,10 +94,12 @@ pub async fn update_watch_targets(
     state: State<'_, AppRuntime>,
     targets: Vec<WatchTarget>,
 ) -> Result<(), AppError> {
-    let mut config = storage::get_config(&state.db)?;
-    config.watch_targets = targets;
-    validate_config_paths(&config)?;
-    storage::save_config(&state.db, &config)?;
+    state.run_exclusive_engine_operation(|db| {
+        let mut config = storage::get_config(db)?;
+        config.watch_targets = targets;
+        validate_config_paths(&config)?;
+        storage::save_config(db, &config)
+    })?;
     state.sync_after_config_change(&app_handle)?;
     Ok(())
 }
