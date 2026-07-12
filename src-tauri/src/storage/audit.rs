@@ -90,14 +90,7 @@ pub fn list_failed_automatic_rule_attempts(
     Ok(attempts)
 }
 
-pub fn append_audit_entry(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
-    db.write(|conn| {
-        upsert_audit_entry_tx(conn, entry)?;
-        Ok(())
-    })
-}
-
-pub fn update_audit_entry(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
+pub fn upsert_audit_entry(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     db.write(|conn| {
         upsert_audit_entry_tx(conn, entry)?;
         Ok(())
@@ -400,7 +393,7 @@ mod tests {
             },
         };
 
-        super::append_audit_entry(&fixture.db, &entry).expect("audit entry should save");
+        super::upsert_audit_entry(&fixture.db, &entry).expect("audit entry should save");
 
         let loaded = super::get_audit_entry_by_id(&fixture.db, &entry.id)
             .expect("audit lookup should work")

@@ -63,7 +63,7 @@ fn watch_event_loop(rx: mpsc::Receiver<DebounceEventResult>, event_sink: Watcher
                     .flat_map(|event| event.paths.iter().cloned())
                     .collect::<Vec<_>>();
 
-                let stable_paths = process_debounced_paths(paths, Duration::from_secs(1));
+                let stable_paths = wait_for_paths_stability(paths, Duration::from_secs(1));
                 event_sink(WatcherEvent::PathsReady(stable_paths));
             }
             Err(errors) => {
@@ -79,12 +79,6 @@ fn watch_event_loop(rx: mpsc::Receiver<DebounceEventResult>, event_sink: Watcher
             }
         }
     }
-}
-
-pub fn process_debounced_paths(paths: Vec<PathBuf>, stability_delay: Duration) -> Vec<PathBuf> {
-    // Wait for each changed path to stabilise before processing. Already-deleted
-    // paths pass through immediately (deletion is a valid stable event).
-    wait_for_paths_stability(paths, stability_delay)
 }
 
 /// For each path, poll until size and mtime are stable across two checks or the
@@ -110,14 +104,14 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::process_debounced_paths;
+    use super::wait_for_paths_stability;
 
     #[test]
     fn deleted_paths_pass_through_as_stable_events() {
         let fixture = Fixture::new();
         let path = fixture.watch.join("missing.txt");
 
-        let paths = process_debounced_paths(vec![path.clone()], Duration::ZERO);
+        let paths = wait_for_paths_stability(vec![path.clone()], Duration::ZERO);
 
         assert_eq!(paths, vec![path]);
     }

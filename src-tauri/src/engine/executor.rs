@@ -238,7 +238,7 @@ fn execute_file_action(
         explanation: audit.explanation,
         undo_status: unavailable_pending_status(),
     };
-    storage::audit::append_audit_entry(db, &entry)?;
+    storage::audit::upsert_audit_entry(db, &entry)?;
 
     let undo_status = match apply_prepared_file_action(&source, &mut tracked, &prepared) {
         Ok(status) => status,
@@ -266,7 +266,7 @@ fn fail_audited(db: &Database, mut entry: AuditEntry, error: AppError) -> FileAc
         None => error.message.clone(),
     };
     entry.undo_status = UndoStatus::Failed { reason };
-    let _ = storage::audit::update_audit_entry(db, &entry);
+    let _ = storage::audit::upsert_audit_entry(db, &entry);
     FileActionFailure {
         error,
         audit_entry: Some(Box::new(entry)),
@@ -486,7 +486,7 @@ pub(crate) fn ingest_dropzone_file_audited(
         explanation: None,
         undo_status: unavailable_pending_status(),
     };
-    storage::audit::append_audit_entry(db, &entry)?;
+    storage::audit::upsert_audit_entry(db, &entry)?;
 
     if let Err(error) = fs::create_dir_all(&destination_folder).map_err(AppError::from) {
         return Err(fail_audited(db, entry, error));
@@ -540,12 +540,12 @@ pub fn undo_audit_entry(db: &Database, audit_id: &str) -> Result<AuditEntry, App
             entry.undo_status = UndoStatus::Failed {
                 reason: error.message.clone(),
             };
-            storage::audit::update_audit_entry(db, &entry)?;
+            storage::audit::upsert_audit_entry(db, &entry)?;
             return Err(error);
         }
     }
 
-    storage::audit::update_audit_entry(db, &entry)?;
+    storage::audit::upsert_audit_entry(db, &entry)?;
     Ok(entry)
 }
 

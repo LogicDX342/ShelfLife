@@ -127,7 +127,7 @@ fn append_failed_rule_execution_audit_entry(
         explanation: Some(explanation),
         undo_status: UndoStatus::Failed { reason },
     };
-    storage::audit::append_audit_entry(db, &entry)?;
+    storage::audit::upsert_audit_entry(db, &entry)?;
     Ok(entry)
 }
 

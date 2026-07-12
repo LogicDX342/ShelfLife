@@ -267,7 +267,7 @@ pub fn seed_mock_workspace(
                 reason: reason.to_string(),
             },
         };
-        storage::audit::append_audit_entry(
+        storage::audit::upsert_audit_entry(
             db,
             &AuditEntry {
                 id: uuid::Uuid::new_v4().to_string(),
