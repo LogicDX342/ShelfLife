@@ -27,7 +27,7 @@ struct ReconciliationPlan {
 struct ObservationContext<'a> {
     target: &'a WatchTarget,
     config: &'a AppConfig,
-    rules: &'a [AutomationRule],
+    rules: &'a CompiledRuleSet,
     now: u64,
     ignore_set: Option<&'a GlobSet>,
     canonical_root: Option<&'a Path>,
@@ -37,9 +37,9 @@ use crate::engine::paths::PathScope;
 use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
 use crate::engine::{project_watched_file, tracked_file_from_metadata};
 use crate::models::{
-    AppConfig, AppError, AutomationRule, FileDecayState, ReconciliationReport, TrackedFile,
-    WatchTarget,
+    AppConfig, AppError, FileDecayState, ReconciliationReport, TrackedFile, WatchTarget,
 };
+use crate::rules::CompiledRuleSet;
 use crate::storage::{self, Database};
 
 pub fn reconcile_with_report_with_progress(
@@ -48,7 +48,7 @@ pub fn reconcile_with_report_with_progress(
 ) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
-    let rules = storage::rules::list_rules(db)?;
+    let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
     let now = crate::engine::freshness::now_seconds();
     // Load all currently-tracked files into memory once (single read transaction).
     let existing_map: HashMap<String, TrackedFile> = storage::tracked::list_tracked_files(db)?
@@ -82,7 +82,7 @@ pub fn reconcile_with_report_with_progress(
                 let context = ObservationContext {
                     target,
                     config: &config,
-                    rules: &rules,
+                    rules: &rule_set,
                     now,
                     ignore_set: ignore_set.as_ref(),
                     canonical_root: canonical_root.as_deref(),
@@ -173,7 +173,7 @@ pub fn reconcile_paths(
 ) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
-    let rules = storage::rules::list_rules(db)?;
+    let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
     let now = crate::engine::freshness::now_seconds();
 
     // Deduplicate paths.
@@ -207,7 +207,7 @@ pub fn reconcile_paths(
         let context = ObservationContext {
             target,
             config: &config,
-            rules: &rules,
+            rules: &rule_set,
             now,
             ignore_set: ignore_set.as_ref(),
             canonical_root: canonical_root.as_deref(),

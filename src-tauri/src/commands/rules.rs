@@ -1,11 +1,8 @@
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::engine::paths::PathScope;
-use crate::models::{
-    AppConfig, AppError, AutomationRule, RuleAction, RuleMatchExplanation, RuleMode, SizeCondition,
-};
-use crate::rules::explain_file_against_rules;
+use crate::models::{AppError, AutomationRule, RuleMatchExplanation, RuleMode};
+use crate::rules::CompiledRuleSet;
 use crate::runtime::AppRuntime;
 use crate::storage::{self, Database};
 
@@ -30,7 +27,7 @@ pub async fn save_rule(
 
     let report = state.run_exclusive_engine_operation(|db| {
         let config = storage::get_config(db)?;
-        validate_rule(&rule, &config)?;
+        CompiledRuleSet::compile(vec![rule.clone()], &config)?;
         storage::rules::save_rule(db, &rule)?;
         crate::engine::refresh_tracked_rule_state(db)
     })?;
@@ -51,7 +48,6 @@ pub async fn test_rule(
     rule: AutomationRule,
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
     state.with_database(|db| {
-        validate_rule(&rule, &storage::get_config(db)?)?;
         let matched_explanations = build_rule_preview_explanations(db, &rule)?
             .into_iter()
             .filter(|exp| exp.proposed_action.is_some())
@@ -66,16 +62,13 @@ fn build_rule_preview_explanations(
 ) -> Result<Vec<RuleMatchExplanation>, AppError> {
     let config = storage::get_config(db)?;
     let files = storage::tracked::list_tracked_files(db)?;
-    let mut explanations = Vec::new();
     let mut test_rule = rule.clone();
     test_rule.enabled = true;
+    let rule_set = CompiledRuleSet::compile(vec![test_rule], &config)?;
+    let mut explanations = Vec::new();
 
     for file in files {
-        explanations.extend(explain_file_against_rules(
-            &file,
-            &config,
-            std::slice::from_ref(&test_rule),
-        )?);
+        explanations.extend(rule_set.explain_file(&file));
     }
 
     Ok(explanations)
@@ -97,68 +90,14 @@ pub async fn delete_rule(
     Ok(())
 }
 
-fn validate_rule(rule: &AutomationRule, config: &AppConfig) -> Result<(), AppError> {
-    for pattern in &rule.conditions.filename_regexes {
-        regex::Regex::new(pattern).map_err(|error| {
-            AppError::with_details(
-                "RULE_INVALID_REGEX",
-                "Filename regex could not be parsed. Rule was not saved.",
-                true,
-                error.to_string(),
-            )
-        })?;
-    }
-
-    for glob in &rule.conditions.filename_globs {
-        globset::Glob::new(glob).map_err(|error| {
-            AppError::with_details(
-                "RULE_INVALID_GLOB",
-                "Filename glob could not be parsed. Rule was not saved.",
-                true,
-                error.to_string(),
-            )
-        })?;
-    }
-
-    for domain in &rule.conditions.source_domains {
-        crate::rules::conditions::validate_source_domain_pattern(domain)?;
-    }
-
-    if let SizeCondition::Between { min, max } = &rule.conditions.size {
-        if min > max {
-            return Err(AppError::new(
-                "RULE_INVALID_SIZE_RANGE",
-                "Size range minimum cannot exceed maximum. Rule was not saved.",
-                true,
-            ));
-        }
-    }
-
-    let scope = PathScope::new(config);
-    scope.validate_rule_watch_path(std::path::Path::new(&rule.watch_path))?;
-
-    if let RuleAction::Move {
-        destination_folder,
-        rename_template,
-    } = &rule.action
-    {
-        let destination = std::path::PathBuf::from(destination_folder);
-        scope.validate_move_destination(&destination)?;
-        if let Some(template) = rename_template {
-            crate::engine::validate_rename_template(template)?;
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use crate::models::{RuleAction, SizeCondition};
+    use crate::rules::CompiledRuleSet;
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
 
-    use super::{build_rule_preview_explanations, validate_rule};
+    use super::build_rule_preview_explanations;
 
     #[test]
     fn rule_preview_returns_explanations_without_writing_audit_rows() {
@@ -189,7 +128,9 @@ mod tests {
         let mut rule = fixture.rule();
         rule.conditions.filename_regexes = vec![String::from("[")];
 
-        let error = validate_rule(&rule, &config).expect_err("invalid regex should be rejected");
+        let error = CompiledRuleSet::compile(vec![rule], &config)
+            .err()
+            .expect("invalid regex should be rejected");
 
         assert_eq!(error.code, "RULE_INVALID_REGEX");
     }
@@ -201,7 +142,9 @@ mod tests {
         let mut rule = fixture.rule();
         rule.conditions.filename_globs = vec![String::from("[")];
 
-        let error = validate_rule(&rule, &config).expect_err("invalid glob should be rejected");
+        let error = CompiledRuleSet::compile(vec![rule], &config)
+            .err()
+            .expect("invalid glob should be rejected");
 
         assert_eq!(error.code, "RULE_INVALID_GLOB");
     }
@@ -213,8 +156,9 @@ mod tests {
         let mut rule = fixture.rule();
         rule.conditions.size = SizeCondition::Between { min: 10, max: 1 };
 
-        let error =
-            validate_rule(&rule, &config).expect_err("invalid size range should be rejected");
+        let error = CompiledRuleSet::compile(vec![rule], &config)
+            .err()
+            .expect("invalid size range should be rejected");
 
         assert_eq!(error.code, "RULE_INVALID_SIZE_RANGE");
     }
@@ -229,7 +173,7 @@ mod tests {
             rename_template: None,
         };
 
-        validate_rule(&rule, &config).expect("outside destination should validate");
+        CompiledRuleSet::compile(vec![rule], &config).expect("outside destination should validate");
     }
 
     #[test]
@@ -239,7 +183,9 @@ mod tests {
         let mut rule = fixture.rule();
         rule.watch_path = path_string(&fixture.root.join("outside"));
 
-        let error = validate_rule(&rule, &config).expect_err("outside watch path should fail");
+        let error = CompiledRuleSet::compile(vec![rule], &config)
+            .err()
+            .expect("outside watch path should fail");
 
         assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
     }
@@ -254,7 +200,9 @@ mod tests {
             rename_template: None,
         };
 
-        let error = validate_rule(&rule, &config).expect_err("in-watch destination should fail");
+        let error = CompiledRuleSet::compile(vec![rule], &config)
+            .err()
+            .expect("in-watch destination should fail");
 
         assert_eq!(error.code, "RULE_INVALID_DESTINATION");
     }

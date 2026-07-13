@@ -106,7 +106,7 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 |  notify watcher signal source                            |
 |  debounced event queue                                   |
 |  quiescence detector                                     |
-|  rule evaluator                                          |
+|  compiled rule-set module                                |
 |  safe action executor                                    |
 |  audit ledger                                            |
 +---------------------------+------------------------------+
@@ -535,6 +535,36 @@ Rules are evaluated in this order:
 ```
 
 `matched_rule_ids` is informational and preserves all matching rule ids in priority order. Effective behavior comes from the rule verdict, not from reinterpreting the first stored id. A higher-priority `PreviewOnly` rule blocks lower-priority executable rules. `Ignore` takes effect immediately as `FileDecayState::Ignored` and does not apply a rule TTL.
+
+The raw `AutomationRule` records from storage or IPC are compiled into one `CompiledRuleSet` before evaluation. Compilation is the shared rule-engine seam and must:
+
+- Validate filename regexes and globs, source-domain patterns, size ranges, watch-path scope, move destinations, and rename templates.
+- Sort rules by descending priority while preserving the stored order for equal priorities.
+- Compile filename glob sets and regular expressions once for the operation snapshot.
+- Keep condition matching, rule ordering, and effective-verdict selection in one implementation.
+
+Reconciliation, incremental watcher processing, rule refresh, dropzone preview and execution, file explanations, and automatic rule scheduling all consume `CompiledRuleSet`. These workflows must not independently sort raw rules, validate rule syntax, or rebuild filename matchers. The compiled set exposes the per-file evaluation interface:
+
+```rust
+pub struct CompiledRuleSet { /* compiled rules and matchers */ }
+
+impl CompiledRuleSet {
+    pub fn compile(
+        rules: impl IntoIterator<Item = AutomationRule>,
+        config: &AppConfig,
+    ) -> Result<Self, AppError>;
+
+    pub fn decide_file(
+        &self,
+        file: &TrackedFile,
+        scope: RuleDecisionScope,
+    ) -> RuleDecision;
+
+    pub fn explain_file(&self, file: &TrackedFile) -> Vec<RuleMatchExplanation>;
+}
+```
+
+`RuleDecisionScope::WatchedFile` applies the rule's `watch_path`; `RuleDecisionScope::Dropzone` evaluates the compiled rule set without watched-file path filtering. Invalid rule data fails at compilation rather than during a per-file match.
 
 Internal rule evaluation returns a decision:
 
@@ -1325,6 +1355,7 @@ Test:
 
 ```text
 rule matching
+compiled rule-set validation, ordering, and matcher reuse
 freshness calculation
 expiry calculation
 path scope validation

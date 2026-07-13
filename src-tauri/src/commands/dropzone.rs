@@ -7,7 +7,7 @@ use crate::engine::paths::PathScope;
 use crate::models::{
     AppError, DropzoneActionFailure, DropzoneActionResult, DropzonePreview, RuleAction, RuleMode,
 };
-use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
+use crate::rules::{CompiledRuleSet, RuleDecisionScope, RuleVerdict};
 use crate::runtime::AppRuntime;
 use crate::storage;
 
@@ -101,7 +101,7 @@ pub async fn execute_dropzone_rule_group(
         }
 
         let config = storage::get_config(db)?;
-        let rules = storage::rules::list_rules(db)?;
+        let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
         let scope = PathScope::new(&config);
         let mut result = DropzoneActionResult {
             entries: Vec::new(),
@@ -112,12 +112,10 @@ pub async fn execute_dropzone_rule_group(
         for path in paths {
             let execution: Result<_, engine::executor::FileActionFailure> = (|| {
                 let (_, tracked) = engine::dropzone::build_dropzone_file(&path, &config)?;
-                let decision = decide_file_against_rules(
+                let decision = rule_set.decide_file(
                     &tracked,
-                    &config,
-                    &rules,
                     RuleDecisionScope::Dropzone,
-                )?;
+                );
                 let RuleVerdict::Matched {
                     effective_rule,
                     effective_explanation,

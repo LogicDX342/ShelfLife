@@ -7,7 +7,7 @@ use crate::engine::paths::PathScope;
 use crate::models::{
     AppError, FileDecayState, FilePreview, FilePreviewContent, RuleMatchExplanation, TrackedFile,
 };
-use crate::rules::explain_file_against_rules;
+use crate::rules::CompiledRuleSet;
 use crate::runtime::AppRuntime;
 use crate::storage::{self, Database};
 
@@ -40,7 +40,8 @@ pub async fn explain_file(
     };
     let config = state.with_database(storage::get_config)?;
     let rules = state.with_database(storage::rules::list_rules)?;
-    explain_file_against_rules(&file, &config, &rules)
+    let rule_set = CompiledRuleSet::compile(rules, &config)?;
+    Ok(rule_set.explain_file(&file))
 }
 
 #[tauri::command]

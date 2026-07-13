@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 use crate::engine::freshness::tracked_file_from_metadata;
 use crate::engine::paths::PathScope;
 use crate::models::{
-    AppConfig, AppError, AutomationRule, DropzoneFile, DropzonePreview, DropzoneRejectedFile,
-    DropzoneRuleGroup, RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
+    AppConfig, AppError, DropzoneFile, DropzonePreview, DropzoneRejectedFile, DropzoneRuleGroup,
+    RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
 };
-use crate::rules::{decide_file_against_rules, RuleDecisionScope, RuleVerdict};
+use crate::rules::{CompiledRuleSet, RuleDecisionScope, RuleVerdict};
 use crate::storage::{self, Database};
 
 pub const SHAKE_INTERVAL_MS: u64 = 1_000;
@@ -137,7 +137,7 @@ pub fn preview_dropzone_files(
     paths: &[String],
 ) -> Result<DropzonePreview, AppError> {
     let config = storage::get_config(db)?;
-    let rules = storage::rules::list_rules(db)?;
+    let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
     let mut files = Vec::new();
     let mut tracked_files = Vec::new();
     let mut rejected_files = Vec::new();
@@ -156,7 +156,7 @@ pub fn preview_dropzone_files(
     }
 
     let (rule_groups, preview_only, unmatched_files) =
-        plan_rule_groups(&config, &rules, &tracked_files)?;
+        plan_rule_groups(&config, &rule_set, &tracked_files)?;
 
     Ok(DropzonePreview {
         files,
@@ -210,7 +210,7 @@ pub fn build_dropzone_file(
 #[allow(clippy::type_complexity)]
 pub fn plan_rule_groups(
     config: &AppConfig,
-    rules: &[AutomationRule],
+    rule_set: &CompiledRuleSet,
     files: &[TrackedFile],
 ) -> Result<
     (
@@ -226,7 +226,7 @@ pub fn plan_rule_groups(
     let scope = PathScope::new(config);
 
     for file in files {
-        let decision = decide_file_against_rules(file, config, rules, RuleDecisionScope::Dropzone)?;
+        let decision = rule_set.decide_file(file, RuleDecisionScope::Dropzone);
         let RuleVerdict::Matched {
             effective_rule: rule,
             effective_explanation,

@@ -1,10 +1,11 @@
 use crate::engine::project_watched_file;
 use crate::models::{AppError, ReconciliationReport};
+use crate::rules::CompiledRuleSet;
 use crate::storage::{self, Database};
 
 pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport, AppError> {
     let config = storage::get_config(db)?;
-    let rules = storage::rules::list_rules(db)?;
+    let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
     let files = storage::tracked::list_tracked_files(db)?;
     let now = crate::engine::freshness::now_seconds();
 
@@ -12,7 +13,7 @@ pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport,
     let mut changed = Vec::new();
 
     for file in files {
-        let refreshed = project_watched_file(file.clone(), &config, &rules, now)?.tracked;
+        let refreshed = project_watched_file(file.clone(), &config, &rule_set, now)?.tracked;
 
         if refreshed != file {
             report.updated.push(refreshed.path.clone());

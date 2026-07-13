@@ -6,6 +6,7 @@ use crate::models::{
     AppError, AuditActionKind, AuditEntry, AutomationRule, RuleAction, RuleMatchExplanation,
     TrackedFile, UndoStatus,
 };
+use crate::rules::CompiledRuleSet;
 use crate::storage::{self, Database};
 
 #[derive(Debug, Clone)]
@@ -16,7 +17,7 @@ pub struct RuleExecutionReport {
 
 pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionReport, AppError> {
     let config = storage::get_config(db)?;
-    let rules = storage::rules::list_rules(db)?;
+    let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
     let now = crate::engine::freshness::now_seconds();
     let files = storage::tracked::list_tracked_files(db)?;
     let mut failed_attempts = storage::audit::list_failed_automatic_rule_attempts(db)?;
@@ -25,7 +26,7 @@ pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionRep
     let mut failures = Vec::new();
 
     for file in files {
-        let Some(candidate) = automatic_rule_candidate(&file, &config, &rules)? else {
+        let Some(candidate) = automatic_rule_candidate(&file, &config, &rule_set)? else {
             continue;
         };
         if candidate.expires_at > now {
@@ -71,13 +72,13 @@ pub fn next_automatic_rule_execution_delay(
     minimum_interval: Duration,
 ) -> Result<Option<Duration>, AppError> {
     let config = storage::get_config(db)?;
-    let rules = storage::rules::list_rules(db)?;
+    let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
     let now = crate::engine::freshness::now_seconds();
     let mut nearest_expiry: Option<u64> = None;
     let failed_attempts = storage::audit::list_failed_automatic_rule_attempts(db)?;
 
     for file in storage::tracked::list_tracked_files(db)? {
-        let Some(candidate) = automatic_rule_candidate(&file, &config, &rules)? else {
+        let Some(candidate) = automatic_rule_candidate(&file, &config, &rule_set)? else {
             continue;
         };
         if failed_attempts.contains(&(file.path.clone(), candidate.rule.id.clone())) {

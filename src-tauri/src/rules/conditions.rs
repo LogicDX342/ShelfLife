@@ -1,10 +1,21 @@
-use globset::{Glob, GlobSetBuilder};
+use globset::{Glob, GlobSet, GlobSetBuilder};
+use regex::Regex;
 use url::Url;
 
 use crate::models::{AppError, OriginEvidence, RuleConditions, SizeCondition};
-use crate::rules::regex_cache::cached_regex_is_match;
 
-pub struct ConditionMatch {
+#[derive(Debug)]
+pub(crate) struct CompiledConditions {
+    extensions: Vec<String>,
+    filename_globs: Vec<String>,
+    filename_glob_set: Option<GlobSet>,
+    filename_regexes: Vec<(String, Regex)>,
+    source_domains: Vec<String>,
+    size: SizeCondition,
+}
+
+#[derive(Debug)]
+pub(crate) struct ConditionMatch {
     pub matched_extension: bool,
     pub matched_size: bool,
     pub matched_origin: Option<String>,
@@ -12,100 +23,138 @@ pub struct ConditionMatch {
     pub matched: bool,
 }
 
-pub fn evaluate_conditions(
-    file_name: &str,
-    size_bytes: u64,
-    origin: &OriginEvidence,
-    conditions: &RuleConditions,
-) -> Result<ConditionMatch, AppError> {
-    let matched_extension = matches_extension(file_name, &conditions.extensions);
-    let matched_size = matches_size(size_bytes, &conditions.size);
-    let matched_filename_pattern = matches_filename_pattern(
-        file_name,
-        &conditions.filename_globs,
-        &conditions.filename_regexes,
-    )?;
-    let matched_origin = matches_origin(origin, &conditions.source_domains);
+impl CompiledConditions {
+    pub(crate) fn compile(conditions: &RuleConditions) -> Result<Self, AppError> {
+        if let SizeCondition::Between { min, max } = conditions.size {
+            if min > max {
+                return Err(AppError::new(
+                    "RULE_INVALID_SIZE_RANGE",
+                    "Size range minimum cannot exceed maximum. Rule was not saved.",
+                    true,
+                ));
+            }
+        }
 
-    let extension_ok = conditions.extensions.is_empty() || matched_extension;
-    let filename_ok = conditions.filename_globs.is_empty()
-        && conditions.filename_regexes.is_empty()
-        || matched_filename_pattern.is_some();
-    let origin_ok = conditions.source_domains.is_empty() || matched_origin.is_some();
+        let mut filename_glob_set = None;
+        if !conditions.filename_globs.is_empty() {
+            let mut builder = GlobSetBuilder::new();
+            for pattern in &conditions.filename_globs {
+                builder.add(Glob::new(pattern).map_err(|error| {
+                    AppError::with_details(
+                        "RULE_INVALID_GLOB",
+                        "Filename glob could not be parsed.",
+                        true,
+                        error.to_string(),
+                    )
+                })?);
+            }
+            filename_glob_set = Some(builder.build().map_err(|error| {
+                AppError::with_details(
+                    "RULE_INVALID_GLOB",
+                    "Filename glob set could not be built.",
+                    true,
+                    error.to_string(),
+                )
+            })?);
+        }
 
-    Ok(ConditionMatch {
-        matched_extension,
-        matched_size,
-        matched_origin,
-        matched_filename_pattern,
-        matched: extension_ok && filename_ok && origin_ok && matched_size,
-    })
+        let filename_regexes = conditions
+            .filename_regexes
+            .iter()
+            .map(|pattern| {
+                Regex::new(pattern)
+                    .map(|regex| (pattern.clone(), regex))
+                    .map_err(|error| {
+                        AppError::with_details(
+                            "RULE_INVALID_REGEX",
+                            "Filename regex could not be parsed.",
+                            true,
+                            error.to_string(),
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for pattern in &conditions.source_domains {
+            validate_source_domain_pattern(pattern)?;
+        }
+
+        Ok(Self {
+            extensions: conditions
+                .extensions
+                .iter()
+                .map(|value| value.trim_start_matches('.').to_lowercase())
+                .collect(),
+            filename_globs: conditions.filename_globs.clone(),
+            filename_glob_set,
+            filename_regexes,
+            source_domains: conditions.source_domains.clone(),
+            size: conditions.size.clone(),
+        })
+    }
+
+    pub(crate) fn evaluate(
+        &self,
+        file_name: &str,
+        size_bytes: u64,
+        origin: &OriginEvidence,
+    ) -> ConditionMatch {
+        let matched_extension = self.matches_extension(file_name);
+        let matched_size = matches_size(size_bytes, &self.size);
+        let matched_filename_pattern = self.matches_filename_pattern(file_name);
+        let matched_origin = matches_origin(origin, &self.source_domains);
+
+        let extension_ok = self.extensions.is_empty() || matched_extension;
+        let filename_ok = self.filename_globs.is_empty() && self.filename_regexes.is_empty()
+            || matched_filename_pattern.is_some();
+        let origin_ok = self.source_domains.is_empty() || matched_origin.is_some();
+
+        ConditionMatch {
+            matched_extension,
+            matched_size,
+            matched_origin,
+            matched_filename_pattern,
+            matched: extension_ok && filename_ok && origin_ok && matched_size,
+        }
+    }
+
+    fn matches_extension(&self, file_name: &str) -> bool {
+        if self.extensions.is_empty() {
+            return false;
+        }
+
+        let ext = std::path::Path::new(file_name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_lowercase();
+
+        self.extensions.iter().any(|candidate| candidate == &ext)
+    }
+
+    fn matches_filename_pattern(&self, file_name: &str) -> Option<String> {
+        if let Some(glob_set) = &self.filename_glob_set {
+            if let Some(index) = glob_set.matches(file_name).first() {
+                if let Some(pattern) = self.filename_globs.get(*index) {
+                    return Some(pattern.clone());
+                }
+            }
+        }
+
+        self.filename_regexes
+            .iter()
+            .find(|(_, regex)| regex.is_match(file_name))
+            .map(|(pattern, _)| pattern.clone())
+    }
 }
 
-pub fn matches_size(size_bytes: u64, condition: &SizeCondition) -> bool {
+pub(crate) fn matches_size(size_bytes: u64, condition: &SizeCondition) -> bool {
     match condition {
         SizeCondition::Any => true,
         SizeCondition::LessThan(max) => size_bytes < *max,
         SizeCondition::GreaterThan(min) => size_bytes > *min,
         SizeCondition::Between { min, max } => size_bytes >= *min && size_bytes <= *max,
     }
-}
-
-fn matches_extension(file_name: &str, extensions: &[String]) -> bool {
-    if extensions.is_empty() {
-        return false;
-    }
-
-    let ext = std::path::Path::new(file_name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .trim_start_matches('.')
-        .to_lowercase();
-
-    extensions
-        .iter()
-        .map(|value| value.trim_start_matches('.').to_lowercase())
-        .any(|candidate| candidate == ext)
-}
-
-fn matches_filename_pattern(
-    file_name: &str,
-    globs: &[String],
-    regexes: &[String],
-) -> Result<Option<String>, AppError> {
-    if !globs.is_empty() {
-        let mut builder = GlobSetBuilder::new();
-        for glob in globs {
-            builder.add(Glob::new(glob).map_err(|error| {
-                AppError::with_details(
-                    "RULE_INVALID_GLOB",
-                    "Filename glob could not be parsed.",
-                    true,
-                    error.to_string(),
-                )
-            })?);
-        }
-        let glob_set = builder.build().map_err(|error| {
-            AppError::with_details(
-                "RULE_INVALID_GLOB",
-                "Filename glob set could not be built.",
-                true,
-                error.to_string(),
-            )
-        })?;
-
-        if let Some(index) = glob_set.matches(file_name).first() {
-            return Ok(globs.get(*index).cloned());
-        }
-    }
-
-    for pattern in regexes {
-        if cached_regex_is_match(pattern, file_name, "Filename regex could not be parsed.")? {
-            return Ok(Some(pattern.clone()));
-        }
-    }
-    Ok(None)
 }
 
 fn matches_origin(origin: &OriginEvidence, domains: &[String]) -> Option<String> {
@@ -169,7 +218,7 @@ fn matches_pattern(pattern: &str, host: &str) -> bool {
             && host.as_bytes()[host.len() - domain.len() - 1] == b'.')
 }
 
-pub fn validate_source_domain_pattern(pattern: &str) -> Result<(), AppError> {
+pub(crate) fn validate_source_domain_pattern(pattern: &str) -> Result<(), AppError> {
     let pattern = pattern.trim();
     if pattern == "*" {
         return Ok(());

@@ -84,10 +84,6 @@ impl<'a> PathScope<'a> {
         Err(AppError::path_out_of_scope(path.to_string_lossy().as_ref()))
     }
 
-    pub fn rule_watch_path_contains(&self, rule_watch_path: &str, path: &Path) -> bool {
-        root_contains(rule_watch_path, path)
-    }
-
     fn is_inside_enabled_watch_root(&self, path: &Path) -> bool {
         self.config
             .watch_targets
@@ -146,7 +142,7 @@ fn target_contains_path(target: &WatchTarget, path: &Path) -> bool {
     }
 }
 
-fn root_contains(root: &str, path: impl AsRef<Path>) -> bool {
+pub(crate) fn root_contains(root: &str, path: impl AsRef<Path>) -> bool {
     let Some(root) = normalize_configured_path(Path::new(root)) else {
         return false;
     };
