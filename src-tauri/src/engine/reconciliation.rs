@@ -24,6 +24,11 @@ struct ReconciliationPlan {
     to_remove: Vec<String>,
 }
 
+struct ScannedFile {
+    path: PathBuf,
+    metadata: fs::Metadata,
+}
+
 struct ObservationContext<'a> {
     target: &'a WatchTarget,
     config: &'a AppConfig,
@@ -69,16 +74,16 @@ pub fn reconcile_with_report_with_progress(
         let hidden_whitelist = build_glob_set(&target.include_hidden_patterns)?;
         // Canonicalize root once — reused inside target_ignores_path.
         let canonical_root = root.canonicalize().ok();
-        let paths = scan_target_paths(
+        let files = scan_target_paths(
             &root,
             target.recursive,
             ignore_set.as_ref(),
             hidden_whitelist.as_ref(),
         )?;
-        let path_results: Result<Vec<Option<ObservedFile>>, AppError> = paths
+        let path_results: Result<Vec<Option<ObservedFile>>, AppError> = files
             .into_par_iter()
-            .map(|path| {
-                let path_string = path.to_string_lossy().to_string();
+            .map(|file| {
+                let path_string = file.path.to_string_lossy().to_string();
                 let context = ObservationContext {
                     target,
                     config: &config,
@@ -87,14 +92,19 @@ pub fn reconcile_with_report_with_progress(
                     ignore_set: ignore_set.as_ref(),
                     canonical_root: canonical_root.as_deref(),
                 };
-                observe_path(&path, existing_map.get(&path_string), &context)
+                observe_path_with_metadata(
+                    &file.path,
+                    &file.metadata,
+                    existing_map.get(&path_string),
+                    &context,
+                )
             })
             .collect();
 
         observations.extend(path_results?.into_iter().flatten());
     }
 
-    let path_statuses = path_statuses_for(&existing_map, &scope);
+    let path_statuses = path_statuses_for(&existing_map, &scope, &observations);
     reconcile_observations(db, &existing_map, observations, &path_statuses, progress_cb)
 }
 
@@ -123,13 +133,16 @@ fn plan_reconciliation(
             ObservedFile::Present(tracked) => {
                 observed_paths.insert(tracked.path.clone());
                 match existing.get(&tracked.path) {
-                    Some(file) if tracked_file_changed(file, &tracked) => {
+                    Some(file) if tracked.changed_from(file) => {
                         report.updated.push(tracked.path.clone());
+                        to_upsert.push(*tracked);
                     }
-                    None => report.indexed.push(tracked.path.clone()),
+                    None => {
+                        report.indexed.push(tracked.path.clone());
+                        to_upsert.push(*tracked);
+                    }
                     _ => {}
-                }
-                to_upsert.push(*tracked);
+                };
             }
         }
     }
@@ -217,7 +230,7 @@ pub fn reconcile_paths(
         }
     }
 
-    let path_statuses = path_statuses_for(&existing_map, &scope);
+    let path_statuses = path_statuses_for(&existing_map, &scope, &observations);
     reconcile_observations(db, &existing_map, observations, &path_statuses, None)
 }
 
@@ -226,30 +239,33 @@ fn observe_path(
     existing: Option<&TrackedFile>,
     context: &ObservationContext<'_>,
 ) -> Result<Option<ObservedFile>, AppError> {
-    if is_transient_path(path) {
-        return Ok(None);
-    }
-
-    let path_string = path.to_string_lossy().to_string();
     // Single stat — symlink_metadata covers both symlink detection and file metadata.
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(_) => return Ok(None),
     };
+    observe_path_with_metadata(path, &metadata, existing, context)
+}
+
+fn observe_path_with_metadata(
+    path: &Path,
+    metadata: &fs::Metadata,
+    existing: Option<&TrackedFile>,
+    context: &ObservationContext<'_>,
+) -> Result<Option<ObservedFile>, AppError> {
+    if is_transient_path(path) {
+        return Ok(None);
+    }
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Ok(None);
     }
+    let path_string = path.to_string_lossy().to_string();
     if target_ignores_path(path, context.ignore_set, context.canonical_root) {
         return Ok(Some(ObservedFile::Ignored(path_string)));
     }
 
-    let tracked = tracked_file_from_metadata(
-        path,
-        &metadata,
-        existing,
-        context.config,
-        &context.target.id,
-    );
+    let tracked =
+        tracked_file_from_metadata(path, metadata, existing, context.config, &context.target.id);
     let tracked =
         project_watched_file(tracked, context.config, context.rules, context.now)?.tracked;
 
@@ -259,9 +275,19 @@ fn observe_path(
 fn path_statuses_for(
     existing: &HashMap<String, TrackedFile>,
     scope: &PathScope<'_>,
+    observations: &[ObservedFile],
 ) -> HashMap<String, ExistingPathStatus> {
+    let observed_paths: HashSet<&str> = observations
+        .iter()
+        .map(|observation| match observation {
+            ObservedFile::Ignored(path) => path.as_str(),
+            ObservedFile::Present(file) => file.path.as_str(),
+        })
+        .collect();
+
     existing
         .iter()
+        .filter(|(path_string, _)| !observed_paths.contains(path_string.as_str()))
         .map(|(path_string, file)| {
             let path = Path::new(path_string);
             let status = if !scope.is_tracked_path_active(path, &file.watch_target_id) {
@@ -330,7 +356,7 @@ fn scan_target_paths(
     recursive: bool,
     ignore_set: Option<&GlobSet>,
     hidden_whitelist: Option<&GlobSet>,
-) -> Result<Vec<PathBuf>, AppError> {
+) -> Result<Vec<ScannedFile>, AppError> {
     scan_target_paths_inner(root, recursive, true, ignore_set, hidden_whitelist)
 }
 
@@ -340,15 +366,15 @@ fn scan_target_paths_inner(
     is_root: bool,
     ignore_set: Option<&GlobSet>,
     hidden_whitelist: Option<&GlobSet>,
-) -> Result<Vec<PathBuf>, AppError> {
-    let mut paths = Vec::new();
+) -> Result<Vec<ScannedFile>, AppError> {
+    let mut files = Vec::new();
     let entries = match fs::read_dir(root) {
         Ok(entries) => entries,
         Err(error) => {
             if is_root {
                 return Err(error.into());
             } else {
-                return Ok(paths);
+                return Ok(files);
             }
         }
     };
@@ -365,8 +391,10 @@ fn scan_target_paths_inner(
             }
         };
         let path = entry.path();
-        let file_type = match entry.file_type() {
-            Ok(ft) => ft,
+        // On Windows, DirEntry metadata is populated by directory enumeration and
+        // does not issue the extra per-path stat performed by symlink_metadata.
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
             Err(error) => {
                 if is_root {
                     return Err(error.into());
@@ -375,16 +403,16 @@ fn scan_target_paths_inner(
                 }
             }
         };
-        if file_type.is_symlink() {
+        if metadata.file_type().is_symlink() {
             continue;
         }
-        if file_type.is_dir() && recursive {
+        if metadata.is_dir() && recursive {
             // System directories are always skipped — no override.
             if is_system_directory(&path) {
                 continue;
             }
             // Hidden directories are skipped by default; allowed if whitelisted.
-            if is_hidden_directory(&path) {
+            if is_hidden_directory(&path, &metadata) {
                 let dir_name = path
                     .file_name()
                     .and_then(|v| v.to_str())
@@ -406,16 +434,16 @@ fn scan_target_paths_inner(
                     continue;
                 }
             }
-            if let Ok(sub_paths) =
+            if let Ok(sub_files) =
                 scan_target_paths_inner(&path, recursive, false, ignore_set, hidden_whitelist)
             {
-                paths.extend(sub_paths);
+                files.extend(sub_files);
             }
-        } else {
-            paths.push(path);
+        } else if metadata.is_file() {
+            files.push(ScannedFile { path, metadata });
         }
     }
-    Ok(paths)
+    Ok(files)
 }
 
 fn build_glob_set(patterns: &[String]) -> Result<Option<GlobSet>, AppError> {
@@ -460,17 +488,6 @@ fn target_ignores_path(
         .and_then(|root| path.strip_prefix(root).ok())
         .unwrap_or(path);
     ignore_set.is_match(file_name) || ignore_set.is_match(relative)
-}
-
-fn tracked_file_changed(existing: &TrackedFile, next: &TrackedFile) -> bool {
-    existing.file_name != next.file_name
-        || existing.size_bytes != next.size_bytes
-        || existing.last_observed_mtime != next.last_observed_mtime
-        || existing.freshness_at != next.freshness_at
-        || existing.expiry != next.expiry
-        || existing.state != next.state
-        || existing.matched_rule_ids != next.matched_rule_ids
-        || existing.origin != next.origin
 }
 
 #[cfg(test)]
@@ -539,6 +556,7 @@ mod tests {
         assert_eq!(plan.report.indexed, vec!["indexed"]);
         assert_eq!(plan.report.updated, vec!["updated"]);
         assert_eq!(plan.report.removed, vec!["missing"]);
+        assert!(!plan.to_upsert.iter().any(|file| file.path == "unchanged"));
         assert!(plan
             .to_upsert
             .iter()

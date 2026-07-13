@@ -149,14 +149,13 @@ pub fn tracked_file_from_metadata(
         expiry,
         state,
         matched_rule_ids: Vec::new(),
-        // Reuse existing origin evidence when already resolved — avoids an ADS
-        // syscall per file on every scan. A replaced file will have a changed mtime
-        // which causes a full re-evaluation including a fresh origin read.
+        // Reuse the previous origin lookup for an unchanged file, including Unknown:
+        // on Windows, Unknown normally means the Zone.Identifier ADS was absent.
+        // A replaced file will have changed size or mtime and refresh the evidence.
         origin: match existing {
             Some(file)
                 if file.size_bytes == metadata.len()
-                    && file.last_observed_mtime == last_observed_mtime
-                    && !matches!(file.origin, crate::models::OriginEvidence::Unknown) =>
+                    && file.last_observed_mtime == last_observed_mtime =>
             {
                 file.origin.clone()
             }
@@ -233,6 +232,31 @@ mod tests {
         );
 
         assert_eq!(refreshed.origin, known_origin());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn unchanged_file_reuses_unknown_origin() {
+        let fixture = Fixture::new("shelflife-unknown-origin-reuse");
+        let path = fixture.write_watch_file("local.txt", "body");
+        let ads_path = format!("{}:Zone.Identifier:$DATA", path.to_string_lossy());
+        if fs::write(&ads_path, "[ZoneTransfer]\nZoneId=3\n").is_err() {
+            return;
+        }
+        let metadata = fs::metadata(&path).expect("metadata should exist");
+        let mut existing =
+            tracked_file_from_metadata(&path, &metadata, None, &fixture.config(), "watch");
+        existing.origin = OriginEvidence::Unknown;
+
+        let refreshed = tracked_file_from_metadata(
+            &path,
+            &metadata,
+            Some(&existing),
+            &fixture.config(),
+            "watch",
+        );
+
+        assert_eq!(refreshed.origin, OriginEvidence::Unknown);
     }
 
     #[test]

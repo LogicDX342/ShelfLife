@@ -35,3 +35,17 @@ pub struct TrackedFile {
     pub matched_rule_ids: Vec<String>,
     pub origin: OriginEvidence,
 }
+
+impl TrackedFile {
+    /// Returns `true` when any tracked field differs from `previous`.
+    pub fn changed_from(&self, previous: &TrackedFile) -> bool {
+        self.file_name != previous.file_name
+            || self.size_bytes != previous.size_bytes
+            || self.last_observed_mtime != previous.last_observed_mtime
+            || self.freshness_at != previous.freshness_at
+            || self.expiry != previous.expiry
+            || self.state != previous.state
+            || self.matched_rule_ids != previous.matched_rule_ids
+            || self.origin != previous.origin
+    }
+}
