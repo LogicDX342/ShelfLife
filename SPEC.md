@@ -819,7 +819,6 @@ serde JSON-compatible structs
 app_config
 watch_targets
 watch_target_ignore_patterns
-watch_target_include_hidden_patterns
 
 automation_rules
 rule_extensions
@@ -1315,7 +1314,6 @@ pub struct WatchTarget {
     pub enabled: bool,
     pub recursive: bool,
     pub ignore_patterns: Vec<String>,
-    pub include_hidden_patterns: Vec<String>,
 }
 ```
 

@@ -320,7 +320,6 @@ mod tests {
                 enabled: true,
                 recursive: false,
                 ignore_patterns: Vec::new(),
-                include_hidden_patterns: Vec::new(),
             },
         );
 
@@ -349,7 +348,6 @@ mod tests {
             enabled: true,
             recursive: false,
             ignore_patterns: Vec::new(),
-            include_hidden_patterns: Vec::new(),
         });
 
         let error = validate_config_paths(&config).expect_err("overlap should be rejected");
@@ -382,7 +380,6 @@ mod tests {
                 enabled: true,
                 recursive: false,
                 ignore_patterns: Vec::new(),
-                include_hidden_patterns: Vec::new(),
             }],
             safe_folder_path: path_string(&safe),
             ..AppConfig::default()
@@ -511,7 +508,6 @@ mod tests {
                 enabled: true,
                 recursive,
                 ignore_patterns: Vec::new(),
-                include_hidden_patterns: Vec::new(),
             }
         }
     }

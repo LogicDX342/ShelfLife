@@ -52,7 +52,6 @@
       enabled: true,
       recursive: false,
       ignore_patterns: [],
-      include_hidden_patterns: [],
     };
   }
 

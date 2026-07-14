@@ -31,14 +31,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    watch_target_include_hidden_patterns (target_id, ordinal) {
-        target_id -> Text,
-        ordinal -> BigInt,
-        value -> Text,
-    }
-}
-
-diesel::table! {
     automation_rules (id) {
         id -> Text,
         name -> Text,
@@ -157,7 +149,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     app_config,
     watch_targets,
     watch_target_ignore_patterns,
-    watch_target_include_hidden_patterns,
     automation_rules,
     rule_extensions,
     rule_filename_globs,

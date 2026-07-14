@@ -65,15 +65,9 @@ pub fn reconcile_with_report_with_progress(
 
         // Hoist pattern set construction outside the file loop.
         let ignore_set = build_glob_set(&target.ignore_patterns)?;
-        let hidden_whitelist = build_glob_set(&target.include_hidden_patterns)?;
         // Canonicalize root once — reused inside target_ignores_path.
         let canonical_root = root.canonicalize().ok();
-        let files = scan_target_paths(
-            &root,
-            target.recursive,
-            ignore_set.as_ref(),
-            hidden_whitelist.as_ref(),
-        )?;
+        let files = scan_target_paths(&root, target.recursive, ignore_set.as_ref())?;
         let path_results: Result<Vec<Option<ObservedFile>>, AppError> = files
             .into_par_iter()
             .map(|file| {
@@ -343,9 +337,8 @@ fn scan_target_paths(
     root: &Path,
     recursive: bool,
     ignore_set: Option<&GlobSet>,
-    hidden_whitelist: Option<&GlobSet>,
 ) -> Result<Vec<ScannedFile>, AppError> {
-    scan_target_paths_inner(root, recursive, true, ignore_set, hidden_whitelist)
+    scan_target_paths_inner(root, recursive, true, ignore_set)
 }
 
 fn scan_target_paths_inner(
@@ -353,7 +346,6 @@ fn scan_target_paths_inner(
     recursive: bool,
     is_root: bool,
     ignore_set: Option<&GlobSet>,
-    hidden_whitelist: Option<&GlobSet>,
 ) -> Result<Vec<ScannedFile>, AppError> {
     let mut files = Vec::new();
     let entries = match fs::read_dir(root) {
@@ -399,18 +391,9 @@ fn scan_target_paths_inner(
             if is_system_directory(&path) {
                 continue;
             }
-            // Hidden directories are skipped by default; allowed if whitelisted.
+            // Hidden directories are always skipped.
             if is_hidden_directory(&path, &metadata) {
-                let dir_name = path
-                    .file_name()
-                    .and_then(|v| v.to_str())
-                    .unwrap_or_default();
-                let whitelisted = hidden_whitelist
-                    .map(|set| set.is_match(dir_name))
-                    .unwrap_or(false);
-                if !whitelisted {
-                    continue;
-                }
+                continue;
             }
             // Non-hidden dirs can be excluded by ignore_patterns.
             if let Some(set) = ignore_set {
@@ -422,9 +405,7 @@ fn scan_target_paths_inner(
                     continue;
                 }
             }
-            if let Ok(sub_files) =
-                scan_target_paths_inner(&path, recursive, false, ignore_set, hidden_whitelist)
-            {
+            if let Ok(sub_files) = scan_target_paths_inner(&path, recursive, false, ignore_set) {
                 files.extend(sub_files);
             }
         } else if metadata.is_file() {
@@ -864,7 +845,6 @@ mod tests {
                     enabled: true,
                     recursive: true,
                     ignore_patterns: Vec::new(),
-                    include_hidden_patterns: Vec::new(),
                 }],
                 safe_folder_path: path_string(&self.root.join("safe")),
                 ..AppConfig::default()
@@ -880,7 +860,6 @@ mod tests {
                     enabled: true,
                     recursive: false,
                     ignore_patterns,
-                    include_hidden_patterns: Vec::new(),
                 }],
                 safe_folder_path: path_string(&self.root.join("safe")),
                 ..AppConfig::default()

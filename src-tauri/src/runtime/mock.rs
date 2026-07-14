@@ -155,7 +155,6 @@ pub fn seed_mock_workspace(
                 enabled: true,
                 recursive: true,
                 ignore_patterns: Vec::new(),
-                include_hidden_patterns: Vec::new(),
             }],
             default_ttl_seconds: 30 * SECONDS_PER_DAY,
             stale_threshold_seconds: 5 * SECONDS_PER_DAY,

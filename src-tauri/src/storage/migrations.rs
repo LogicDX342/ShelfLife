@@ -136,6 +136,7 @@ INNER JOIN tracked_files_v2 AS files ON files.path = rules.file_path;
 
 DROP TABLE tracked_file_rules;
 DROP TABLE origin_values;
+DROP TABLE IF EXISTS watch_target_include_hidden_patterns;
 DROP TABLE tracked_files;
 ALTER TABLE tracked_files_v2 RENAME TO tracked_files;
 ALTER TABLE tracked_file_rules_v2 RENAME TO tracked_file_rules;

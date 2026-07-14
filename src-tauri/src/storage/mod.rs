@@ -146,13 +146,6 @@ CREATE TABLE IF NOT EXISTS watch_target_ignore_patterns (
     PRIMARY KEY (target_id, ordinal)
 );
 
-CREATE TABLE IF NOT EXISTS watch_target_include_hidden_patterns (
-    target_id TEXT NOT NULL REFERENCES watch_targets(id) ON DELETE CASCADE,
-    ordinal INTEGER NOT NULL,
-    value TEXT NOT NULL,
-    PRIMARY KEY (target_id, ordinal)
-);
-
 CREATE TABLE IF NOT EXISTS automation_rules (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -298,13 +291,6 @@ pub fn get_config(db: &Database) -> Result<AppConfig, AppError> {
                 &row.id,
                 "value",
             )?,
-            include_hidden_patterns: load_ordered_values(
-                &mut conn,
-                "watch_target_include_hidden_patterns",
-                "target_id",
-                &row.id,
-                "value",
-            )?,
             id: row.id,
             path: row.path,
             enabled: row.enabled,
@@ -378,15 +364,6 @@ pub fn save_config(db: &Database, config: &AppConfig) -> Result<(), AppError> {
                 &target.id,
                 &target.ignore_patterns,
                 "watch_target_ignore_patterns.ordinal",
-            )?;
-            insert_ordered_values(
-                conn,
-                "watch_target_include_hidden_patterns",
-                "target_id",
-                "value",
-                &target.id,
-                &target.include_hidden_patterns,
-                "watch_target_include_hidden_patterns.ordinal",
             )?;
         }
 

@@ -148,7 +148,6 @@ export type WatchTarget = {
   enabled: boolean;
   recursive: boolean;
   ignore_patterns: string[];
-  include_hidden_patterns: string[];
 };
 
 export type CloseBehavior = 'Ask' | 'HideToTray' | 'Quit';

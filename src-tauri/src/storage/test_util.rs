@@ -51,7 +51,6 @@ impl Fixture {
             enabled: true,
             recursive,
             ignore_patterns: Vec::new(),
-            include_hidden_patterns: Vec::new(),
         }
     }
 
