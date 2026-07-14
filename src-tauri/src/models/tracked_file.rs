@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use super::OriginEvidence;
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Expiry {
     At(u64),
@@ -16,7 +14,6 @@ pub enum FileDecayState {
     Decaying,
     Pinned,
     Ignored,
-    Missing,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -33,7 +30,7 @@ pub struct TrackedFile {
     pub expiry: Expiry,
     pub state: FileDecayState,
     pub matched_rule_ids: Vec<String>,
-    pub origin: OriginEvidence,
+    pub origin_url: Option<String>,
 }
 
 impl TrackedFile {
@@ -46,6 +43,6 @@ impl TrackedFile {
             || self.expiry != previous.expiry
             || self.state != previous.state
             || self.matched_rule_ids != previous.matched_rule_ids
-            || self.origin != previous.origin
+            || self.origin_url != previous.origin_url
     }
 }

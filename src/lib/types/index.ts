@@ -1,18 +1,6 @@
-export type FileDecayState = 'Fresh' | 'Stale' | 'Decaying' | 'Pinned' | 'Ignored' | 'Missing';
+export type FileDecayState = 'Fresh' | 'Stale' | 'Decaying' | 'Pinned' | 'Ignored';
 
 export type Expiry = { At: number } | 'Permanent' | { SnoozedUntil: number };
-
-export type OriginEvidence =
-  | { MacWhereFroms: { values: string[] } }
-  | {
-      WindowsZoneIdentifier: {
-        zone_id: number | null;
-        host_url: string | null;
-        referrer_url: string | null;
-      };
-    }
-  | { LinuxXattr: { key: string; value_utf8: string | null } }
-  | 'Unknown';
 
 export type TrackedFile = {
   path: string;
@@ -27,7 +15,7 @@ export type TrackedFile = {
   expiry: Expiry;
   state: FileDecayState;
   matched_rule_ids: string[];
-  origin: OriginEvidence;
+  origin_url: string | null;
 };
 
 export type RuleMode = 'PreviewOnly' | 'AskFirst' | 'Automatic';

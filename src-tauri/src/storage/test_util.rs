@@ -5,8 +5,7 @@ use uuid::Uuid;
 
 use crate::engine::freshness::tracked_file_from_metadata;
 use crate::models::{
-    AppConfig, AutomationRule, OriginEvidence, RuleAction, RuleConditions, RuleMode, SizeCondition,
-    WatchTarget,
+    AppConfig, AutomationRule, RuleAction, RuleConditions, RuleMode, SizeCondition, WatchTarget,
 };
 use crate::storage;
 
@@ -112,7 +111,7 @@ impl Fixture {
         let metadata = fs::metadata(path).expect("metadata should exist");
         let config = AppConfig::default();
         let mut tracked = tracked_file_from_metadata(path, &metadata, None, &config, "");
-        tracked.origin = OriginEvidence::Unknown;
+        tracked.origin_url = None;
         storage::tracked::upsert_tracked_file(&self.db, &tracked)
             .expect("tracked file should save");
     }

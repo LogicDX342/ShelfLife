@@ -2,14 +2,26 @@ use diesel::dsl::sql;
 use diesel::prelude::*;
 use diesel::sql_types::{Integer, Text};
 use diesel::sqlite::SqliteConnection;
+use diesel::upsert::excluded;
 
-use crate::models::{AppError, Expiry, FileDecayState, OriginEvidence, TrackedFile};
-use crate::storage::schema::tracked_files;
+use crate::models::{AppError, Expiry, FileDecayState, TrackedFile};
+use crate::storage::schema::{tracked_file_rules, tracked_files};
 use crate::storage::{
     delete_owner_rows, i64_to_u64, insert_ordered_values, load_ordered_values,
     load_ordered_values_by_owner, opt_i64_to_u64, opt_u64_to_i64, storage_data_error, u64_to_i64,
     Database,
 };
+
+const PRIMARY_WRITE_CHUNK_SIZE: usize = 64;
+const RULE_WRITE_CHUNK_SIZE: usize = 300;
+const DELETE_CHUNK_SIZE: usize = 500;
+
+#[derive(Default)]
+pub struct TrackedFileChanges {
+    pub inserts: Vec<TrackedFile>,
+    pub updates: Vec<TrackedFile>,
+    pub removes: Vec<String>,
+}
 
 pub fn get_tracked_file(db: &Database, path: &str) -> Result<Option<TrackedFile>, AppError> {
     let mut conn = db.connect()?;
@@ -27,9 +39,7 @@ pub fn get_tracked_file(db: &Database, path: &str) -> Result<Option<TrackedFile>
             &row.path,
             "rule_id",
         )?;
-        let origin_values =
-            load_ordered_values(&mut conn, "origin_values", "file_path", &row.path, "value")?;
-        tracked_file_from_row(row, matched_rule_ids, origin_values)
+        tracked_file_from_row(row, matched_rule_ids)
     })
     .transpose()
 }
@@ -46,8 +56,7 @@ pub fn list_tracked_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
                     WHEN 'fresh' THEN 2
                     WHEN 'pinned' THEN 3
                     WHEN 'ignored' THEN 4
-                    WHEN 'missing' THEN 5
-                    ELSE 6
+                    ELSE 5
                 END
                 ",
             ),
@@ -59,19 +68,16 @@ pub fn list_tracked_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
 
     let mut matched_rules_by_path =
         load_ordered_values_by_owner(&mut conn, "tracked_file_rules", "file_path", "rule_id")?;
-    let mut origin_values_by_path =
-        load_ordered_values_by_owner(&mut conn, "origin_values", "file_path", "value")?;
     let mut files = Vec::new();
     for row in rows {
         let matched_rule_ids = matched_rules_by_path.remove(&row.path).unwrap_or_default();
-        let origin_values = origin_values_by_path.remove(&row.path).unwrap_or_default();
-        files.push(tracked_file_from_row(row, matched_rule_ids, origin_values)?);
+        files.push(tracked_file_from_row(row, matched_rule_ids)?);
     }
     Ok(files)
 }
 
 pub fn upsert_tracked_file(db: &Database, file: &TrackedFile) -> Result<(), AppError> {
-    update_tracked_files_batch(db, vec![file.clone()], Vec::new())
+    db.write(|conn| upsert_tracked_file_tx(conn, file))
 }
 
 pub fn replace_tracked_file(
@@ -96,89 +102,83 @@ pub(crate) fn replace_tracked_file_tx(
 
 /// Write all file changes in a single transaction.
 pub fn upsert_tracked_files_batch(db: &Database, files: &[TrackedFile]) -> Result<(), AppError> {
-    update_tracked_files_batch(db, files.to_vec(), Vec::new())
+    apply_tracked_file_changes(
+        db,
+        TrackedFileChanges {
+            updates: files.to_vec(),
+            ..TrackedFileChanges::default()
+        },
+    )
 }
 
-pub fn update_tracked_files_batch(
+pub fn apply_tracked_file_changes(
     db: &Database,
-    upserts: Vec<TrackedFile>,
-    removes: Vec<String>,
+    changes: TrackedFileChanges,
 ) -> Result<(), AppError> {
-    update_tracked_files_batch_with_progress(db, upserts, removes, None)
+    apply_tracked_file_changes_with_progress(db, changes, None)
 }
 
-pub fn update_tracked_files_batch_with_progress(
+pub fn apply_tracked_file_changes_with_progress(
     db: &Database,
-    upserts: Vec<TrackedFile>,
-    removes: Vec<String>,
+    changes: TrackedFileChanges,
     progress_cb: Option<&dyn Fn(usize)>,
 ) -> Result<(), AppError> {
-    if upserts.is_empty() && removes.is_empty() {
+    if changes.inserts.is_empty() && changes.updates.is_empty() && changes.removes.is_empty() {
         return Ok(());
     }
 
     db.write(|conn| {
         let mut completed = 0;
-        for path in &removes {
-            diesel::delete(tracked_files::table.filter(tracked_files::path.eq(path)))
+        for paths in changes.removes.chunks(DELETE_CHUNK_SIZE) {
+            diesel::delete(tracked_files::table.filter(tracked_files::path.eq_any(paths)))
                 .execute(conn)?;
-            completed += 1;
-            if let Some(cb) = progress_cb {
-                cb(completed);
-            }
+            completed += paths.len();
+            emit_progress(progress_cb, completed);
         }
-        for file in &upserts {
-            upsert_tracked_file_tx(conn, file)?;
-            completed += 1;
-            if let Some(cb) = progress_cb {
-                cb(completed);
-            }
+
+        for files in changes.inserts.chunks(PRIMARY_WRITE_CHUNK_SIZE) {
+            insert_tracked_files_tx(conn, files)?;
+            insert_tracked_file_rules_tx(conn, files)?;
+            completed += files.len();
+            emit_progress(progress_cb, completed);
+        }
+
+        for files in changes.updates.chunks(PRIMARY_WRITE_CHUNK_SIZE) {
+            upsert_tracked_files_tx(conn, files)?;
+            rebuild_tracked_file_rules_tx(conn, files)?;
+            completed += files.len();
+            emit_progress(progress_cb, completed);
         }
         Ok(())
     })
+}
+
+fn emit_progress(progress_cb: Option<&dyn Fn(usize)>, completed: usize) {
+    if let Some(cb) = progress_cb {
+        cb(completed);
+    }
+}
+
+pub(crate) fn delete_tracked_file_tx(
+    conn: &mut SqliteConnection,
+    path: &str,
+) -> Result<(), AppError> {
+    diesel::delete(tracked_files::table.filter(tracked_files::path.eq(path))).execute(conn)?;
+    Ok(())
 }
 
 pub(crate) fn upsert_tracked_file_tx(
     conn: &mut SqliteConnection,
     file: &TrackedFile,
 ) -> Result<(), AppError> {
-    let (expiry_kind, expires_at) = expiry_parts(&file.expiry)?;
-    let origin = origin_parts(&file.origin)?;
-    let row = TrackedWriteRow {
-        path: &file.path,
-        file_name: &file.file_name,
-        watch_target_id: &file.watch_target_id,
-        size_bytes: u64_to_i64(file.size_bytes, "tracked_files.size_bytes")?,
-        first_seen_at: u64_to_i64(file.first_seen_at, "tracked_files.first_seen_at")?,
-        last_observed_mtime: opt_u64_to_i64(
-            file.last_observed_mtime,
-            "tracked_files.last_observed_mtime",
-        )?,
-        last_observed_atime: opt_u64_to_i64(
-            file.last_observed_atime,
-            "tracked_files.last_observed_atime",
-        )?,
-        last_user_action_at: opt_u64_to_i64(
-            file.last_user_action_at,
-            "tracked_files.last_user_action_at",
-        )?,
-        freshness_at: u64_to_i64(file.freshness_at, "tracked_files.freshness_at")?,
-        expiry_kind,
-        expires_at,
-        state: state_label(&file.state),
-        origin_kind: origin.kind,
-        origin_zone_id: origin.zone_id,
-        origin_host_url: origin.host_url,
-        origin_referrer_url: origin.referrer_url,
-        origin_xattr_key: origin.xattr_key,
-        origin_xattr_value_utf8: origin.xattr_value_utf8,
-    };
+    let rows = tracked_write_rows(std::slice::from_ref(file))?;
+    let row = &rows[0];
 
     diesel::insert_into(tracked_files::table)
-        .values(&row)
+        .values(row)
         .on_conflict(tracked_files::path)
         .do_update()
-        .set(&row)
+        .set(row)
         .execute(conn)?;
 
     delete_owner_rows(conn, "tracked_file_rules", "file_path", &file.path)?;
@@ -192,29 +192,128 @@ pub(crate) fn upsert_tracked_file_tx(
         "tracked_file_rules.ordinal",
     )?;
 
-    delete_owner_rows(conn, "origin_values", "file_path", &file.path)?;
-    if let OriginEvidence::MacWhereFroms { values } = &file.origin {
-        insert_ordered_values(
-            conn,
-            "origin_values",
-            "file_path",
-            "value",
-            &file.path,
-            values,
-            "origin_values.ordinal",
-        )?;
-    }
-
     Ok(())
+}
+
+fn insert_tracked_files_tx(
+    conn: &mut SqliteConnection,
+    files: &[TrackedFile],
+) -> Result<(), AppError> {
+    let rows = tracked_write_rows(files)?;
+    diesel::insert_into(tracked_files::table)
+        .values(&rows)
+        .execute(conn)?;
+    Ok(())
+}
+
+fn upsert_tracked_files_tx(
+    conn: &mut SqliteConnection,
+    files: &[TrackedFile],
+) -> Result<(), AppError> {
+    let rows = tracked_write_rows(files)?;
+    diesel::insert_into(tracked_files::table)
+        .values(&rows)
+        .on_conflict(tracked_files::path)
+        .do_update()
+        .set((
+            tracked_files::file_name.eq(excluded(tracked_files::file_name)),
+            tracked_files::watch_target_id.eq(excluded(tracked_files::watch_target_id)),
+            tracked_files::size_bytes.eq(excluded(tracked_files::size_bytes)),
+            tracked_files::first_seen_at.eq(excluded(tracked_files::first_seen_at)),
+            tracked_files::last_observed_mtime.eq(excluded(tracked_files::last_observed_mtime)),
+            tracked_files::last_observed_atime.eq(excluded(tracked_files::last_observed_atime)),
+            tracked_files::last_user_action_at.eq(excluded(tracked_files::last_user_action_at)),
+            tracked_files::freshness_at.eq(excluded(tracked_files::freshness_at)),
+            tracked_files::expiry_kind.eq(excluded(tracked_files::expiry_kind)),
+            tracked_files::expires_at.eq(excluded(tracked_files::expires_at)),
+            tracked_files::state.eq(excluded(tracked_files::state)),
+            tracked_files::origin_url.eq(excluded(tracked_files::origin_url)),
+        ))
+        .execute(conn)?;
+    Ok(())
+}
+
+fn rebuild_tracked_file_rules_tx(
+    conn: &mut SqliteConnection,
+    files: &[TrackedFile],
+) -> Result<(), AppError> {
+    let paths: Vec<&str> = files.iter().map(|file| file.path.as_str()).collect();
+    diesel::delete(tracked_file_rules::table.filter(tracked_file_rules::file_path.eq_any(paths)))
+        .execute(conn)?;
+    insert_tracked_file_rules_tx(conn, files)
+}
+
+fn insert_tracked_file_rules_tx(
+    conn: &mut SqliteConnection,
+    files: &[TrackedFile],
+) -> Result<(), AppError> {
+    let rows = tracked_rule_write_rows(files)?;
+    for rows in rows.chunks(RULE_WRITE_CHUNK_SIZE) {
+        diesel::insert_into(tracked_file_rules::table)
+            .values(rows)
+            .execute(conn)?;
+    }
+    Ok(())
+}
+
+fn tracked_write_rows(files: &[TrackedFile]) -> Result<Vec<TrackedWriteRow<'_>>, AppError> {
+    files
+        .iter()
+        .map(|file| {
+            let (expiry_kind, expires_at) = expiry_parts(&file.expiry)?;
+            Ok(TrackedWriteRow {
+                path: &file.path,
+                file_name: &file.file_name,
+                watch_target_id: &file.watch_target_id,
+                size_bytes: u64_to_i64(file.size_bytes, "tracked_files.size_bytes")?,
+                first_seen_at: u64_to_i64(file.first_seen_at, "tracked_files.first_seen_at")?,
+                last_observed_mtime: opt_u64_to_i64(
+                    file.last_observed_mtime,
+                    "tracked_files.last_observed_mtime",
+                )?,
+                last_observed_atime: opt_u64_to_i64(
+                    file.last_observed_atime,
+                    "tracked_files.last_observed_atime",
+                )?,
+                last_user_action_at: opt_u64_to_i64(
+                    file.last_user_action_at,
+                    "tracked_files.last_user_action_at",
+                )?,
+                freshness_at: u64_to_i64(file.freshness_at, "tracked_files.freshness_at")?,
+                expiry_kind,
+                expires_at,
+                state: state_label(&file.state),
+                origin_url: file.origin_url.as_deref(),
+            })
+        })
+        .collect()
+}
+
+fn tracked_rule_write_rows(
+    files: &[TrackedFile],
+) -> Result<Vec<TrackedRuleWriteRow<'_>>, AppError> {
+    files
+        .iter()
+        .flat_map(|file| {
+            file.matched_rule_ids
+                .iter()
+                .enumerate()
+                .map(move |(ordinal, rule_id)| (file.path.as_str(), ordinal, rule_id.as_str()))
+        })
+        .map(|(file_path, ordinal, rule_id)| {
+            Ok(TrackedRuleWriteRow {
+                file_path,
+                ordinal: u64_to_i64(ordinal as u64, "tracked_file_rules.ordinal")?,
+                rule_id,
+            })
+        })
+        .collect()
 }
 
 fn tracked_file_from_row(
     row: TrackedRow,
     matched_rule_ids: Vec<String>,
-    origin_values: Vec<String>,
 ) -> Result<TrackedFile, AppError> {
-    let origin = origin_from_row(&row, origin_values)?;
-
     Ok(TrackedFile {
         path: row.path,
         file_name: row.file_name,
@@ -237,7 +336,7 @@ fn tracked_file_from_row(
         expiry: expiry_from_parts(&row.expiry_kind, row.expires_at)?,
         state: state_from_label(&row.state)?,
         matched_rule_ids,
-        origin,
+        origin_url: row.origin_url,
     })
 }
 
@@ -257,17 +356,13 @@ struct TrackedRow {
     expiry_kind: String,
     expires_at: Option<i64>,
     state: String,
-    origin_kind: String,
-    origin_zone_id: Option<i64>,
-    origin_host_url: Option<String>,
-    origin_referrer_url: Option<String>,
-    origin_xattr_key: Option<String>,
-    origin_xattr_value_utf8: Option<String>,
+    origin_url: Option<String>,
 }
 
 #[derive(Insertable, AsChangeset)]
 #[diesel(table_name = tracked_files)]
 #[diesel(treat_none_as_null = true)]
+#[diesel(treat_none_as_default_value = false)]
 struct TrackedWriteRow<'a> {
     path: &'a str,
     file_name: &'a str,
@@ -281,12 +376,15 @@ struct TrackedWriteRow<'a> {
     expiry_kind: &'a str,
     expires_at: Option<i64>,
     state: &'a str,
-    origin_kind: &'a str,
-    origin_zone_id: Option<i64>,
-    origin_host_url: Option<&'a str>,
-    origin_referrer_url: Option<&'a str>,
-    origin_xattr_key: Option<&'a str>,
-    origin_xattr_value_utf8: Option<&'a str>,
+    origin_url: Option<&'a str>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = tracked_file_rules)]
+struct TrackedRuleWriteRow<'a> {
+    file_path: &'a str,
+    ordinal: i64,
+    rule_id: &'a str,
 }
 
 fn expiry_parts(expiry: &Expiry) -> Result<(&'static str, Option<i64>), AppError> {
@@ -332,7 +430,6 @@ fn state_label(state: &FileDecayState) -> &'static str {
         FileDecayState::Decaying => "decaying",
         FileDecayState::Pinned => "pinned",
         FileDecayState::Ignored => "ignored",
-        FileDecayState::Missing => "missing",
     }
 }
 
@@ -343,7 +440,6 @@ fn state_from_label(value: &str) -> Result<FileDecayState, AppError> {
         "decaying" => Ok(FileDecayState::Decaying),
         "pinned" => Ok(FileDecayState::Pinned),
         "ignored" => Ok(FileDecayState::Ignored),
-        "missing" => Ok(FileDecayState::Missing),
         other => Err(storage_data_error(
             "Stored file decay state is not recognized.",
             other,
@@ -351,105 +447,23 @@ fn state_from_label(value: &str) -> Result<FileDecayState, AppError> {
     }
 }
 
-struct OriginParts<'a> {
-    kind: &'static str,
-    zone_id: Option<i64>,
-    host_url: Option<&'a str>,
-    referrer_url: Option<&'a str>,
-    xattr_key: Option<&'a str>,
-    xattr_value_utf8: Option<&'a str>,
-}
-
-fn origin_parts(origin: &OriginEvidence) -> Result<OriginParts<'_>, AppError> {
-    match origin {
-        OriginEvidence::MacWhereFroms { .. } => Ok(OriginParts {
-            kind: "mac_where_froms",
-            zone_id: None,
-            host_url: None,
-            referrer_url: None,
-            xattr_key: None,
-            xattr_value_utf8: None,
-        }),
-        OriginEvidence::WindowsZoneIdentifier {
-            zone_id,
-            host_url,
-            referrer_url,
-        } => Ok(OriginParts {
-            kind: "windows_zone_identifier",
-            zone_id: zone_id.map(i64::from),
-            host_url: host_url.as_deref(),
-            referrer_url: referrer_url.as_deref(),
-            xattr_key: None,
-            xattr_value_utf8: None,
-        }),
-        OriginEvidence::LinuxXattr { key, value_utf8 } => Ok(OriginParts {
-            kind: "linux_xattr",
-            zone_id: None,
-            host_url: None,
-            referrer_url: None,
-            xattr_key: Some(key.as_str()),
-            xattr_value_utf8: value_utf8.as_deref(),
-        }),
-        OriginEvidence::Unknown => Ok(OriginParts {
-            kind: "unknown",
-            zone_id: None,
-            host_url: None,
-            referrer_url: None,
-            xattr_key: None,
-            xattr_value_utf8: None,
-        }),
-    }
-}
-
-fn origin_from_row(row: &TrackedRow, values: Vec<String>) -> Result<OriginEvidence, AppError> {
-    match row.origin_kind.as_str() {
-        "mac_where_froms" => Ok(OriginEvidence::MacWhereFroms { values }),
-        "windows_zone_identifier" => Ok(OriginEvidence::WindowsZoneIdentifier {
-            zone_id: row.origin_zone_id.map(i64_to_u32).transpose()?,
-            host_url: row.origin_host_url.clone(),
-            referrer_url: row.origin_referrer_url.clone(),
-        }),
-        "linux_xattr" => {
-            let Some(key) = row.origin_xattr_key.clone() else {
-                return Err(storage_data_error(
-                    "Stored Linux xattr origin is missing its key.",
-                    row.origin_kind.clone(),
-                ));
-            };
-            Ok(OriginEvidence::LinuxXattr {
-                key,
-                value_utf8: row.origin_xattr_value_utf8.clone(),
-            })
-        }
-        "unknown" => Ok(OriginEvidence::Unknown),
-        other => Err(storage_data_error(
-            "Stored origin evidence is not recognized.",
-            other,
-        )),
-    }
-}
-
-fn i64_to_u32(value: i64) -> Result<u32, AppError> {
-    u32::try_from(value).map_err(|_| {
-        storage_data_error(
-            "Stored origin zone id cannot be represented by the Rust model.",
-            format!("origin_zone_id={value}"),
-        )
-    })
-}
-
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use diesel::prelude::*;
 
-    use crate::models::{Expiry, OriginEvidence};
+    use crate::models::{Expiry, FileDecayState, TrackedFile};
     use crate::storage::schema::{tracked_file_rules, tracked_files};
     use crate::storage::test_util::{path_string, Fixture};
 
-    use super::{get_tracked_file, replace_tracked_file, update_tracked_files_batch};
+    use super::{
+        apply_tracked_file_changes, apply_tracked_file_changes_with_progress, get_tracked_file,
+        replace_tracked_file, TrackedFileChanges, PRIMARY_WRITE_CHUNK_SIZE,
+    };
 
     #[test]
-    fn update_tracked_files_batch_updates_primary_rows_and_indexes() {
+    fn apply_tracked_file_changes_updates_primary_rows_and_indexes() {
         let fixture = Fixture::new("shelflife-tracked-changes");
         let removed_path = fixture.write_watch_file("old.zip", "old");
         let kept_path = fixture.write_watch_file("new.zip", "new");
@@ -472,8 +486,15 @@ mod tests {
         kept.expiry = Expiry::At(200);
         kept.matched_rule_ids = vec![String::from("new-rule")];
 
-        update_tracked_files_batch(&fixture.db, vec![kept], vec![removed_key.clone()])
-            .expect("changes should apply");
+        apply_tracked_file_changes(
+            &fixture.db,
+            TrackedFileChanges {
+                updates: vec![kept],
+                removes: vec![removed_key.clone()],
+                ..TrackedFileChanges::default()
+            },
+        )
+        .expect("changes should apply");
 
         assert!(get_tracked_file(&fixture.db, &removed_key)
             .expect("tracked lookup should work")
@@ -485,6 +506,80 @@ mod tests {
         assert_eq!(rule_index_paths(&fixture, "old-rule"), Vec::<String>::new());
         assert_eq!(expiry_index_paths(&fixture, 200), vec![kept_key.clone()]);
         assert_eq!(rule_index_paths(&fixture, "new-rule"), vec![kept_key]);
+    }
+
+    #[test]
+    fn apply_tracked_file_changes_batches_new_primary_and_rule_rows() {
+        let fixture = Fixture::new("shelflife-tracked-batch-insert");
+        let insert_count = PRIMARY_WRITE_CHUNK_SIZE * 2 + 2;
+        let inserts = (0..insert_count)
+            .map(|index| tracked_for_batch(&fixture, index))
+            .collect::<Vec<_>>();
+        let progress = Mutex::new(Vec::new());
+        let progress_callback = |completed| {
+            progress
+                .lock()
+                .expect("progress lock should work")
+                .push(completed);
+        };
+
+        apply_tracked_file_changes_with_progress(
+            &fixture.db,
+            TrackedFileChanges {
+                inserts,
+                ..TrackedFileChanges::default()
+            },
+            Some(&progress_callback),
+        )
+        .expect("batched inserts should apply");
+
+        assert_eq!(
+            *progress.lock().expect("progress lock should work"),
+            vec![
+                PRIMARY_WRITE_CHUNK_SIZE,
+                PRIMARY_WRITE_CHUNK_SIZE * 2,
+                insert_count,
+            ]
+        );
+
+        let mut conn = fixture.db.connect().expect("database should connect");
+        assert_eq!(
+            tracked_files::table
+                .count()
+                .get_result::<i64>(&mut conn)
+                .expect("tracked count should load"),
+            insert_count as i64
+        );
+        assert_eq!(
+            tracked_file_rules::table
+                .count()
+                .get_result::<i64>(&mut conn)
+                .expect("rule index count should load"),
+            (insert_count * 3) as i64
+        );
+
+        drop(conn);
+        let updates = (0..insert_count)
+            .map(|index| {
+                let mut tracked = tracked_for_batch(&fixture, index);
+                tracked.size_bytes += 1_000;
+                tracked.matched_rule_ids = vec![format!("updated-rule-{index}")];
+                tracked
+            })
+            .collect();
+        apply_tracked_file_changes(
+            &fixture.db,
+            TrackedFileChanges {
+                updates,
+                ..TrackedFileChanges::default()
+            },
+        )
+        .expect("batched updates should apply");
+
+        let updated = super::list_tracked_files(&fixture.db).expect("tracked files should load");
+        assert_eq!(updated.len(), insert_count);
+        assert!(updated.iter().all(|file| file.size_bytes >= 1_000));
+        assert!(updated.iter().all(|file| file.matched_rule_ids.len() == 1));
     }
 
     #[test]
@@ -516,15 +611,15 @@ mod tests {
     }
 
     #[test]
-    fn update_tracked_files_batch_accepts_empty_changes() {
+    fn apply_tracked_file_changes_accepts_empty_changes() {
         let fixture = Fixture::new("shelflife-tracked-empty");
 
-        update_tracked_files_batch(&fixture.db, Vec::new(), Vec::new())
+        apply_tracked_file_changes(&fixture.db, TrackedFileChanges::default())
             .expect("empty changes should be accepted");
     }
 
     #[test]
-    fn tracked_file_round_trips_origin_and_expiry_variants() {
+    fn tracked_file_round_trips_origin_url_and_expiry_variants() {
         let fixture = Fixture::new("shelflife-tracked-round-trip");
         let path = fixture.write_watch_file("source.zip", "body");
         fixture.track_file(&path);
@@ -533,11 +628,7 @@ mod tests {
             .expect("tracked lookup should work")
             .expect("tracked file should exist");
         tracked.expiry = Expiry::SnoozedUntil(900);
-        tracked.origin = OriginEvidence::WindowsZoneIdentifier {
-            zone_id: Some(3),
-            host_url: Some(String::from("https://example.com/file.zip")),
-            referrer_url: Some(String::from("https://example.com")),
-        };
+        tracked.origin_url = Some(String::from("https://example.com/"));
         tracked.matched_rule_ids = vec![String::from("rule-a"), String::from("rule-b")];
 
         super::upsert_tracked_file(&fixture.db, &tracked).expect("tracked file should save");
@@ -546,6 +637,24 @@ mod tests {
             .expect("tracked lookup should work")
             .expect("tracked file should exist");
         assert_eq!(loaded, tracked);
+    }
+
+    fn tracked_for_batch(fixture: &Fixture, index: usize) -> TrackedFile {
+        TrackedFile {
+            path: path_string(&fixture.root.join(format!("batch-{index}.zip"))),
+            file_name: format!("batch-{index}.zip"),
+            watch_target_id: String::from("watch"),
+            size_bytes: index as u64,
+            first_seen_at: 1,
+            last_observed_mtime: None,
+            last_observed_atime: None,
+            last_user_action_at: None,
+            freshness_at: 1,
+            expiry: Expiry::At(2),
+            state: FileDecayState::Fresh,
+            matched_rule_ids: (0..3).map(|rule| format!("rule-{index}-{rule}")).collect(),
+            origin_url: None,
+        }
     }
 
     fn expiry_index_paths(fixture: &Fixture, expires_at: u64) -> Vec<String> {

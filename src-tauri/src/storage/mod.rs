@@ -1,4 +1,5 @@
 pub mod audit;
+mod migrations;
 pub mod rules;
 pub(crate) mod schema;
 #[cfg(test)]
@@ -18,7 +19,7 @@ use crate::models::{
 };
 use crate::storage::schema::{app_config, watch_targets};
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Clone)]
 pub struct Database {
@@ -59,11 +60,14 @@ pub fn open_database(path: impl AsRef<Path>) -> Result<Database, AppError> {
 pub(crate) fn finalize_file_action(
     db: &Database,
     original_path: &str,
-    file: &TrackedFile,
+    retained_file: Option<&TrackedFile>,
     audit_entry: &AuditEntry,
 ) -> Result<(), AppError> {
     db.write(|conn| {
-        tracked::replace_tracked_file_tx(conn, original_path, file)?;
+        match retained_file {
+            Some(file) => tracked::replace_tracked_file_tx(conn, original_path, file)?,
+            None => tracked::delete_tracked_file_tx(conn, original_path)?,
+        }
         audit::upsert_audit_entry_tx(conn, audit_entry)
     })
 }
@@ -89,14 +93,22 @@ fn initialize_database(db: &Database) -> Result<(), AppError> {
         ));
     }
 
-    for statement in SCHEMA_SQL
-        .split(';')
-        .map(str::trim)
-        .filter(|sql| !sql.is_empty())
-    {
-        sql_query(statement).execute(&mut conn)?;
+    if version == 0 {
+        conn.immediate_transaction(|conn| {
+            for statement in SCHEMA_SQL
+                .split(';')
+                .map(str::trim)
+                .filter(|sql| !sql.is_empty())
+            {
+                sql_query(statement).execute(conn)?;
+            }
+            sql_query(format!("PRAGMA user_version = {SCHEMA_VERSION}")).execute(conn)?;
+            Ok::<(), AppError>(())
+        })?;
+    } else if version < SCHEMA_VERSION {
+        migrations::migrate(&mut conn, version)?;
     }
-    sql_query(format!("PRAGMA user_version = {SCHEMA_VERSION}")).execute(&mut conn)?;
+
     Ok(())
 }
 
@@ -205,13 +217,8 @@ CREATE TABLE IF NOT EXISTS tracked_files (
     freshness_at INTEGER NOT NULL,
     expiry_kind TEXT NOT NULL CHECK (expiry_kind IN ('at', 'permanent', 'snoozed_until')),
     expires_at INTEGER,
-    state TEXT NOT NULL CHECK (state IN ('fresh', 'stale', 'decaying', 'pinned', 'ignored', 'missing')),
-    origin_kind TEXT NOT NULL CHECK (origin_kind IN ('mac_where_froms', 'windows_zone_identifier', 'linux_xattr', 'unknown')),
-    origin_zone_id INTEGER,
-    origin_host_url TEXT,
-    origin_referrer_url TEXT,
-    origin_xattr_key TEXT,
-    origin_xattr_value_utf8 TEXT
+    state TEXT NOT NULL CHECK (state IN ('fresh', 'stale', 'decaying', 'pinned', 'ignored')),
+    origin_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tracked_file_rules (
@@ -220,13 +227,6 @@ CREATE TABLE IF NOT EXISTS tracked_file_rules (
     rule_id TEXT NOT NULL,
     PRIMARY KEY (file_path, ordinal),
     UNIQUE (file_path, rule_id)
-);
-
-CREATE TABLE IF NOT EXISTS origin_values (
-    file_path TEXT NOT NULL REFERENCES tracked_files(path) ON DELETE CASCADE,
-    ordinal INTEGER NOT NULL,
-    value TEXT NOT NULL,
-    PRIMARY KEY (file_path, ordinal)
 );
 
 CREATE TABLE IF NOT EXISTS audit_sequence_state (

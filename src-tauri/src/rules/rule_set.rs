@@ -73,10 +73,11 @@ impl CompiledRuleSet {
                 continue;
             }
 
-            let condition_match =
-                compiled_rule
-                    .conditions
-                    .evaluate(&file.file_name, file.size_bytes, &file.origin);
+            let condition_match = compiled_rule.conditions.evaluate(
+                &file.file_name,
+                file.size_bytes,
+                file.origin_url.as_deref(),
+            );
             let explanation = rule_explanation(
                 &file.path,
                 file.size_bytes,
@@ -161,7 +162,7 @@ fn unmatched_explanation(file: &TrackedFile) -> RuleMatchExplanation {
 
 #[cfg(test)]
 mod tests {
-    use crate::models::{OriginEvidence, RuleAction, RuleConditions, RuleMode, SizeCondition};
+    use crate::models::{RuleAction, RuleConditions, RuleMode, SizeCondition};
     use crate::storage::test_util::Fixture;
 
     use super::{CompiledRuleSet, RuleDecisionScope, RuleVerdict};
@@ -175,7 +176,7 @@ mod tests {
         };
         let compiled = super::super::conditions::CompiledConditions::compile(&conditions)
             .expect("conditions should compile");
-        let result = compiled.evaluate("download.zip", 10, &OriginEvidence::Unknown);
+        let result = compiled.evaluate("download.zip", 10, None);
         assert!(!result.matched);
     }
 

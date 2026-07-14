@@ -104,12 +104,7 @@ diesel::table! {
         expiry_kind -> Text,
         expires_at -> Nullable<BigInt>,
         state -> Text,
-        origin_kind -> Text,
-        origin_zone_id -> Nullable<BigInt>,
-        origin_host_url -> Nullable<Text>,
-        origin_referrer_url -> Nullable<Text>,
-        origin_xattr_key -> Nullable<Text>,
-        origin_xattr_value_utf8 -> Nullable<Text>,
+        origin_url -> Nullable<Text>,
     }
 }
 
@@ -118,14 +113,6 @@ diesel::table! {
         file_path -> Text,
         ordinal -> BigInt,
         rule_id -> Text,
-    }
-}
-
-diesel::table! {
-    origin_values (file_path, ordinal) {
-        file_path -> Text,
-        ordinal -> BigInt,
-        value -> Text,
     }
 }
 
@@ -178,7 +165,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     rule_source_domains,
     tracked_files,
     tracked_file_rules,
-    origin_values,
     audit_sequence_state,
     audit_entries,
 );

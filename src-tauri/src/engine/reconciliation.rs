@@ -11,16 +11,10 @@ enum ObservedFile {
     Present(Box<TrackedFile>),
 }
 
-#[derive(Clone, Copy)]
-enum ExistingPathStatus {
-    ActivePresent,
-    ActiveMissing,
-    Inactive,
-}
-
 struct ReconciliationPlan {
     report: ReconciliationReport,
-    to_upsert: Vec<TrackedFile>,
+    to_insert: Vec<TrackedFile>,
+    to_update: Vec<TrackedFile>,
     to_remove: Vec<String>,
 }
 
@@ -104,18 +98,25 @@ pub fn reconcile_with_report_with_progress(
         observations.extend(path_results?.into_iter().flatten());
     }
 
-    let path_statuses = path_statuses_for(&existing_map, &scope, &observations);
-    reconcile_observations(db, &existing_map, observations, &path_statuses, progress_cb)
+    let paths_to_remove = paths_to_remove_for(&existing_map, &scope, &observations);
+    reconcile_observations(
+        db,
+        &existing_map,
+        observations,
+        &paths_to_remove,
+        progress_cb,
+    )
 }
 
 fn plan_reconciliation(
     existing: &HashMap<String, TrackedFile>,
     observations: Vec<ObservedFile>,
-    path_statuses: &HashMap<String, ExistingPathStatus>,
+    paths_to_remove: &HashSet<String>,
 ) -> ReconciliationPlan {
     let mut observed_paths = HashSet::new();
     let mut report = ReconciliationReport::default();
-    let mut to_upsert = Vec::new();
+    let mut to_insert = Vec::new();
+    let mut to_update = Vec::new();
 
     for observation in observations {
         match observation {
@@ -126,7 +127,7 @@ fn plan_reconciliation(
                         let mut updated = file.clone();
                         updated.state = FileDecayState::Ignored;
                         report.updated.push(path);
-                        to_upsert.push(updated);
+                        to_update.push(updated);
                     }
                 }
             }
@@ -135,11 +136,11 @@ fn plan_reconciliation(
                 match existing.get(&tracked.path) {
                     Some(file) if tracked.changed_from(file) => {
                         report.updated.push(tracked.path.clone());
-                        to_upsert.push(*tracked);
+                        to_update.push(*tracked);
                     }
                     None => {
                         report.indexed.push(tracked.path.clone());
-                        to_upsert.push(*tracked);
+                        to_insert.push(*tracked);
                     }
                     _ => {}
                 };
@@ -148,32 +149,20 @@ fn plan_reconciliation(
     }
 
     let mut to_remove = Vec::new();
-    for (path, file) in existing {
+    for path in existing.keys() {
         if observed_paths.contains(path) {
             continue;
         }
-        match path_statuses.get(path) {
-            Some(ExistingPathStatus::Inactive) => {
-                if !matches!(file.state, FileDecayState::Missing) {
-                    report.removed.push(path.clone());
-                }
-                to_remove.push(path.clone());
-            }
-            Some(ExistingPathStatus::ActiveMissing) => {
-                if !matches!(file.state, FileDecayState::Missing) {
-                    report.removed.push(path.clone());
-                    let mut updated = file.clone();
-                    updated.state = FileDecayState::Missing;
-                    to_upsert.push(updated);
-                }
-            }
-            Some(ExistingPathStatus::ActivePresent) | None => {}
+        if paths_to_remove.contains(path) {
+            report.removed.push(path.clone());
+            to_remove.push(path.clone());
         }
     }
 
     ReconciliationPlan {
         report,
-        to_upsert,
+        to_insert,
+        to_update,
         to_remove,
     }
 }
@@ -230,8 +219,8 @@ pub fn reconcile_paths(
         }
     }
 
-    let path_statuses = path_statuses_for(&existing_map, &scope, &observations);
-    reconcile_observations(db, &existing_map, observations, &path_statuses, None)
+    let paths_to_remove = paths_to_remove_for(&existing_map, &scope, &observations);
+    reconcile_observations(db, &existing_map, observations, &paths_to_remove, None)
 }
 
 fn observe_path(
@@ -272,11 +261,11 @@ fn observe_path_with_metadata(
     Ok(Some(ObservedFile::Present(Box::new(tracked))))
 }
 
-fn path_statuses_for(
+fn paths_to_remove_for(
     existing: &HashMap<String, TrackedFile>,
     scope: &PathScope<'_>,
     observations: &[ObservedFile],
-) -> HashMap<String, ExistingPathStatus> {
+) -> HashSet<String> {
     let observed_paths: HashSet<&str> = observations
         .iter()
         .map(|observation| match observation {
@@ -288,16 +277,10 @@ fn path_statuses_for(
     existing
         .iter()
         .filter(|(path_string, _)| !observed_paths.contains(path_string.as_str()))
-        .map(|(path_string, file)| {
+        .filter_map(|(path_string, file)| {
             let path = Path::new(path_string);
-            let status = if !scope.is_tracked_path_active(path, &file.watch_target_id) {
-                ExistingPathStatus::Inactive
-            } else if path.exists() {
-                ExistingPathStatus::ActivePresent
-            } else {
-                ExistingPathStatus::ActiveMissing
-            };
-            (path_string.clone(), status)
+            (!scope.is_tracked_path_active(path, &file.watch_target_id) || !path.exists())
+                .then(|| path_string.clone())
         })
         .collect()
 }
@@ -306,18 +289,24 @@ fn reconcile_observations(
     db: &Database,
     existing: &HashMap<String, TrackedFile>,
     observations: Vec<ObservedFile>,
-    path_statuses: &HashMap<String, ExistingPathStatus>,
+    paths_to_remove: &HashSet<String>,
     progress_cb: Option<&(dyn Fn(usize, usize) + Send + Sync)>,
 ) -> Result<ReconciliationReport, AppError> {
-    let plan = plan_reconciliation(existing, observations, path_statuses);
+    let plan = plan_reconciliation(existing, observations, paths_to_remove);
     let ReconciliationPlan {
         report,
-        to_upsert,
+        to_insert,
+        to_update,
         to_remove,
     } = plan;
+    let changes = storage::tracked::TrackedFileChanges {
+        inserts: to_insert,
+        updates: to_update,
+        removes: to_remove,
+    };
 
     if let Some(cb) = progress_cb {
-        let total_changes = to_upsert.len() + to_remove.len();
+        let total_changes = changes.inserts.len() + changes.updates.len() + changes.removes.len();
         let last_emit = Mutex::new(std::time::Instant::now());
         let progress_emitter = |current| {
             let is_first = current == 1;
@@ -338,14 +327,13 @@ fn reconcile_observations(
                 cb(current, total_changes);
             }
         };
-        storage::tracked::update_tracked_files_batch_with_progress(
+        storage::tracked::apply_tracked_file_changes_with_progress(
             db,
-            to_upsert,
-            to_remove,
+            changes,
             Some(&progress_emitter),
         )?;
     } else {
-        storage::tracked::update_tracked_files_batch(db, to_upsert, to_remove)?;
+        storage::tracked::apply_tracked_file_changes(db, changes)?;
     }
 
     Ok(report)
@@ -498,14 +486,11 @@ mod tests {
 
     use uuid::Uuid;
 
-    use crate::models::{
-        AppConfig, AppError, Expiry, FileDecayState, OriginEvidence, TrackedFile, WatchTarget,
-    };
+    use crate::models::{AppConfig, AppError, Expiry, FileDecayState, TrackedFile, WatchTarget};
     use crate::storage::{self, Database};
 
     use super::{
-        plan_reconciliation, reconcile_paths, reconcile_with_report_with_progress,
-        ExistingPathStatus, ObservedFile,
+        plan_reconciliation, reconcile_paths, reconcile_with_report_with_progress, ObservedFile,
     };
 
     fn tracked(path: &str) -> TrackedFile {
@@ -522,26 +507,24 @@ mod tests {
             expiry: Expiry::At(2),
             state: FileDecayState::Fresh,
             matched_rule_ids: Vec::new(),
-            origin: OriginEvidence::Unknown,
+            origin_url: None,
         }
     }
 
     #[test]
-    fn planner_classifies_indexed_updated_and_missing_files_without_storage() {
+    fn planner_classifies_indexed_updated_and_removed_files_without_storage() {
         let unchanged = tracked("unchanged");
         let mut updated = tracked("updated");
         updated.size_bytes = 2;
-        let missing = tracked("missing");
+        let removed = tracked("removed");
         let existing = [
             (unchanged.path.clone(), unchanged.clone()),
             (updated.path.clone(), tracked("updated")),
-            (missing.path.clone(), missing),
+            (removed.path.clone(), removed),
         ]
         .into_iter()
         .collect();
-        let statuses = [("missing".into(), ExistingPathStatus::ActiveMissing)]
-            .into_iter()
-            .collect();
+        let paths_to_remove = [String::from("removed")].into_iter().collect();
 
         let plan = plan_reconciliation(
             &existing,
@@ -550,17 +533,27 @@ mod tests {
                 ObservedFile::Present(Box::new(updated)),
                 ObservedFile::Present(Box::new(tracked("indexed"))),
             ],
-            &statuses,
+            &paths_to_remove,
         );
 
         assert_eq!(plan.report.indexed, vec!["indexed"]);
         assert_eq!(plan.report.updated, vec!["updated"]);
-        assert_eq!(plan.report.removed, vec!["missing"]);
-        assert!(!plan.to_upsert.iter().any(|file| file.path == "unchanged"));
-        assert!(plan
-            .to_upsert
-            .iter()
-            .any(|file| file.path == "missing" && file.state == FileDecayState::Missing));
+        assert_eq!(plan.report.removed, vec!["removed"]);
+        assert_eq!(
+            plan.to_insert
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["indexed"]
+        );
+        assert_eq!(
+            plan.to_update
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["updated"]
+        );
+        assert_eq!(plan.to_remove, vec!["removed"]);
     }
 
     #[test]
@@ -573,21 +566,19 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        let statuses = [("inactive".into(), ExistingPathStatus::Inactive)]
-            .into_iter()
-            .collect();
+        let paths_to_remove = [String::from("inactive")].into_iter().collect();
 
         let plan = plan_reconciliation(
             &existing,
             vec![ObservedFile::Ignored("ignored".into())],
-            &statuses,
+            &paths_to_remove,
         );
 
         assert_eq!(plan.to_remove, vec!["inactive"]);
         assert_eq!(plan.report.removed, vec!["inactive"]);
         assert_eq!(plan.report.updated, vec!["ignored"]);
         assert!(plan
-            .to_upsert
+            .to_update
             .iter()
             .any(|file| file.path == "ignored" && file.state == FileDecayState::Ignored));
     }
@@ -597,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_indexes_existing_files_and_marks_missing_rows() {
+    fn reconcile_indexes_existing_files_and_removes_deleted_rows() {
         let fixture = Fixture::new();
         let file = fixture.write_watch_file("download.txt", "body");
         fixture.save_config();
@@ -612,10 +603,11 @@ mod tests {
 
         fs::remove_file(&file).expect("test file should be removable");
         reconcile(&fixture.db).expect("second reconciliation should succeed");
-        let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
-            .expect("tracked lookup should work")
-            .expect("tracked row should remain for missing state");
-        assert_eq!(tracked.state, FileDecayState::Missing);
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
     }
 
     #[test]
@@ -748,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    fn incremental_reconciliation_marks_deleted_ignored_file_missing() {
+    fn incremental_reconciliation_removes_deleted_ignored_file() {
         let fixture = Fixture::new();
         let file = fixture.write_watch_file("skip.me", "ignored later");
         fixture.save_config();
@@ -761,11 +753,11 @@ mod tests {
 
         let report = reconcile_paths(&fixture.db, vec![file.clone()])
             .expect("incremental deletion reconciliation should succeed");
-        let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
-            .expect("tracked lookup should work")
-            .expect("tracked file should remain for missing state");
-
-        assert_eq!(tracked.state, FileDecayState::Missing);
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
         assert_eq!(report.removed, vec![path_string(&file)]);
     }
 

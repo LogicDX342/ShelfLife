@@ -58,7 +58,6 @@
       Fresh: 3,
       Pinned: 2,
       Ignored: 1,
-      Missing: 0,
     };
     return (priority[state1] || 0) >= (priority[state2] || 0) ? state1 : state2;
   }

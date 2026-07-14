@@ -2,7 +2,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex::Regex;
 use url::Url;
 
-use crate::models::{AppError, OriginEvidence, RuleConditions, SizeCondition};
+use crate::models::{AppError, RuleConditions, SizeCondition};
 
 #[derive(Debug)]
 pub(crate) struct CompiledConditions {
@@ -97,12 +97,12 @@ impl CompiledConditions {
         &self,
         file_name: &str,
         size_bytes: u64,
-        origin: &OriginEvidence,
+        origin_url: Option<&str>,
     ) -> ConditionMatch {
         let matched_extension = self.matches_extension(file_name);
         let matched_size = matches_size(size_bytes, &self.size);
         let matched_filename_pattern = self.matches_filename_pattern(file_name);
-        let matched_origin = matches_origin(origin, &self.source_domains);
+        let matched_origin = matches_origin(origin_url, &self.source_domains);
 
         let extension_ok = self.extensions.is_empty() || matched_extension;
         let filename_ok = self.filename_globs.is_empty() && self.filename_regexes.is_empty()
@@ -157,44 +157,18 @@ pub(crate) fn matches_size(size_bytes: u64, condition: &SizeCondition) -> bool {
     }
 }
 
-fn matches_origin(origin: &OriginEvidence, domains: &[String]) -> Option<String> {
+fn matches_origin(origin_url: Option<&str>, domains: &[String]) -> Option<String> {
     if domains.is_empty() {
         return None;
     }
 
-    let candidates: Vec<&str> = match origin {
-        OriginEvidence::WindowsZoneIdentifier {
-            host_url,
-            referrer_url,
-            ..
-        } => host_url
-            .iter()
-            .chain(referrer_url.iter())
-            .map(String::as_str)
-            .collect(),
-        OriginEvidence::MacWhereFroms { values } => values.iter().map(String::as_str).collect(),
-        OriginEvidence::LinuxXattr {
-            value_utf8: Some(value),
-            ..
-        } => vec![value.as_str()],
-        OriginEvidence::LinuxXattr {
-            value_utf8: None, ..
-        }
-        | OriginEvidence::Unknown => Vec::new(),
-    };
-
-    for candidate in candidates {
-        let Some(host) = Url::parse(candidate)
-            .ok()
-            .and_then(|url| url.host_str().map(str::to_owned))
-        else {
-            continue;
-        };
-
-        for pattern in domains {
-            if matches_pattern(pattern, &host) {
-                return Some(pattern.trim().to_lowercase());
-            }
+    let host = Url::parse(origin_url?)
+        .ok()?
+        .host_str()
+        .map(str::to_owned)?;
+    for pattern in domains {
+        if matches_pattern(pattern, &host) {
+            return Some(pattern.trim().to_lowercase());
         }
     }
 
@@ -285,5 +259,17 @@ mod tests {
         assert!(validate_source_domain_pattern("example.com..").is_err());
         assert!(validate_source_domain_pattern("ex_ample.com").is_err());
         assert!(validate_source_domain_pattern("-example.com").is_err());
+    }
+
+    #[test]
+    fn source_domain_matches_canonical_origin_url() {
+        assert_eq!(
+            matches_origin(
+                Some("https://downloads.example.com/"),
+                &[String::from("example.com")]
+            ),
+            Some(String::from("example.com"))
+        );
+        assert_eq!(matches_origin(None, &[String::from("example.com")]), None);
     }
 }

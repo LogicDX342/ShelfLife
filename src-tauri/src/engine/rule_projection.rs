@@ -38,10 +38,7 @@ pub fn automatic_rule_candidate(
     let Expiry::At(expires_at) = file.expiry else {
         return Ok(None);
     };
-    if matches!(
-        file.state,
-        FileDecayState::Ignored | FileDecayState::Missing
-    ) {
+    if matches!(file.state, FileDecayState::Ignored) {
         return Ok(None);
     }
 
@@ -119,9 +116,7 @@ mod tests {
     use std::fs;
 
     use crate::engine::freshness::{now_seconds, tracked_file_from_metadata};
-    use crate::models::{
-        AppConfig, AutomationRule, Expiry, FileDecayState, OriginEvidence, RuleAction, RuleMode,
-    };
+    use crate::models::{AppConfig, AutomationRule, Expiry, FileDecayState, RuleAction, RuleMode};
     use crate::rules::CompiledRuleSet;
     use crate::storage::test_util::Fixture;
 
@@ -279,16 +274,6 @@ mod tests {
                 .is_none()
         );
 
-        let mut missing = tracked.clone();
-        missing.state = FileDecayState::Missing;
-        let automatic_rule_set = CompiledRuleSet::compile(vec![automatic_rule.clone()], &config)
-            .expect("rule set should compile");
-        assert!(
-            automatic_rule_candidate(&missing, &config, &automatic_rule_set)
-                .expect("candidate should evaluate")
-                .is_none()
-        );
-
         let mut ignored = tracked;
         ignored.state = FileDecayState::Ignored;
         let automatic_rule_set = CompiledRuleSet::compile(vec![automatic_rule], &config)
@@ -308,7 +293,7 @@ mod tests {
         let path = fixture.write_watch_file(name, "body");
         let metadata = fs::metadata(&path).expect("metadata should exist");
         let mut tracked = tracked_file_from_metadata(&path, &metadata, None, config, "watch");
-        tracked.origin = OriginEvidence::Unknown;
+        tracked.origin_url = None;
         tracked
     }
 }

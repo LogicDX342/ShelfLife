@@ -4,8 +4,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{App, Manager};
 
 use crate::models::{
-    AppConfig, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState, OriginEvidence,
-    RuleAction, RuleConditions, RuleMode, SizeCondition, TrackedFile, UndoStatus, WatchTarget,
+    AppConfig, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState, RuleAction,
+    RuleConditions, RuleMode, SizeCondition, TrackedFile, UndoStatus, WatchTarget,
 };
 use crate::storage;
 use crate::storage::Database;
@@ -220,15 +220,7 @@ pub fn seed_mock_workspace(
         let expiry = (*ttl_days)
             .map(|days| Expiry::At(observed_at + days * SECONDS_PER_DAY))
             .unwrap_or(Expiry::Permanent);
-        let origin = if permanent {
-            OriginEvidence::WindowsZoneIdentifier {
-                zone_id: Some(3),
-                host_url: Some(String::from("https://github.com")),
-                referrer_url: None,
-            }
-        } else {
-            OriginEvidence::Unknown
-        };
+        let origin_url = permanent.then(|| String::from("https://github.com/"));
 
         storage::tracked::upsert_tracked_file(
             db,
@@ -249,7 +241,7 @@ pub fn seed_mock_workspace(
                 expiry,
                 state: state.clone(),
                 matched_rule_ids: matched_rule_ids.iter().map(ToString::to_string).collect(),
-                origin,
+                origin_url,
             },
         )?;
     }

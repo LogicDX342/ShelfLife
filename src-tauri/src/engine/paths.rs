@@ -39,20 +39,18 @@ impl<'a> PathScope<'a> {
         ))
     }
 
-    pub fn ensure_restore_parent_scope(&self, parent: &Path) -> Result<(), AppError> {
-        if self.is_in_enabled_watch_target(parent) {
+    pub fn ensure_watch_scope(&self, path: &Path) -> Result<(), AppError> {
+        if self.is_in_enabled_watch_target(path) {
             return Ok(());
         }
 
-        Err(AppError::path_out_of_scope(
-            parent.to_string_lossy().as_ref(),
-        ))
+        Err(AppError::path_out_of_scope(path.to_string_lossy().as_ref()))
     }
 
     pub fn is_tracked_path_active(&self, path: &Path, watch_target_id: &str) -> bool {
         self.config.watch_targets.iter().any(|target| {
             target.enabled && target.id == watch_target_id && target_contains_path(target, path)
-        }) || root_contains(&self.config.safe_folder_path, path)
+        })
     }
 
     pub fn validate_move_destination(&self, folder: &Path) -> Result<(), AppError> {
@@ -77,11 +75,7 @@ impl<'a> PathScope<'a> {
     }
 
     pub fn validate_rule_watch_path(&self, path: &Path) -> Result<(), AppError> {
-        if self.is_in_enabled_watch_target(path) {
-            return Ok(());
-        }
-
-        Err(AppError::path_out_of_scope(path.to_string_lossy().as_ref()))
+        self.ensure_watch_scope(path)
     }
 
     fn is_inside_enabled_watch_root(&self, path: &Path) -> bool {
@@ -471,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn tracked_path_active_uses_owning_target_and_safe_folder() {
+    fn tracked_path_active_requires_owning_enabled_target() {
         let fixture = Fixture::new();
         let disabled = WatchTarget {
             enabled: false,
@@ -481,7 +475,7 @@ mod tests {
         let scope = PathScope::new(&config);
 
         assert!(!scope.is_tracked_path_active(&fixture.watch.join("file.txt"), "watch"));
-        assert!(scope.is_tracked_path_active(&fixture.root.join("safe").join("file.txt"), "watch"));
+        assert!(!scope.is_tracked_path_active(&fixture.root.join("safe").join("file.txt"), "watch"));
     }
 
     #[cfg(target_os = "windows")]

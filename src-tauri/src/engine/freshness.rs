@@ -2,7 +2,9 @@ use std::fs::Metadata;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{AppConfig, Expiry, FileDecayState, OriginEvidence, TrackedFile};
+use url::Url;
+
+use crate::models::{AppConfig, Expiry, FileDecayState, TrackedFile};
 
 pub fn now_seconds() -> u64 {
     SystemTime::now()
@@ -149,69 +151,80 @@ pub fn tracked_file_from_metadata(
         expiry,
         state,
         matched_rule_ids: Vec::new(),
-        // Reuse the previous origin lookup for an unchanged file, including Unknown:
-        // on Windows, Unknown normally means the Zone.Identifier ADS was absent.
+        // Reuse the previous origin lookup for an unchanged file, including None:
+        // on Windows, None normally means the Zone.Identifier ADS had no usable URL.
         // A replaced file will have changed size or mtime and refresh the evidence.
-        origin: match existing {
+        origin_url: match existing {
             Some(file)
                 if file.size_bytes == metadata.len()
                     && file.last_observed_mtime == last_observed_mtime =>
             {
-                file.origin.clone()
+                file.origin_url.clone()
             }
-            _ => read_origin_evidence(path),
+            _ => read_origin_url(path),
         },
     }
 }
 
 #[cfg(target_os = "windows")]
-pub fn read_origin_evidence(path: &Path) -> OriginEvidence {
+pub fn read_origin_url(path: &Path) -> Option<String> {
     let ads_path = format!("{}:Zone.Identifier:$DATA", path.to_string_lossy());
     let Ok(content) = std::fs::read_to_string(ads_path) else {
-        return OriginEvidence::Unknown;
+        return None;
     };
 
-    let mut zone_id = None;
     let mut host_url = None;
     let mut referrer_url = None;
 
     for line in content.lines() {
-        if let Some(value) = line.strip_prefix("ZoneId=") {
-            zone_id = value.parse::<u32>().ok();
-        } else if let Some(value) = line.strip_prefix("HostUrl=") {
+        if let Some(value) = line.strip_prefix("HostUrl=") {
             host_url = Some(value.to_string());
         } else if let Some(value) = line.strip_prefix("ReferrerUrl=") {
             referrer_url = Some(value.to_string());
         }
     }
 
-    OriginEvidence::WindowsZoneIdentifier {
-        zone_id,
-        host_url,
-        referrer_url,
-    }
+    canonical_origin_url(
+        host_url
+            .iter()
+            .chain(referrer_url.iter())
+            .map(String::as_str),
+    )
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn read_origin_evidence(_path: &Path) -> OriginEvidence {
-    OriginEvidence::Unknown
+pub fn read_origin_url(_path: &Path) -> Option<String> {
+    None
+}
+
+pub(crate) fn canonical_origin_url<'a>(
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<String> {
+    candidates.into_iter().find_map(|candidate| {
+        let mut url = Url::parse(candidate.trim()).ok()?;
+        if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+            return None;
+        }
+
+        url.set_username("").ok()?;
+        url.set_password(None).ok()?;
+        url.set_path("/");
+        url.set_query(None);
+        url.set_fragment(None);
+        Some(url.to_string())
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use std::fs;
 
-    use crate::models::OriginEvidence;
     use crate::storage::test_util::Fixture;
 
     use super::tracked_file_from_metadata;
 
-    fn known_origin() -> OriginEvidence {
-        OriginEvidence::WindowsZoneIdentifier {
-            zone_id: Some(3),
-            host_url: Some(String::from("https://example.com/file")),
-            referrer_url: None,
-        }
+    fn known_origin_url() -> Option<String> {
+        Some(String::from("https://example.com/"))
     }
 
     #[test]
@@ -221,7 +234,7 @@ mod tests {
         let metadata = fs::metadata(&path).expect("metadata should exist");
         let mut existing =
             tracked_file_from_metadata(&path, &metadata, None, &fixture.config(), "watch");
-        existing.origin = known_origin();
+        existing.origin_url = known_origin_url();
 
         let refreshed = tracked_file_from_metadata(
             &path,
@@ -231,12 +244,12 @@ mod tests {
             "watch",
         );
 
-        assert_eq!(refreshed.origin, known_origin());
+        assert_eq!(refreshed.origin_url, known_origin_url());
     }
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn unchanged_file_reuses_unknown_origin() {
+    fn unchanged_file_reuses_absent_origin() {
         let fixture = Fixture::new("shelflife-unknown-origin-reuse");
         let path = fixture.write_watch_file("local.txt", "body");
         let ads_path = format!("{}:Zone.Identifier:$DATA", path.to_string_lossy());
@@ -246,7 +259,7 @@ mod tests {
         let metadata = fs::metadata(&path).expect("metadata should exist");
         let mut existing =
             tracked_file_from_metadata(&path, &metadata, None, &fixture.config(), "watch");
-        existing.origin = OriginEvidence::Unknown;
+        existing.origin_url = None;
 
         let refreshed = tracked_file_from_metadata(
             &path,
@@ -256,7 +269,7 @@ mod tests {
             "watch",
         );
 
-        assert_eq!(refreshed.origin, OriginEvidence::Unknown);
+        assert_eq!(refreshed.origin_url, None);
     }
 
     #[test]
@@ -266,7 +279,7 @@ mod tests {
         let metadata = fs::metadata(&path).expect("metadata should exist");
         let mut existing =
             tracked_file_from_metadata(&path, &metadata, None, &fixture.config(), "watch");
-        existing.origin = known_origin();
+        existing.origin_url = known_origin_url();
 
         fs::write(&path, "different-sized body").expect("file should be replaced");
         let changed_metadata = fs::metadata(&path).expect("metadata should exist");
@@ -278,6 +291,6 @@ mod tests {
             "watch",
         );
 
-        assert_ne!(refreshed.origin, known_origin());
+        assert_ne!(refreshed.origin_url, known_origin_url());
     }
 }

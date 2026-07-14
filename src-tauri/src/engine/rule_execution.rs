@@ -181,7 +181,7 @@ mod tests {
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&destination))
                 .expect("tracked lookup should work")
-                .is_some()
+                .is_none()
         );
     }
 

@@ -286,6 +286,8 @@ The reconciliation scan runs:
 
 It detects files that were missed by filesystem events and removes stale tracked rows for files that no longer exist.
 
+`tracked_files` contains only files currently inside enabled watch targets. Files are removed from tracking when they disappear, leave a watch target, are moved to another destination, are moved to the safe folder, or are trashed. Audit entries retain completed-action history. Undo recreates tracking only when the restored path is inside an enabled watch target.
+
 ---
 
 ## 6. Freshness and Expiry Model
@@ -311,7 +313,7 @@ pub struct TrackedFile {
     pub expiry: Expiry,
     pub state: FileDecayState,
     pub matched_rule_ids: Vec<String>,
-    pub origin: OriginEvidence,
+    pub origin_url: Option<String>,
 }
 ```
 
@@ -358,7 +360,6 @@ pub enum FileDecayState {
     Decaying,
     Pinned,
     Ignored,
-    Missing,
 }
 ```
 
@@ -370,7 +371,6 @@ Stale: no observed activity beyond the stale threshold (default after 5 days)
 Decaying: expiry is within the configured warning window (default 24 hours)
 Pinned: user has explicitly protected the file
 Ignored: file is excluded by user or rule
-Missing: tracked file no longer exists at path
 ```
 
 Note: Fresh and Stale are continuous. A file transitions from Fresh to Stale once it exceeds the fresh threshold. There is no gap between the two states.
@@ -388,42 +388,28 @@ Origin tracking is optional evidence. It is never required for safe operation.
 Windows:
 
 - Zone.Identifier alternate data stream when available.
-- ZoneId and optional URL/referrer fields if present.
+- Use the first valid HTTP(S) URL from `HostUrl`, falling back to `ReferrerUrl`.
+- ZoneId is not stored.
 
 The following platforms are documented for future reference but are not implemented in v1:
 
 macOS:
 
 - Extended attributes.
-- Metadata such as where-from values when available.
+- Use the first valid HTTP(S) where-from value when available.
 
 Linux:
 
-- Extended attributes when available.
+- Use an extended-attribute value only when it contains a valid HTTP(S) URL.
 - No universal origin convention is assumed.
 
 ### 7.2 Origin model
 
-```rust
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub enum OriginEvidence {
-    MacWhereFroms { values: Vec<String> },
-    WindowsZoneIdentifier {
-        zone_id: Option<u32>,
-        host_url: Option<String>,
-        referrer_url: Option<String>,
-    },
-    LinuxXattr {
-        key: String,
-        value_utf8: Option<String>,
-    },
-    Unknown,
-}
-```
+All platform metadata adapters reduce their candidates to the same `origin_url: Option<String>` field when file metadata is first observed. URLs are parsed as HTTP(S), reduced to `scheme://host[:non-default-port]/`, and stored without credentials, path, query, or fragment. Invalid or unavailable evidence becomes `None`.
 
 ### 7.3 Rule behavior
 
-A rule may match origin only when origin evidence exists. Unknown origin must not be treated as unsafe by default.
+A rule may match origin only when `origin_url` contains a matching domain. Absent origin must not be treated as unsafe by default.
 
 ---
 
@@ -495,8 +481,8 @@ pub struct RuleConditions {
     pub extensions: Vec<String>,
     pub filename_globs: Vec<String>,
     pub filename_regexes: Vec<String>,
-    /// Matches only when OriginEvidence contains a matching domain.
-    /// Ignored (treated as not-matched) when origin is Unknown.
+    /// Matches only when origin_url contains a matching domain.
+    /// Ignored (treated as not-matched) when origin_url is absent.
     pub source_domains: Vec<String>,
     pub size: SizeCondition,
 }
@@ -639,6 +625,8 @@ Trash actions must move files to the operating system Trash or Recycle Bin. Raw 
 ### 9.4 Safe folder behavior
 
 The safe folder is a user-visible folder, not a hidden application cache.
+
+Moving a file to the safe folder completes its tracked lifecycle. The destination remains user-visible and undoable through its audit entry, but it is not retained in `tracked_files`.
 
 Default suggestion:
 
@@ -841,7 +829,6 @@ rule_source_domains
 
 tracked_files
 tracked_file_rules
-origin_values
 
 audit_sequence_state
 audit_entries
@@ -995,7 +982,7 @@ Events are for background updates. Commands are for user-initiated requests and 
 
 Every command that receives a path must validate:
 
-- Path exists, unless the action is explicitly about a missing file.
+- Path exists for file actions; undo may refer to an audit path that is not currently present.
 - Canonical path is inside a configured watch target or safe folder.
 - Path is not a system directory.
 - Path is not outside the user's approved scope.
@@ -1381,7 +1368,7 @@ watcher stable-path emission without database access
 move to safe folder
 trash action mock or platform-gated test
 undo move (including with rename)
-missing file reconciliation
+deleted file reconciliation
 PreviewOnly blocks lower-priority Automatic rules
 Ignore rules apply immediately without rule TTL
 effective rule TTL versus app default TTL

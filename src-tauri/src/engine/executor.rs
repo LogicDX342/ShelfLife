@@ -7,12 +7,12 @@ use chrono::Local;
 use uuid::Uuid;
 
 use crate::engine::paths::PathScope;
-use crate::engine::{now_seconds, tracked_file_from_metadata};
+use crate::engine::{now_seconds, project_watched_file, tracked_file_from_metadata};
 use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
     RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus, UserTriageAction,
 };
-use crate::rules::{validate_rename_template, validate_reserved_name};
+use crate::rules::{validate_rename_template, validate_reserved_name, CompiledRuleSet};
 use crate::storage;
 use crate::storage::Database;
 use std::sync::OnceLock;
@@ -189,7 +189,7 @@ fn execute_file_action(
     }
 
     match source_policy {
-        SourcePolicy::Watched => PathScope::new(&config).ensure_source_scope(&source)?,
+        SourcePolicy::Watched => PathScope::new(&config).ensure_watch_scope(&source)?,
         SourcePolicy::Dropzone => {
             if !source.is_file() {
                 return Err(AppError::with_details(
@@ -205,7 +205,7 @@ fn execute_file_action(
                 RequestedFileAction::User(UserTriageAction::Ignore)
                     | RequestedFileAction::Rule(RuleAction::Ignore)
             ) {
-                PathScope::new(&config).ensure_source_scope(&source)?;
+                PathScope::new(&config).ensure_watch_scope(&source)?;
             }
         }
     }
@@ -246,9 +246,15 @@ fn execute_file_action(
         Err(error) => return Err(fail_audited(db, entry, error)),
     };
 
-    tracked.last_user_action_at = Some(timestamp);
+    let retained_file = if prepared.retains_tracking() {
+        tracked.last_user_action_at = Some(timestamp);
+        Some(&tracked)
+    } else {
+        None
+    };
     entry.undo_status = undo_status;
-    if let Err(error) = finalize_recorded_action(db, &original_tracked_path, &tracked, &entry) {
+    if let Err(error) = finalize_recorded_action(db, &original_tracked_path, retained_file, &entry)
+    {
         return Err(fail_audited(db, entry, error));
     }
 
@@ -277,10 +283,11 @@ fn fail_audited(db: &Database, mut entry: AuditEntry, error: AppError) -> FileAc
 fn finalize_recorded_action(
     db: &Database,
     original_tracked_path: &str,
-    tracked: &TrackedFile,
+    retained_file: Option<&TrackedFile>,
     entry: &AuditEntry,
 ) -> Result<(), AppError> {
-    storage::finalize_file_action(db, original_tracked_path, tracked, entry).map_err(|error| {
+    storage::finalize_file_action(db, original_tracked_path, retained_file, entry).map_err(
+        |error| {
         let AppError {
             code,
             message,
@@ -294,7 +301,8 @@ fn finalize_recorded_action(
             true,
             format!("{code}: {cause}"),
         )
-    })
+        },
+    )
 }
 
 enum PreparedFileAction {
@@ -314,6 +322,10 @@ impl PreparedFileAction {
             Self::Move { .. } => AuditActionKind::Move,
             Self::Trash => AuditActionKind::Trash,
         }
+    }
+
+    fn retains_tracking(&self) -> bool {
+        matches!(self, Self::Pin | Self::Snooze { .. } | Self::Ignore)
     }
 }
 
@@ -402,7 +414,6 @@ fn apply_prepared_file_action(
             })?;
             fs::create_dir_all(destination_folder)?;
             move_file(source, destination)?;
-            apply_tracked_destination(tracked, destination);
             Ok(UndoStatus::Available)
         }
         PreparedFileAction::Trash => {
@@ -414,7 +425,6 @@ fn apply_prepared_file_action(
                     error.to_string(),
                 )
             })?;
-            tracked.state = FileDecayState::Missing;
             Ok(recycle_bin_undo_status())
         }
     }
@@ -505,7 +515,8 @@ pub(crate) fn ingest_dropzone_file_audited(
     tracked.last_user_action_at = Some(timestamp);
 
     entry.undo_status = UndoStatus::Available;
-    if let Err(error) = finalize_recorded_action(db, &original_tracked_path, &tracked, &entry) {
+    if let Err(error) = finalize_recorded_action(db, &original_tracked_path, Some(&tracked), &entry)
+    {
         return Err(fail_audited(db, entry, error));
     }
 
@@ -565,17 +576,6 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     if !from_dropzone {
         validate_move_source_for_undo(&from, &config)?;
     }
-    let to_parent = to.parent().ok_or_else(|| {
-        AppError::new(
-            "UNDO_FAILED",
-            "Original path has no parent folder. No file was changed.",
-            true,
-        )
-    })?;
-    if !from_dropzone {
-        PathScope::new(&config).ensure_restore_parent_scope(to_parent)?;
-    }
-
     if !from.exists() {
         return Err(AppError::new(
             "UNDO_FAILED",
@@ -592,20 +592,7 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     }
 
     move_file(&from, &to)?;
-    if let Some(mut tracked) = storage::tracked::get_tracked_file(db, destination)? {
-        let now = now_seconds();
-        tracked.path = entry.source_path.clone();
-        tracked.file_name = to
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or(&entry.file_name)
-            .to_string();
-        tracked.last_user_action_at = Some(now);
-        tracked.freshness_at = now;
-        tracked.expiry = Expiry::At(now + config.default_ttl_seconds);
-        tracked.state = FileDecayState::Fresh;
-        storage::tracked::replace_tracked_file(db, destination, &tracked)?;
-    }
+    sync_restored_tracking(db, destination, &to, &config)?;
     Ok(())
 }
 
@@ -703,17 +690,41 @@ fn undo_trash(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
         }
     })?;
 
-    if let Some(mut tracked) = storage::tracked::get_tracked_file(db, &entry.source_path)? {
-        let config = storage::get_config(db)?;
-        let now = now_seconds();
-        tracked.last_user_action_at = Some(now);
-        tracked.freshness_at = now;
-        tracked.expiry = Expiry::At(now + config.default_ttl_seconds);
-        tracked.state = FileDecayState::Fresh;
-        storage::tracked::upsert_tracked_file(db, &tracked)?;
-    }
+    let config = storage::get_config(db)?;
+    sync_restored_tracking(db, &entry.source_path, source_path, &config)?;
 
     Ok(())
+}
+
+fn sync_restored_tracking(
+    db: &Database,
+    previous_tracked_path: &str,
+    restored_path: &Path,
+    config: &AppConfig,
+) -> Result<(), AppError> {
+    let scope = PathScope::new(config);
+    let Some(target) = scope.watch_target_for_path(restored_path) else {
+        return storage::tracked::apply_tracked_file_changes(
+            db,
+            storage::tracked::TrackedFileChanges {
+                removes: vec![previous_tracked_path.to_string()],
+                ..storage::tracked::TrackedFileChanges::default()
+            },
+        );
+    };
+
+    let metadata = fs::metadata(restored_path)?;
+    let now = now_seconds();
+    let mut tracked =
+        tracked_file_from_metadata(restored_path, &metadata, None, config, &target.id);
+    tracked.last_user_action_at = Some(now);
+    tracked.freshness_at = now;
+    tracked.expiry = Expiry::At(now + config.default_ttl_seconds);
+    tracked.state = FileDecayState::Fresh;
+
+    let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, config)?;
+    let tracked = project_watched_file(tracked, config, &rule_set, now)?.tracked;
+    storage::tracked::replace_tracked_file(db, previous_tracked_path, &tracked)
 }
 
 fn load_or_create_tracked(
@@ -727,8 +738,16 @@ fn load_or_create_tracked(
     }
 
     let metadata = fs::metadata(path)?;
+    let watch_target_id = PathScope::new(config)
+        .watch_target_for_path(path)
+        .map(|target| target.id.as_str())
+        .unwrap_or_default();
     Ok(tracked_file_from_metadata(
-        path, &metadata, None, config, "",
+        path,
+        &metadata,
+        None,
+        config,
+        watch_target_id,
     ))
 }
 
@@ -738,15 +757,6 @@ fn validate_move_source_for_undo(path: &Path, config: &AppConfig) -> Result<(), 
     }
 
     Ok(())
-}
-
-fn apply_tracked_destination(tracked: &mut TrackedFile, destination: &Path) {
-    tracked.path = destination.to_string_lossy().to_string();
-    tracked.file_name = destination
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or(&tracked.file_name)
-        .to_string();
 }
 
 fn move_file(source: &Path, destination: &Path) -> Result<(), AppError> {
@@ -1049,7 +1059,7 @@ mod tests {
     }
 
     #[test]
-    fn manual_move_preserves_name_avoids_collision_and_updates_tracked_path() {
+    fn manual_move_preserves_name_avoids_collision_and_stops_tracking() {
         let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("report.txt", "download");
         let destination_folder = fixture.outside.join("sorted");
@@ -1083,7 +1093,7 @@ mod tests {
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &destination)
                 .expect("tracked lookup should work")
-                .is_some()
+                .is_none()
         );
     }
 
@@ -1178,16 +1188,9 @@ mod tests {
         assert!(!source.exists());
         let destination = entry.destination_path.as_ref().unwrap();
         assert!(Path::new(destination).exists());
-
-        let mut expired = storage::tracked::get_tracked_file(&fixture.db, destination)
+        assert!(storage::tracked::get_tracked_file(&fixture.db, destination)
             .expect("tracked lookup should work")
-            .expect("moved file should remain tracked");
-        expired.last_user_action_at = None;
-        expired.freshness_at = 1;
-        expired.expiry = Expiry::At(1);
-        expired.state = FileDecayState::Decaying;
-        storage::tracked::upsert_tracked_file(&fixture.db, &expired)
-            .expect("expired tracked file should save");
+            .is_none());
 
         let undone = super::undo_audit_entry(&fixture.db, &entry.id).expect("undo should succeed");
         assert!(matches!(undone.undo_status, UndoStatus::Completed));
@@ -1208,7 +1211,7 @@ mod tests {
     }
 
     #[test]
-    fn undo_move_revalidates_original_path_scope() {
+    fn undo_move_to_disabled_target_restores_without_tracking() {
         let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("notes.txt", "download");
         fixture.save_config();
@@ -1220,12 +1223,17 @@ mod tests {
         .expect("move should succeed");
         fixture.save_config_without_watch_targets();
 
-        let error = super::undo_audit_entry(&fixture.db, &entry.id)
-            .expect_err("undo should fail when original path is out of scope");
+        let undone = super::undo_audit_entry(&fixture.db, &entry.id)
+            .expect("undo should restore the recorded path");
 
-        assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
-        assert!(!source.exists());
-        assert!(Path::new(entry.destination_path.as_ref().unwrap()).exists());
+        assert!(matches!(undone.undo_status, UndoStatus::Completed));
+        assert!(source.exists());
+        assert!(!Path::new(entry.destination_path.as_ref().unwrap()).exists());
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
     }
 
     #[test]
@@ -1382,6 +1390,14 @@ mod tests {
         assert!(matches!(undone.undo_status, UndoStatus::Completed));
         assert!(source.exists());
         assert!(!Path::new(destination).exists());
+        assert!(storage::tracked::get_tracked_file(&fixture.db, destination)
+            .expect("tracked lookup should work")
+            .is_none());
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
     }
 
     #[test]

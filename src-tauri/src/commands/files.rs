@@ -19,12 +19,7 @@ pub async fn get_active_files(state: State<'_, AppRuntime>) -> Result<Vec<Tracke
 fn active_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
     Ok(storage::tracked::list_tracked_files(db)?
         .into_iter()
-        .filter(|file| {
-            !matches!(
-                file.state,
-                FileDecayState::Missing | FileDecayState::Ignored
-            )
-        })
+        .filter(|file| !matches!(file.state, FileDecayState::Ignored))
         .collect())
 }
 
@@ -352,21 +347,18 @@ mod tests {
     }
 
     #[test]
-    fn active_files_hide_missing_and_ignored_by_default() {
+    fn active_files_hide_ignored_files_by_default() {
         let fixture = Fixture::new();
         let fresh = fixture.write("fresh.txt", "fresh");
         let ignored = fixture.write("ignored.txt", "ignored");
-        let missing = fixture.root.join("missing.txt");
         let db =
             storage::open_database(fixture.root.join("test.sqlite")).expect("database should open");
 
         for (path, state) in [
             (&fresh, FileDecayState::Fresh),
             (&ignored, FileDecayState::Ignored),
-            (&missing, FileDecayState::Missing),
         ] {
-            let metadata = fs::metadata(path)
-                .unwrap_or_else(|_| fs::metadata(&fresh).expect("metadata should exist"));
+            let metadata = fs::metadata(path).expect("metadata should exist");
             let config = AppConfig::default();
             let mut tracked =
                 crate::engine::tracked_file_from_metadata(path, &metadata, None, &config, "");
