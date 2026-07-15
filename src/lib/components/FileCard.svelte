@@ -285,7 +285,10 @@
           </Label>
           <div class="flex gap-2">
             <Select.Root type="single" bind:value={snoozeDays}>
-              <Select.Trigger id="snooze-in-{file.file_name}" class="flex-1 min-w-0">
+              <Select.Trigger
+                id="snooze-in-{file.file_name}"
+                class={snoozeDays === '-1' ? 'w-32 shrink-0' : 'flex-1 min-w-0'}
+              >
                 <span data-slot="select-value">{snoozeLabel(snoozeDays)}</span>
               </Select.Trigger>
               <Select.Content>
@@ -302,6 +305,7 @@
                 type="number"
                 bind:value={customSnoozeDays}
                 placeholder={i18n.t('file.days')}
+                class="flex-1 min-w-0"
               />
             {/if}
             <Button variant="outline" disabled={busy} onclick={snoozeAction}>
