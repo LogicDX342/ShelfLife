@@ -176,20 +176,6 @@ export type AppConfig = {
   dropzone_enabled: boolean;
 };
 
-export type FilePreviewContent =
-  | { Text: { snippet: string; truncated: boolean } }
-  | { Image: { width: number; height: number; format: string; thumbnail_path: string | null } }
-  | { Pdf: { page_count: number | null; title: string | null } }
-  | 'Unknown';
-
-export type FilePreview = {
-  path: string;
-  file_name: string;
-  size_bytes: number;
-  mime_type: string | null;
-  content: FilePreviewContent;
-};
-
 export type AppError = {
   code: string;
   message: string;

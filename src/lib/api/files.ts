@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { FilePreview, RuleMatchExplanation, TrackedFile } from '$lib/types';
+import type { RuleMatchExplanation, TrackedFile } from '$lib/types';
 
 export function getActiveFiles() {
   return invoke<TrackedFile[]>('get_active_files');
@@ -8,10 +8,6 @@ export function getActiveFiles() {
 
 export function explainFile(path: string) {
   return invoke<RuleMatchExplanation[]>('explain_file', { path });
-}
-
-export function previewFile(path: string) {
-  return invoke<FilePreview>('preview_file', { path });
 }
 
 export function openFileLocation(path: string) {

@@ -876,9 +876,6 @@ async fn get_active_files() -> Result<Vec<TrackedFile>, AppError>;
 async fn explain_file(path: String) -> Result<Vec<RuleMatchExplanation>, AppError>;
 
 #[tauri::command]
-async fn preview_file(path: String) -> Result<FilePreview, AppError>;
-
-#[tauri::command]
 async fn open_file_location(path: String) -> Result<(), AppError>;
 
 #[tauri::command]
@@ -1043,7 +1040,6 @@ Use the live snapshot adapter as the only owner of backend file/audit event name
 Use events to trigger coalesced full snapshot refreshes.
 Avoid interval timers faster than 15 minutes for background refresh.
 Refresh on window focus through the live snapshot adapter.
-Preview panel triggers use on-demand command calls, not timers.
 ```
 
 Views must not register live backend listeners directly for file, audit, or reconciliation freshness. The adapter owns:
@@ -1057,29 +1053,7 @@ coalescing so only one refresh per snapshot kind runs at a time
 listener cleanup on layout teardown
 ```
 
-### 13.4 Preview panel
-
-Preview is lazy.
-
-Trigger:
-
-```text
-user hovers, focuses, or expands a file card
-```
-
-v1 preview types:
-
-```text
-text: first safe UTF-8 snippet
-markdown: first safe UTF-8 snippet
-image: metadata and optional lightweight thumbnail path
-pdf: metadata only
-unknown: icon and metadata only
-```
-
-Avoid sending large base64 payloads through IPC. Prefer cached preview artifacts and scoped asset loading where possible.
-
-### 13.5 Rule explanation UI
+### 13.4 Rule explanation UI
 
 Each proposed action must show:
 
@@ -1699,7 +1673,6 @@ Which debounce implementation produces the fewest false positives per platform?
 How reliable is trash undo on each supported OS?
 Should cloud-synced subfolders within Downloads be auto-detected and excluded?
 How should cloud-synced folders be detected and warned about?
-Which preview formats are safe and useful without heavy dependencies?
 What is the minimum notification frequency users tolerate?
 ```
 
