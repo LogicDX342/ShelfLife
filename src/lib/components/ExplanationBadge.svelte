@@ -67,11 +67,11 @@
   let modeLabel = $derived.by(() => {
     switch (explanation.mode) {
       case 'Automatic':
-        return i18n.t('rules.modeAutomatic') ?? 'Auto';
+        return i18n.t('rules.modeAutomatic') ?? 'Run automatically';
       case 'AskFirst':
-        return i18n.t('rules.modeAskFirst') ?? 'Ask First';
+        return i18n.t('rules.modeAskFirst') ?? 'Ask before acting';
       case 'PreviewOnly':
-        return i18n.t('rules.modePreviewOnly') ?? 'Preview';
+        return i18n.t('rules.modePreviewOnly') ?? 'Preview changes';
       default:
         return '';
     }
