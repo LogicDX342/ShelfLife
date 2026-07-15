@@ -87,7 +87,9 @@ impl CompiledRuleSet {
 
             if explanation.proposed_action.is_some() {
                 matched_rule_ids.push(compiled_rule.rule.id.clone());
-                if effective_match.is_none() {
+                if effective_match.is_none()
+                    && !matches!(compiled_rule.rule.mode, RuleMode::PreviewOnly)
+                {
                     effective_match = Some((
                         compiled_rule.rule.clone(),
                         explanation.clone(),
@@ -181,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn higher_priority_preview_rule_is_effective_and_has_no_rule_ttl() {
+    fn higher_priority_preview_rule_is_reported_but_lower_live_rule_is_effective() {
         let fixture = Fixture::new("shelflife-rule-decision");
         let file = fixture.write_watch_file("download.zip", "body");
         fixture.save_config();
@@ -214,10 +216,10 @@ mod tests {
                 rule_ttl_seconds,
                 ..
             } => {
-                assert_eq!(effective_rule.id, preview.id);
-                assert_eq!(rule_ttl_seconds, None);
+                assert_eq!(effective_rule.id, automatic.id);
+                assert_eq!(rule_ttl_seconds, Some(automatic.ttl_seconds));
             }
-            RuleVerdict::Unmatched => panic!("preview rule should be effective"),
+            RuleVerdict::Unmatched => panic!("automatic rule should be effective"),
         }
     }
 

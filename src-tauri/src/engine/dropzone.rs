@@ -227,20 +227,26 @@ pub fn plan_rule_groups(
 
     for file in files {
         let decision = rule_set.decide_file(file, RuleDecisionScope::Dropzone);
+        let mut has_preview_match = false;
+        for explanation in decision.explanations.iter().filter(|explanation| {
+            explanation.proposed_action.is_some()
+                && matches!(explanation.mode, Some(RuleMode::PreviewOnly))
+        }) {
+            has_preview_match = true;
+            preview_only.push(explanation.clone());
+        }
+
         let RuleVerdict::Matched {
             effective_rule: rule,
             effective_explanation,
             ..
         } = decision.verdict
         else {
-            unmatched_files.push(file.path.clone());
+            if !has_preview_match {
+                unmatched_files.push(file.path.clone());
+            }
             continue;
         };
-
-        if matches!(rule.mode, RuleMode::PreviewOnly) {
-            preview_only.push(*effective_explanation);
-            continue;
-        }
 
         let mut effective_explanation = *effective_explanation;
         if matches!(rule.action, RuleAction::Ignore)
@@ -339,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_blocks_lower_priority_executable_rule_globally() {
+    fn preview_does_not_block_lower_priority_executable_rule() {
         let fixture = Fixture::new("shelflife-dropzone-preview");
         let file = fixture.write_outside_file("download.zip", "body");
         fixture.save_config();
@@ -357,7 +363,8 @@ mod tests {
         let result = preview_dropzone_files(&fixture.db, &[path_string(&file)])
             .expect("preview should work");
 
-        assert!(result.rule_groups.is_empty());
+        assert_eq!(result.rule_groups.len(), 1);
+        assert_eq!(result.rule_groups[0].rule_id, ask.id);
         assert_eq!(result.preview_only.len(), 1);
         assert!(result.unmatched_files.is_empty());
     }

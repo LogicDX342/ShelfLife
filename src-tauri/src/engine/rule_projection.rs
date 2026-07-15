@@ -146,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_rule_blocks_lower_automatic_rule_ttl_and_candidate() {
+    fn preview_rule_does_not_block_lower_automatic_rule_ttl_and_candidate() {
         let fixture = Fixture::new("shelflife-rule-projection");
         let config = fixture.config();
         let tracked = tracked_fixture_file(&fixture, &config, "download.zip");
@@ -160,8 +160,9 @@ mod tests {
         automatic_rule.priority = 10;
         automatic_rule.mode = RuleMode::Automatic;
         automatic_rule.ttl_seconds = 1;
-        let rule_set = CompiledRuleSet::compile(vec![automatic_rule, preview_rule], &config)
-            .expect("rule set should compile");
+        let rule_set =
+            CompiledRuleSet::compile(vec![automatic_rule.clone(), preview_rule], &config)
+                .expect("rule set should compile");
 
         let projection = project_watched_file(tracked.clone(), &config, &rule_set, now_seconds())
             .expect("projection should build");
@@ -177,9 +178,10 @@ mod tests {
         );
         assert_eq!(
             projection.tracked.expiry,
-            Expiry::At(projection.tracked.freshness_at + AppConfig::default().default_ttl_seconds)
+            Expiry::At(projection.tracked.freshness_at + automatic_rule.ttl_seconds)
         );
-        assert!(candidate.is_none());
+        let candidate = candidate.expect("lower automatic rule should remain actionable");
+        assert_eq!(candidate.rule.id, automatic_rule.id);
     }
 
     #[test]
