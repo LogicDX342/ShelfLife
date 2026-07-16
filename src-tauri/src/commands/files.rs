@@ -3,7 +3,7 @@ use std::path::Path;
 use tauri::State;
 
 use crate::engine::paths::PathScope;
-use crate::models::{AppError, FileDecayState, RuleMatchExplanation, TrackedFile};
+use crate::models::{AppError, RuleMatchExplanation, TrackedFile};
 use crate::rules::CompiledRuleSet;
 use crate::runtime::AppRuntime;
 use crate::storage::{self, Database};
@@ -14,10 +14,7 @@ pub async fn get_active_files(state: State<'_, AppRuntime>) -> Result<Vec<Tracke
 }
 
 fn active_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
-    Ok(storage::tracked::list_tracked_files(db)?
-        .into_iter()
-        .filter(|file| !matches!(file.state, FileDecayState::Ignored))
-        .collect())
+    storage::tracked::list_tracked_files(db)
 }
 
 #[tauri::command]
@@ -116,7 +113,7 @@ mod tests {
     use super::{active_files, existing_directories};
 
     #[test]
-    fn active_files_hide_ignored_files_by_default() {
+    fn active_files_include_ignored_files_by_default() {
         let fixture = Fixture::new();
         let fresh = fixture.write("fresh.txt", "fresh");
         let ignored = fixture.write("ignored.txt", "ignored");
@@ -137,8 +134,9 @@ mod tests {
 
         let files = active_files(&db).expect("active files should load");
 
-        assert_eq!(files.len(), 1);
+        assert_eq!(files.len(), 2);
         assert_eq!(files[0].path, fresh.to_string_lossy());
+        assert_eq!(files[1].path, ignored.to_string_lossy());
     }
 
     #[test]
