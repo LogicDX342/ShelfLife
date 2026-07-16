@@ -138,7 +138,6 @@ export type UserTriageAction =
   | 'Pin'
   | { Snooze: { seconds: number } }
   | 'Ignore'
-  | 'MoveToSafeFolder'
   | { Move: { destination_folder: string } }
   | 'TrashNow';
 
@@ -169,7 +168,7 @@ export type AppConfig = {
   default_ttl_seconds: number;
   stale_threshold_seconds: number;
   decaying_threshold_seconds: number;
-  safe_folder_path: string;
+  default_move_destination: string | null;
   notifications_enabled: boolean;
   start_at_login: boolean;
   close_behavior: CloseBehavior;

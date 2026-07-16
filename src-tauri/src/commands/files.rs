@@ -70,7 +70,19 @@ fn open_location(_path: &Path) -> Result<(), AppError> {
 
 fn validate_path_scope(state: &State<'_, AppRuntime>, path: &str) -> Result<(), AppError> {
     let config = state.with_database(storage::get_config)?;
-    PathScope::new(&config).ensure_source_scope(Path::new(path))
+    PathScope::new(&config).ensure_watch_scope(Path::new(path))
+}
+
+#[tauri::command]
+pub async fn filter_existing_directories(paths: Vec<String>) -> Result<Vec<String>, AppError> {
+    Ok(existing_directories(paths))
+}
+
+fn existing_directories(paths: Vec<String>) -> Vec<String> {
+    paths
+        .into_iter()
+        .filter(|path| Path::new(path).is_dir())
+        .collect()
 }
 
 #[tauri::command]
@@ -101,7 +113,7 @@ mod tests {
     use crate::models::{AppConfig, FileDecayState};
     use crate::storage;
 
-    use super::active_files;
+    use super::{active_files, existing_directories};
 
     #[test]
     fn active_files_hide_ignored_files_by_default() {
@@ -127,6 +139,23 @@ mod tests {
 
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].path, fresh.to_string_lossy());
+    }
+
+    #[test]
+    fn directory_filter_preserves_only_existing_directories() {
+        let fixture = Fixture::new();
+        let directory = fixture.root.join("destination");
+        fs::create_dir_all(&directory).expect("destination should exist");
+        let file = fixture.write("file.txt", "body");
+        let missing = fixture.root.join("missing");
+
+        let filtered = existing_directories(vec![
+            directory.to_string_lossy().into_owned(),
+            file.to_string_lossy().into_owned(),
+            missing.to_string_lossy().into_owned(),
+        ]);
+
+        assert_eq!(filtered, vec![directory.to_string_lossy().into_owned()]);
     }
 
     struct Fixture {

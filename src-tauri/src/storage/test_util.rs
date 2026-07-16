@@ -39,7 +39,7 @@ impl Fixture {
     pub fn config(&self) -> AppConfig {
         AppConfig {
             watch_targets: vec![self.watch_target(false)],
-            safe_folder_path: path_string(&self.safe),
+            default_move_destination: Some(path_string(&self.safe)),
             ..AppConfig::default()
         }
     }
@@ -87,7 +87,7 @@ impl Fixture {
     pub fn save_config_with_targets(&self, watch_targets: Vec<WatchTarget>) {
         let config = AppConfig {
             watch_targets,
-            safe_folder_path: path_string(&self.safe),
+            default_move_destination: Some(path_string(&self.safe)),
             ..AppConfig::default()
         };
         storage::save_config(&self.db, &config).expect("config should save");

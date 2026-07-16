@@ -22,7 +22,7 @@ pub struct AppConfig {
     pub default_ttl_seconds: u64,
     pub stale_threshold_seconds: u64,
     pub decaying_threshold_seconds: u64,
-    pub safe_folder_path: String,
+    pub default_move_destination: Option<String>,
     pub notifications_enabled: bool,
     pub start_at_login: bool,
     pub close_behavior: CloseBehavior,
@@ -36,17 +36,11 @@ impl Default for AppConfig {
             default_ttl_seconds: 30 * 24 * 60 * 60,
             stale_threshold_seconds: 5 * 24 * 60 * 60,
             decaying_threshold_seconds: 24 * 60 * 60,
-            safe_folder_path: default_safe_folder(),
+            default_move_destination: None,
             notifications_enabled: true,
             start_at_login: false,
             close_behavior: CloseBehavior::Ask,
             dropzone_enabled: false,
         }
     }
-}
-
-fn default_safe_folder() -> String {
-    std::env::var("USERPROFILE")
-        .map(|home| format!("{home}\\shelflife-safe"))
-        .unwrap_or_else(|_| String::from("shelflife-safe"))
 }

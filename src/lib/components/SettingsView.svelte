@@ -35,7 +35,7 @@
   let config = $state<AppConfig | null>(null);
   let targetToRemove = $state<WatchTarget | null>(null);
   let targetPath = $state('');
-  let safeFolderPath = $state('');
+  let defaultMoveDestination = $state('');
   let sliderValue = $state([5, 29, 30]);
   let notificationsEnabled = $state(true);
   let startAtLogin = $state(false);
@@ -55,11 +55,14 @@
     };
   }
 
-  async function browseSafeFolder() {
+  async function browseDefaultMoveDestination() {
     try {
-      const selected = await selectDirectory('Select Safe Folder', safeFolderPath);
+      const selected = await selectDirectory(
+        i18n.t('settings.selectDefaultMoveDestination'),
+        defaultMoveDestination,
+      );
       if (selected) {
-        safeFolderPath = selected;
+        defaultMoveDestination = selected;
         await savePreferences();
       }
     } catch (reason) {
@@ -92,7 +95,7 @@
 
   async function refreshConfig() {
     config = await getConfig();
-    safeFolderPath = config.safe_folder_path;
+    defaultMoveDestination = config.default_move_destination ?? '';
     const stale = Math.round(config.stale_threshold_seconds / 86400);
     const expiry = Math.round(config.default_ttl_seconds / 86400);
     const decayBufferDays = config.decaying_threshold_seconds / 86400;
@@ -140,10 +143,10 @@
     }
 
     try {
-      const trimmedSafeFolderPath = safeFolderPath.trim();
+      const trimmedDefaultMoveDestination = defaultMoveDestination.trim();
       await saveConfig({
         ...config,
-        safe_folder_path: trimmedSafeFolderPath,
+        default_move_destination: trimmedDefaultMoveDestination || null,
         default_ttl_seconds: Math.max(1, sliderValue[2]) * 86400,
         stale_threshold_seconds: Math.max(1, sliderValue[0]) * 86400,
         decaying_threshold_seconds: Math.max(1, sliderValue[2] - sliderValue[1]) * 86400,
@@ -248,14 +251,17 @@
               class="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-fluent-border-light dark:border-fluent-border-dark pb-4"
             >
               <div class="flex flex-col gap-1.5">
-                <Label for="safe-folder-path">{i18n.t('settings.safeFolder')}</Label>
+                <Label for="default-move-destination">
+                  {i18n.t('settings.defaultMoveDestination')}
+                </Label>
                 <div class="flex gap-2">
                   <Input
-                    id="safe-folder-path"
-                    bind:value={safeFolderPath}
+                    id="default-move-destination"
+                    bind:value={defaultMoveDestination}
+                    placeholder={i18n.t('settings.defaultMoveDestinationPlaceholder')}
                     onchange={savePreferences}
                   />
-                  <Button type="button" variant="outline" onclick={browseSafeFolder}>
+                  <Button type="button" variant="outline" onclick={browseDefaultMoveDestination}>
                     {i18n.t('settings.browse')}
                   </Button>
                 </div>

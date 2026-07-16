@@ -93,6 +93,32 @@ struct LegacyOriginRow {
 }
 
 const V1_TO_V2_SQL: &str = r#"
+CREATE TABLE app_config_v2 (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    default_ttl_seconds INTEGER NOT NULL,
+    stale_threshold_seconds INTEGER NOT NULL,
+    decaying_threshold_seconds INTEGER NOT NULL,
+    default_move_destination TEXT,
+    notifications_enabled INTEGER NOT NULL CHECK (notifications_enabled IN (0, 1)),
+    start_at_login INTEGER NOT NULL CHECK (start_at_login IN (0, 1)),
+    close_behavior TEXT NOT NULL CHECK (close_behavior IN ('ask', 'hide_to_tray', 'quit')),
+    dropzone_enabled INTEGER NOT NULL CHECK (dropzone_enabled IN (0, 1))
+);
+
+INSERT INTO app_config_v2 (
+    id, default_ttl_seconds, stale_threshold_seconds, decaying_threshold_seconds,
+    default_move_destination, notifications_enabled, start_at_login,
+    close_behavior, dropzone_enabled
+)
+SELECT
+    id, default_ttl_seconds, stale_threshold_seconds, decaying_threshold_seconds,
+    safe_folder_path, notifications_enabled, start_at_login,
+    close_behavior, dropzone_enabled
+FROM app_config;
+
+DROP TABLE app_config;
+ALTER TABLE app_config_v2 RENAME TO app_config;
+
 CREATE TABLE tracked_files_v2 (
     path TEXT PRIMARY KEY,
     file_name TEXT NOT NULL,
@@ -152,7 +178,7 @@ mod tests {
 
     use diesel::prelude::*;
     use diesel::sql_query;
-    use diesel::sql_types::Integer;
+    use diesel::sql_types::{Integer, Nullable, Text};
     use uuid::Uuid;
 
     use crate::storage;
@@ -192,10 +218,17 @@ mod tests {
                 .expect("missing lookup should work")
                 .is_none()
         );
+        let mut conn = db.connect().expect("migrated database should connect");
+        let config = sql_query("SELECT default_move_destination FROM app_config WHERE id = 1")
+            .get_result::<MigratedDefaultRow>(&mut conn)
+            .expect("migrated config should load");
+        assert_eq!(
+            config.default_move_destination.as_deref(),
+            Some("C:\\Users\\tester\\shelflife-safe")
+        );
 
         storage::tracked::upsert_tracked_file(&db, &tracked)
             .expect("migrated row should use the v2 write schema");
-        let mut conn = db.connect().expect("migrated database should connect");
         let version = sql_query("PRAGMA user_version")
             .get_result::<UserVersionRow>(&mut conn)
             .expect("schema version should load");
@@ -206,13 +239,56 @@ mod tests {
         fs::remove_dir_all(root).expect("migration fixture should be removed");
     }
 
+    #[test]
+    fn fresh_database_has_no_default_move_destination() {
+        let root =
+            std::env::temp_dir().join(format!("shelflife-fresh-database-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("database directory should be created");
+
+        let db =
+            storage::open_database(root.join("test.sqlite")).expect("fresh database should open");
+        let config = storage::get_config(&db).expect("fresh config should load");
+
+        assert_eq!(config.default_move_destination, None);
+
+        drop(db);
+        fs::remove_dir_all(root).expect("database directory should be removed");
+    }
+
     #[derive(QueryableByName)]
     struct UserVersionRow {
         #[diesel(sql_type = Integer)]
         user_version: i32,
     }
 
+    #[derive(QueryableByName)]
+    struct MigratedDefaultRow {
+        #[diesel(sql_type = Nullable<Text>)]
+        default_move_destination: Option<String>,
+    }
+
     const V1_FIXTURE_SQL: &str = r#"
+CREATE TABLE app_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    default_ttl_seconds INTEGER NOT NULL,
+    stale_threshold_seconds INTEGER NOT NULL,
+    decaying_threshold_seconds INTEGER NOT NULL,
+    safe_folder_path TEXT NOT NULL,
+    notifications_enabled INTEGER NOT NULL CHECK (notifications_enabled IN (0, 1)),
+    start_at_login INTEGER NOT NULL CHECK (start_at_login IN (0, 1)),
+    close_behavior TEXT NOT NULL CHECK (close_behavior IN ('ask', 'hide_to_tray', 'quit')),
+    dropzone_enabled INTEGER NOT NULL CHECK (dropzone_enabled IN (0, 1))
+);
+
+INSERT INTO app_config (
+    id, default_ttl_seconds, stale_threshold_seconds, decaying_threshold_seconds,
+    safe_folder_path, notifications_enabled, start_at_login, close_behavior,
+    dropzone_enabled
+) VALUES (
+    1, 2592000, 432000, 86400,
+    'C:\Users\tester\shelflife-safe', 1, 0, 'ask', 0
+);
+
 CREATE TABLE tracked_files (
     path TEXT PRIMARY KEY,
     file_name TEXT NOT NULL,

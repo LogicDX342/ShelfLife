@@ -1,11 +1,14 @@
 <script lang="ts">
-  import IconChevronDown from '@lucide/svelte/icons/chevron-down';
+  import IconClock from '@lucide/svelte/icons/clock';
+  import IconEyeOff from '@lucide/svelte/icons/eye-off';
   import IconDocument from '@lucide/svelte/icons/file';
   import IconFolderArrowRight from '@lucide/svelte/icons/folder-input';
+  import IconFolderOpen from '@lucide/svelte/icons/folder-open';
   import IconPin from '@lucide/svelte/icons/pin';
   import IconDelete from '@lucide/svelte/icons/trash-2';
 
-  import { explainFile, openFileLocation } from '$lib/api/files';
+  import { getConfig } from '$lib/api/config';
+  import { explainFile, openFileLocation, selectDirectory } from '$lib/api/files';
   import { executeTriageAction } from '$lib/api/triage';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
@@ -18,6 +21,11 @@
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { RuleMatchExplanation, TrackedFile, UserTriageAction } from '$lib/types';
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
+  import {
+    getDestinationOptions,
+    loadRecentMoveDestinations,
+    recordRecentMoveDestination,
+  } from '$lib/utils/moveDestinations';
 
   import ConfirmDialog from './ConfirmDialog.svelte';
   import ExplanationBadge from './ExplanationBadge.svelte';
@@ -40,8 +48,13 @@
   );
 
   let busy = $state(false);
-  let expanded = $state(false);
+  let moveOpen = $state(false);
+  let snoozeOpen = $state(false);
+  let moveLoading = $state(false);
   let moveDestination = $state('');
+  let defaultMoveDestination = $state<string | null>(null);
+  let recentMoveDestinations = $state<string[]>([]);
+  let pickedMoveDestination = $state<string | null>(null);
   let snoozeDays = $state('7');
   let customSnoozeDays = $state(7);
   let pendingAction = $state<UserTriageAction | null>(null);
@@ -49,6 +62,13 @@
   let pendingMessage = $state('');
 
   const snoozeOptions = ['1', '3', '7', '14', '30', '-1'];
+  let moveDestinationOptions = $derived(
+    getDestinationOptions(defaultMoveDestination, recentMoveDestinations, pickedMoveDestination, {
+      default: i18n.t('file.defaultDestination'),
+      recent: i18n.t('file.recentDestination'),
+      chosen: i18n.t('file.chosenDestination'),
+    }),
+  );
 
   $effect(() => {
     const path = file.path;
@@ -65,6 +85,13 @@
     busy = true;
     try {
       await executeTriageAction(file.path, action);
+      if (typeof action === 'object' && 'Move' in action) {
+        recordRecentMoveDestination(action.Move.destination_folder);
+        moveOpen = false;
+      }
+      if (typeof action === 'object' && 'Snooze' in action) {
+        snoozeOpen = false;
+      }
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('file.errorAction')));
     } finally {
@@ -72,10 +99,16 @@
     }
   }
 
+  function toggleSnoozeControls() {
+    snoozeOpen = !snoozeOpen;
+    if (snoozeOpen) {
+      moveOpen = false;
+    }
+  }
+
   function actionName(action: UserTriageAction) {
     if (action === 'Pin') return i18n.t('file.pin');
     if (action === 'Ignore') return i18n.t('file.ignore');
-    if (action === 'MoveToSafeFolder') return i18n.t('file.safeFolder');
     if (action === 'TrashNow') return i18n.t('file.trash');
     if (typeof action === 'object' && 'Snooze' in action) return i18n.t('file.snooze');
     if (typeof action === 'object' && 'Move' in action) return i18n.t('file.actionMove');
@@ -101,6 +134,50 @@
   function snoozeAction() {
     const days = snoozeDays === '-1' ? customSnoozeDays : Number(snoozeDays);
     queueAction({ Snooze: { seconds: Math.max(1, days) * 24 * 60 * 60 } });
+  }
+
+  async function toggleMoveControls() {
+    if (moveOpen) {
+      moveOpen = false;
+      return;
+    }
+
+    moveOpen = true;
+    snoozeOpen = false;
+    moveLoading = true;
+    try {
+      const config = await getConfig();
+      defaultMoveDestination = config.default_move_destination;
+      recentMoveDestinations = await loadRecentMoveDestinations(defaultMoveDestination);
+      pickedMoveDestination = null;
+      moveDestination = defaultMoveDestination ?? recentMoveDestinations[0] ?? '';
+    } catch (reason) {
+      notifications.error(getErrorMessage(reason, i18n.t('file.errorMoveDestinations')));
+    } finally {
+      moveLoading = false;
+    }
+  }
+
+  async function chooseMoveDestination() {
+    try {
+      const selected = await selectDirectory(
+        i18n.t('file.selectMoveDestination'),
+        moveDestination || defaultMoveDestination || recentMoveDestinations[0],
+      );
+      if (selected) {
+        pickedMoveDestination = selected;
+        moveDestination = selected;
+      }
+    } catch (reason) {
+      notifications.error(getErrorMessage(reason, i18n.t('file.errorMoveDestinations')));
+    }
+  }
+
+  function queueMoveAction() {
+    const destination = moveDestination.trim();
+    if (destination) {
+      queueAction({ Move: { destination_folder: destination } });
+    }
   }
 
   function snoozeLabel(days: string) {
@@ -134,187 +211,288 @@
   }
 </script>
 
-<Card.Root class="relative gap-3 p-4 transition-all duration-200 {getBorderColor(file.state)}">
-  <!-- Main Grid Info -->
-  <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-    <!-- Left: Checkbox + Name/Path -->
-    <div class="md:col-span-7 flex items-start gap-3 min-w-0">
+<Card.Root
+  class="relative flex flex-col gap-3 p-4 transition-all duration-200 {getBorderColor(file.state)}"
+>
+  <!-- Row 1: File Info -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <!-- Left side: Checkbox + Icon + Name/Path stack -->
+    <div class="flex items-start gap-3 min-w-0 flex-1">
       {#if selectable}
         <Checkbox
           aria-label={`Select ${file.file_name}`}
           checked={selected}
-          class="mt-1.5"
+          class="mt-1"
           onclick={() => onSelectedChange(file.path, !selected)}
         />
       {/if}
 
-      <!-- File type icon representation -->
-      <div class="mt-0.5 text-fluent-muted-light dark:text-fluent-muted-dark flex-shrink-0">
-        <IconDocument class="opacity-75" />
+      <div class="mt-0.5 text-muted-foreground flex-shrink-0">
+        <IconDocument class="w-5 h-5 opacity-80" />
       </div>
 
       <div class="min-w-0 flex-1">
         <h3
-          class="text-sm font-semibold tracking-tight truncate text-fluent-text-light dark:text-fluent-text-dark"
+          class="text-sm font-semibold tracking-tight truncate text-foreground"
           title={file.file_name}
         >
           {file.file_name}
         </h3>
-        <p
-          class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate mt-0.5"
-          title={file.path}
-        >
-          {file.path}
-        </p>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <p class="text-xs text-muted-foreground truncate" title={file.path}>
+            {file.path}
+          </p>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-5 w-5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
+            onclick={openLocation}
+            title={i18n.t('file.openFolder')}
+            aria-label={i18n.t('file.openFolder')}
+          >
+            <IconFolderOpen class="w-3.5 h-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
 
-    <!-- Right: Size + Freshness + Status Pill -->
-    <div
-      class="md:col-span-5 flex flex-wrap md:flex-nowrap items-center justify-between md:justify-end gap-4"
-    >
-      <div class="flex flex-col text-left md:text-right">
-        <span class="text-xs font-semibold text-fluent-text-light dark:text-fluent-text-dark"
-          >{formatBytes(file.size_bytes)}</span
-        >
-        <span class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark mt-0.5">
+    <!-- Right side: Size, Date, Badge, Chevron -->
+    <div class="flex items-center gap-4 justify-between sm:justify-end shrink-0">
+      <div class="flex flex-col text-left sm:text-right">
+        <span class="text-xs font-semibold text-foreground">
+          {formatBytes(file.size_bytes)}
+        </span>
+        <span class="text-[10px] text-muted-foreground mt-0.5">
           {i18n.t('file.firstSeen')}: {formatDate(file.first_seen_at)}
         </span>
       </div>
 
-      <div class="flex items-center gap-3">
-        <Badge variant="outline">
-          {i18n.t(`tab.${file.state.toLowerCase()}`)}
-        </Badge>
-
-        <!-- Toggle chevron for details -->
-        <Button
-          onclick={() => (expanded = !expanded)}
-          variant="outline"
-          aria-label="Toggle details"
-        >
-          <IconChevronDown
-            class="w-4 h-4 transform transition-transform duration-200 {expanded
-              ? 'rotate-180'
-              : ''}"
-          />
-        </Button>
-      </div>
+      <Badge variant="outline" class="font-medium text-xs px-2.5 py-0.5">
+        {i18n.t(`tab.${file.state.toLowerCase()}`)}
+      </Badge>
     </div>
   </div>
 
-  <!-- Explanations badges if file matches rules -->
+  <!-- Row 2: Matched Rule -->
   {#if matchedExplanations.length > 0}
-    <div
-      class="flex flex-wrap gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-2"
-    >
-      {#each matchedExplanations as explanation (explanation.rule_id)}
-        <ExplanationBadge {explanation} />
-      {/each}
+    <div class="border-t border-border/40 pt-2.5">
+      <div class="flex flex-wrap gap-2 items-center">
+        {#each matchedExplanations as explanation (explanation.rule_id)}
+          <ExplanationBadge {explanation} />
+        {/each}
+      </div>
     </div>
   {/if}
 
-  <!-- Action buttons row -->
-  <div
-    class="flex flex-wrap gap-2 border-t border-fluent-border-light dark:border-fluent-border-dark pt-2"
-  >
-    {#if file.state === 'Pinned'}
-      <Button variant="outline" disabled={busy} onclick={() => queueAction('Ignore')}>
-        {i18n.t('file.ignore')}
-      </Button>
-    {:else if file.state === 'Ignored'}
-      <Button variant="outline" disabled={busy} onclick={() => queueAction('Pin')}>
-        {i18n.t('file.pin')}
-      </Button>
-    {:else}
-      <Button variant="outline" disabled={busy} onclick={() => queueAction('Pin')}>
-        <IconPin />
-        {i18n.t('file.pin')}
-      </Button>
-      <Button variant="outline" disabled={busy} onclick={() => queueAction('Ignore')}>
-        {i18n.t('file.ignore')}
-      </Button>
-    {/if}
+  <!-- Row 3: Action Buttons -->
+  <div class="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-2.5">
+    <!-- Left actions (Pin/Ignore, Move, Snooze) -->
+    <div class="flex flex-wrap gap-2">
+      {#if file.state === 'Pinned'}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onclick={() => queueAction('Ignore')}
+          class="h-8 text-xs gap-1.5"
+        >
+          <IconEyeOff class="w-3.5 h-3.5" />
+          {i18n.t('file.ignore')}
+        </Button>
+      {:else if file.state === 'Ignored'}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onclick={() => queueAction('Pin')}
+          class="h-8 text-xs gap-1.5"
+        >
+          <IconPin class="w-3.5 h-3.5" />
+          {i18n.t('file.pin')}
+        </Button>
+      {:else}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onclick={() => queueAction('Pin')}
+          class="h-8 text-xs gap-1.5"
+        >
+          <IconPin class="w-3.5 h-3.5" />
+          {i18n.t('file.pin')}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onclick={() => queueAction('Ignore')}
+          class="h-8 text-xs gap-1.5"
+        >
+          <IconEyeOff class="w-3.5 h-3.5" />
+          {i18n.t('file.ignore')}
+        </Button>
+      {/if}
 
-    <Button variant="outline" disabled={busy} onclick={() => queueAction('MoveToSafeFolder')}>
-      <IconFolderArrowRight />
-      {i18n.t('file.safeFolder')}
-    </Button>
+      <Button
+        variant={moveOpen ? 'secondary' : 'outline'}
+        size="sm"
+        disabled={busy}
+        onclick={toggleMoveControls}
+        class="h-8 text-xs gap-1.5"
+      >
+        <IconFolderArrowRight class="w-3.5 h-3.5" />
+        {i18n.t('file.actionMove')}
+      </Button>
 
-    <Button variant="destructive" disabled={busy} onclick={() => queueAction('TrashNow')}>
-      <IconDelete />
-      {i18n.t('file.trash')}
-    </Button>
+      <Button
+        variant={snoozeOpen ? 'secondary' : 'outline'}
+        size="sm"
+        disabled={busy}
+        onclick={toggleSnoozeControls}
+        class="h-8 text-xs gap-1.5"
+      >
+        <IconClock class="w-3.5 h-3.5" />
+        {i18n.t('file.snooze')}
+      </Button>
+    </div>
 
-    <Button variant="ghost" type="button" onclick={openLocation}>
-      {i18n.t('file.openFolder')}
-    </Button>
+    <!-- Right Action (Delete/Trash) -->
+    <div>
+      <Button
+        variant="destructive"
+        size="sm"
+        disabled={busy}
+        onclick={() => queueAction('TrashNow')}
+        class="h-8 text-xs gap-1.5"
+      >
+        <IconDelete class="w-3.5 h-3.5" />
+        {i18n.t('file.trash')}
+      </Button>
+    </div>
   </div>
 
-  <!-- Expandable Details -->
-  {#if expanded}
-    <section
-      class="border-t border-fluent-border-light dark:border-fluent-border-dark pt-4 space-y-4 animate-expand"
+  <!-- Inline Move Controls -->
+  {#if moveOpen}
+    <div
+      class="flex flex-col gap-2.5 border-t border-border/40 pt-3 animate-in fade-in slide-in-from-top-1 duration-200"
     >
-      <!-- Actions -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- Move -->
-        <div class="flex flex-col gap-1.5">
-          <Label for="move-in-{file.file_name}">
-            {i18n.t('file.moveTitle')}
-          </Label>
-          <div class="flex gap-2">
-            <Input
-              id="move-in-{file.file_name}"
-              bind:value={moveDestination}
-              placeholder={i18n.t('file.movePlaceholder')}
-            />
-            <Button
-              variant="outline"
-              disabled={busy || !moveDestination.trim()}
-              onclick={() => queueAction({ Move: { destination_folder: moveDestination } })}
+      <Label
+        for="move-destination-{file.file_name}"
+        class="text-xs font-semibold text-muted-foreground"
+      >
+        {i18n.t('file.moveTitle')}
+      </Label>
+      <div class="flex flex-wrap items-center gap-2">
+        {#if moveDestinationOptions.length > 0}
+          <Select.Root type="single" bind:value={moveDestination} disabled={moveLoading}>
+            <Select.Trigger
+              id="move-destination-{file.file_name}"
+              class="min-w-64 flex-1 h-9 text-xs"
             >
-              {i18n.t('file.actionMove')}
-            </Button>
-          </div>
-        </div>
-        <!-- Snooze -->
-        <div class="flex flex-col gap-1.5">
-          <Label for="snooze-in-{file.file_name}">
-            {i18n.t('file.snoozeTitle')}
-          </Label>
-          <div class="flex gap-2">
-            <Select.Root type="single" bind:value={snoozeDays}>
-              <Select.Trigger
-                id="snooze-in-{file.file_name}"
-                class={snoozeDays === '-1' ? 'w-32 shrink-0' : 'flex-1 min-w-0'}
-              >
-                <span data-slot="select-value">{snoozeLabel(snoozeDays)}</span>
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Group>
-                  {#each snoozeOptions as days (days)}
-                    <Select.Item value={days} label={snoozeLabel(days)} />
-                  {/each}
-                </Select.Group>
-              </Select.Content>
-            </Select.Root>
-            {#if snoozeDays === '-1'}
-              <Input
-                min="1"
-                type="number"
-                bind:value={customSnoozeDays}
-                placeholder={i18n.t('file.days')}
-                class="flex-1 min-w-0"
-              />
-            {/if}
-            <Button variant="outline" disabled={busy} onclick={snoozeAction}>
-              {i18n.t('file.snooze')}
-            </Button>
-          </div>
-        </div>
+              <span data-slot="select-value">
+                {moveDestination || i18n.t('file.chooseDestination')}
+              </span>
+            </Select.Trigger>
+            <Select.Content
+              class="max-w-(--bits-select-anchor-width) transition-[opacity,transform]"
+            >
+              <Select.Group>
+                {#each moveDestinationOptions as option (option.path)}
+                  <Select.Item
+                    value={option.path}
+                    label={option.path}
+                    class="[&>span:last-child]:min-w-0"
+                  >
+                    <span class="min-w-0 flex-1 truncate" title={option.path}>{option.path}</span>
+                    {#if option.isDefault}
+                      <Badge variant="secondary">{i18n.t('file.default')}</Badge>
+                    {/if}
+                  </Select.Item>
+                {/each}
+              </Select.Group>
+            </Select.Content>
+          </Select.Root>
+        {/if}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={moveLoading || busy}
+          onclick={chooseMoveDestination}
+          class="h-9 text-xs"
+        >
+          {i18n.t('file.chooseAnotherFolder')}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onclick={() => (moveOpen = false)}
+          class="h-9 text-xs"
+        >
+          {i18n.t('dialog.cancel')}
+        </Button>
+        <Button
+          size="sm"
+          disabled={busy || moveLoading || !moveDestination.trim()}
+          onclick={queueMoveAction}
+          class="h-9 text-xs"
+        >
+          {i18n.t('file.actionMove')}
+        </Button>
       </div>
-    </section>
+    </div>
+  {/if}
+
+  <!-- Inline Snooze Controls -->
+  {#if snoozeOpen}
+    <div
+      class="flex flex-col gap-2.5 border-t border-border/40 pt-3 animate-in fade-in slide-in-from-top-1 duration-200"
+    >
+      <Label for="snooze-in-{file.file_name}" class="text-xs font-semibold text-muted-foreground">
+        {i18n.t('file.snoozeTitle')}
+      </Label>
+      <div class="flex flex-wrap items-center gap-2">
+        <Select.Root type="single" bind:value={snoozeDays}>
+          <Select.Trigger
+            id="snooze-in-{file.file_name}"
+            class="h-9 text-xs {snoozeDays === '-1' ? 'w-32 shrink-0' : 'flex-1 min-w-64'}"
+          >
+            <span data-slot="select-value">{snoozeLabel(snoozeDays)}</span>
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              {#each snoozeOptions as days (days)}
+                <Select.Item value={days} label={snoozeLabel(days)} class="text-xs" />
+              {/each}
+            </Select.Group>
+          </Select.Content>
+        </Select.Root>
+
+        {#if snoozeDays === '-1'}
+          <Input
+            min="1"
+            type="number"
+            bind:value={customSnoozeDays}
+            placeholder={i18n.t('file.days')}
+            class="flex-1 min-w-0 h-9 text-xs"
+          />
+        {/if}
+
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onclick={() => (snoozeOpen = false)}
+          class="h-9 text-xs"
+        >
+          {i18n.t('dialog.cancel')}
+        </Button>
+
+        <Button size="sm" disabled={busy} onclick={snoozeAction} class="h-9 text-xs">
+          {i18n.t('file.snooze')}
+        </Button>
+      </div>
+    </div>
   {/if}
 
   <!-- Modal Confirmation Dialog -->

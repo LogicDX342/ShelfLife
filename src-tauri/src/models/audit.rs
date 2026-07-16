@@ -52,7 +52,6 @@ pub enum UserTriageAction {
     Pin,
     Snooze { seconds: u64 },
     Ignore,
-    MoveToSafeFolder,
     Move { destination_folder: String },
     TrashNow,
 }

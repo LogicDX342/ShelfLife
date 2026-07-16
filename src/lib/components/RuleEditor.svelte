@@ -424,7 +424,7 @@
             <Input
               id="destination-path"
               bind:value={destinationFolder}
-              placeholder="C:\SafeFolder"
+              placeholder="C:\SortedFiles"
               required={actionKind === 'Move'}
               disabled={actionKind !== 'Move'}
             />

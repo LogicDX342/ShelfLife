@@ -172,7 +172,7 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 1. User opens the dashboard from the tray.
 2. Files appear as Fresh, Stale, or Decaying.
 3. Each file card explains why it appears.
-4. User chooses Pin, Snooze, Move to Safe Folder, Trash Now, Ignore, or Open in Finder/Explorer/File Manager.
+4. User chooses Pin, Snooze, Move to a selected destination, Trash Now, Ignore, or Open in Finder/Explorer/File Manager.
 5. Action is recorded in the audit ledger.
 6. Undo is available where technically possible.
 
@@ -286,7 +286,7 @@ The reconciliation scan runs:
 
 It detects files that were missed by filesystem events and removes stale tracked rows for files that no longer exist.
 
-`tracked_files` contains only files currently inside enabled watch targets. Files are removed from tracking when they disappear, leave a watch target, are moved to another destination, are moved to the safe folder, or are trashed. Audit entries retain completed-action history. Undo recreates tracking only when the restored path is inside an enabled watch target.
+`tracked_files` contains only files currently inside enabled watch targets. Files are removed from tracking when they disappear, leave a watch target, are moved to another destination, or are trashed. Audit entries retain completed-action history. Undo recreates tracking only when the restored path is inside an enabled watch target.
 
 ---
 
@@ -605,7 +605,7 @@ The UI must show this explanation before user-confirmed actions.
 - Pin.
 - Snooze (configurable duration: default 7 days, options include 1 day, 3 days, 7 days, 14 days, 30 days, or custom).
 - Ignore.
-- Move to Safe Folder.
+- Move to a user-selected destination.
 - Trash Now.
 - Open file location.
 - Undo recent action where possible.
@@ -622,19 +622,11 @@ The product must not use the word "Nuke" in user-facing UI. Use "Trash Now" for 
 
 Trash actions must move files to the operating system Trash or Recycle Bin. Raw deletion is not available in v1.
 
-### 9.4 Safe folder behavior
+### 9.4 Move destination behavior
 
-The safe folder is a user-visible folder, not a hidden application cache.
+Users choose a destination for every manual move. An optional configured default and frontend-only recent destinations make common folders quick to reuse, but no destination has special lifecycle or filesystem-scope semantics.
 
-Moving a file to the safe folder completes its tracked lifecycle. The destination remains user-visible and undoable through its audit entry, but it is not retained in `tracked_files`.
-
-Default suggestion:
-
-```text
-~/shelflife-safe
-```
-
-The app may also support platform-specific defaults selected during onboarding.
+Moving a file outside its watch target completes its tracked lifecycle. The destination remains user-visible and undoable through its audit entry, but the file is not retained in `tracked_files`.
 
 ### 9.5 Move with rename behavior
 
@@ -979,7 +971,7 @@ Events are for background updates. Commands are for user-initiated requests and 
 Every command that receives a path must validate:
 
 - Path exists for file actions; undo may refer to an audit path that is not currently present.
-- Canonical path is inside a configured watch target or safe folder.
+- Canonical source paths are inside a configured watch target.
 - Path is not a system directory.
 - Path is not outside the user's approved scope.
 - Symlinks do not escape allowed roots unless explicitly permitted.
@@ -1230,7 +1222,7 @@ v1 statistics are derived from audit and tracked-file tables.
 
 ```text
 Total size moved to Trash
-Total size moved to Safe Folder
+Total size moved to user-selected destinations
 Total files pinned
 Total files ignored
 Current stale size by watch target
@@ -1274,7 +1266,7 @@ pub struct AppConfig {
     pub default_ttl_seconds: u64,
     pub stale_threshold_seconds: u64,
     pub decaying_threshold_seconds: u64,
-    pub safe_folder_path: String,
+    pub default_move_destination: Option<String>,
     pub notifications_enabled: bool,
     pub start_at_login: bool,
     pub close_behavior: CloseBehavior,
@@ -1337,7 +1329,7 @@ delete file
 partial download simulation
 rapid event bursts
 watcher stable-path emission without database access
-move to safe folder
+move to a selected destination
 trash action mock or platform-gated test
 undo move (including with rename)
 deleted file reconciliation
@@ -1506,7 +1498,7 @@ Deliverables:
 Pin
 Snooze
 Ignore
-Move to Safe Folder
+Move to a selected destination
 Trash Now
 AuditEntry records
 Undo for move (including with rename)
@@ -1685,7 +1677,7 @@ Preferred language:
 ```text
 Review
 Trash Now
-Move to Safe Folder
+Move
 Pin
 Snooze
 Ignore

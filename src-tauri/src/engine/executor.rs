@@ -348,12 +348,6 @@ fn prepare_file_action(
             Ok(PreparedFileAction::Snooze { until })
         }
         RequestedFileAction::User(UserTriageAction::Ignore) => Ok(PreparedFileAction::Ignore),
-        RequestedFileAction::User(UserTriageAction::MoveToSafeFolder) => prepare_move_action(
-            source,
-            config,
-            PathBuf::from(&config.safe_folder_path),
-            None,
-        ),
         RequestedFileAction::User(UserTriageAction::Move { destination_folder }) => {
             prepare_move_action(source, config, PathBuf::from(destination_folder), None)
         }
@@ -1112,7 +1106,7 @@ mod tests {
             "cross-volume body"
         );
         assert!(std::fs::read_dir(&fixture.safe)
-            .expect("safe folder should be readable")
+            .expect("destination folder should be readable")
             .all(|entry| {
                 !entry
                     .expect("directory entry should be readable")
@@ -1160,7 +1154,7 @@ mod tests {
             "existing"
         );
         assert!(std::fs::read_dir(&fixture.safe)
-            .expect("safe folder should be readable")
+            .expect("destination folder should be readable")
             .all(|entry| {
                 !entry
                     .expect("directory entry should be readable")
@@ -1171,7 +1165,7 @@ mod tests {
     }
 
     #[test]
-    fn move_to_safe_folder_audits_and_undo_restores_file() {
+    fn manual_move_audits_and_undo_restores_file() {
         let fixture = Fixture::new("shelflife-test");
         let source = fixture.write_watch_file("notes.txt", "download");
         fixture.save_config();
@@ -1179,7 +1173,9 @@ mod tests {
         let entry = execute_triage_action(
             &fixture.db,
             &path_string(&source),
-            UserTriageAction::MoveToSafeFolder,
+            UserTriageAction::Move {
+                destination_folder: path_string(&fixture.safe),
+            },
         )
         .expect("move should succeed");
 
@@ -1218,7 +1214,9 @@ mod tests {
         let entry = execute_triage_action(
             &fixture.db,
             &path_string(&source),
-            UserTriageAction::MoveToSafeFolder,
+            UserTriageAction::Move {
+                destination_folder: path_string(&fixture.safe),
+            },
         )
         .expect("move should succeed");
         fixture.save_config_without_watch_targets();
@@ -1274,7 +1272,7 @@ mod tests {
         )
         .expect_err("in-watch destination should fail");
 
-        assert_eq!(error.code, "RULE_INVALID_DESTINATION");
+        assert_eq!(error.code, "MOVE_DESTINATION_WATCHED");
         assert!(source.exists());
         assert!(!destination_folder.exists());
     }

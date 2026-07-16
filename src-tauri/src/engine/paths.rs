@@ -22,23 +22,6 @@ impl<'a> PathScope<'a> {
         self.watch_target_for_path(path).is_some()
     }
 
-    pub fn is_in_source_scope(&self, path: &Path) -> bool {
-        self.is_in_enabled_watch_target(path) || root_contains(&self.config.safe_folder_path, path)
-    }
-
-    pub fn ensure_source_scope(&self, path: &Path) -> Result<(), AppError> {
-        if self.is_in_source_scope(path) {
-            return Ok(());
-        }
-
-        Err(AppError::path_out_of_scope(
-            normalize_configured_path(path)
-                .unwrap_or_else(|| path.to_path_buf())
-                .to_string_lossy()
-                .as_ref(),
-        ))
-    }
-
     pub fn ensure_watch_scope(&self, path: &Path) -> Result<(), AppError> {
         if self.is_in_enabled_watch_target(path) {
             return Ok(());
@@ -56,7 +39,7 @@ impl<'a> PathScope<'a> {
     pub fn validate_move_destination(&self, folder: &Path) -> Result<(), AppError> {
         if folder.as_os_str().is_empty() {
             return Err(AppError::new(
-                "RULE_INVALID_DESTINATION",
+                "MOVE_DESTINATION_REQUIRED",
                 "Move destination folder is required. No file was changed.",
                 true,
             ));
@@ -64,7 +47,7 @@ impl<'a> PathScope<'a> {
 
         if self.is_inside_enabled_watch_root(folder) {
             return Err(AppError::with_details(
-                "RULE_INVALID_DESTINATION",
+                "MOVE_DESTINATION_WATCHED",
                 "Move destination folder must be outside all enabled watch targets.",
                 true,
                 folder.to_string_lossy().to_string(),
@@ -88,20 +71,13 @@ impl<'a> PathScope<'a> {
 }
 
 pub fn validate_config_paths(config: &AppConfig) -> Result<(), AppError> {
-    let safe_folder = validate_safe_folder(&config.safe_folder_path)?;
+    if let Some(destination) = config.default_move_destination.as_deref() {
+        PathScope::new(config).validate_move_destination(Path::new(destination))?;
+    }
 
     let mut seen_roots: Vec<PathBuf> = Vec::new();
     for target in config.watch_targets.iter().filter(|target| target.enabled) {
         let canonical = validate_watch_target_path(&target.path)?;
-        if paths_overlap(&canonical, &safe_folder) {
-            return Err(AppError::with_details(
-                "PATH_OUT_OF_SCOPE",
-                "Safe folder and watch targets cannot overlap. Choose separate folders.",
-                true,
-                target.path.clone(),
-            ));
-        }
-
         if seen_roots
             .iter()
             .any(|root| paths_overlap(root, &canonical))
@@ -195,51 +171,6 @@ fn validate_watch_target_path(path: &str) -> Result<PathBuf, AppError> {
     Ok(canonical)
 }
 
-fn validate_safe_folder(path: &str) -> Result<PathBuf, AppError> {
-    let path = PathBuf::from(path);
-    if path.as_os_str().is_empty() {
-        return Err(AppError::new(
-            "PATH_OUT_OF_SCOPE",
-            "Safe folder path is required. No configuration was changed.",
-            true,
-        ));
-    }
-
-    let parent = path.parent().ok_or_else(|| {
-        AppError::new(
-            "PATH_OUT_OF_SCOPE",
-            "Safe folder must have a parent folder. No configuration was changed.",
-            true,
-        )
-    })?;
-
-    if parent.exists() && is_sensitive_root(&parent.canonicalize()?) {
-        return Err(AppError::with_details(
-            "PATH_OUT_OF_SCOPE",
-            "Safe folder parent cannot be a sensitive root. No configuration was changed.",
-            true,
-            parent.to_string_lossy(),
-        ));
-    }
-
-    if path.exists() {
-        return Ok(path.canonicalize()?);
-    }
-
-    if parent.exists() {
-        let file_name = path.file_name().ok_or_else(|| {
-            AppError::new(
-                "PATH_OUT_OF_SCOPE",
-                "Safe folder must have a folder name. No configuration was changed.",
-                true,
-            )
-        })?;
-        return Ok(parent.canonicalize()?.join(file_name));
-    }
-
-    Ok(path)
-}
-
 fn paths_overlap(left: &Path, right: &Path) -> bool {
     path_contains_or_equals(left, right) || path_contains_or_equals(right, left)
 }
@@ -329,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_existing_watch_target_and_safe_folder_parent() {
+    fn accepts_existing_watch_target_without_default_move_destination() {
         let fixture = Fixture::new();
         let config = config_with_target(&fixture.root, fixture.watch_target(false));
 
@@ -356,52 +287,25 @@ mod tests {
     }
 
     #[test]
-    fn rejects_safe_folder_inside_watch_target() {
+    fn rejects_default_move_destination_inside_watch_target() {
         let fixture = Fixture::new();
         let mut config = config_with_target(&fixture.root, fixture.watch_target(false));
-        config.safe_folder_path = path_string(&fixture.watch.join("safe"));
+        config.default_move_destination = Some(path_string(&fixture.watch.join("sorted")));
 
-        let error =
-            validate_config_paths(&config).expect_err("safe folder overlap should be rejected");
+        let error = validate_config_paths(&config)
+            .expect_err("default destination inside a watch target should be rejected");
 
-        assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
+        assert_eq!(error.code, "MOVE_DESTINATION_WATCHED");
     }
 
     #[test]
-    fn rejects_watch_target_inside_safe_folder() {
+    fn accepts_default_move_destination_containing_watch_target() {
         let fixture = Fixture::new();
-        let safe = fixture.root.join("safe");
-        let watch = safe.join("watch");
-        fs::create_dir_all(&watch).expect("watch dir should exist");
-        let config = AppConfig {
-            watch_targets: vec![WatchTarget {
-                id: String::from("watch"),
-                path: path_string(&watch),
-                enabled: true,
-                recursive: false,
-                ignore_patterns: Vec::new(),
-            }],
-            safe_folder_path: path_string(&safe),
-            ..AppConfig::default()
-        };
+        let mut config = config_with_target(&fixture.root, fixture.watch_target(false));
+        config.default_move_destination = Some(path_string(&fixture.root));
 
-        let error =
-            validate_config_paths(&config).expect_err("watch target overlap should be rejected");
-
-        assert_eq!(error.code, "PATH_OUT_OF_SCOPE");
-    }
-
-    #[test]
-    fn source_scope_includes_watch_targets_and_safe_folder() {
-        let fixture = Fixture::new();
-        let config = config_with_target(&fixture.root, fixture.watch_target(false));
-        let scope = PathScope::new(&config);
-        let watch_file = fixture.watch.join("file.txt");
-        let safe_file = fixture.root.join("safe").join("file.txt");
-
-        assert!(scope.is_in_source_scope(&watch_file));
-        assert!(scope.is_in_source_scope(&safe_file));
-        assert!(!scope.is_in_source_scope(&fixture.root.join("outside.txt")));
+        validate_config_paths(&config)
+            .expect("normal move validation allows a destination containing a watch target");
     }
 
     #[test]
@@ -447,7 +351,7 @@ mod tests {
             .validate_move_destination(&fixture.watch.join("archive"))
             .expect_err("watch destination should be rejected");
 
-        assert_eq!(error.code, "RULE_INVALID_DESTINATION");
+        assert_eq!(error.code, "MOVE_DESTINATION_WATCHED");
     }
 
     #[test]
@@ -458,7 +362,7 @@ mod tests {
             .validate_move_destination(&fixture.watch.join("archive").join("deep"))
             .expect_err("nested watch destination should be rejected");
 
-        assert_eq!(error.code, "RULE_INVALID_DESTINATION");
+        assert_eq!(error.code, "MOVE_DESTINATION_WATCHED");
     }
 
     #[test]
@@ -518,10 +422,10 @@ mod tests {
         }
     }
 
-    fn config_with_target(root: &Path, target: WatchTarget) -> AppConfig {
+    fn config_with_target(_root: &Path, target: WatchTarget) -> AppConfig {
         AppConfig {
             watch_targets: vec![target],
-            safe_folder_path: path_string(&root.join("safe")),
+            default_move_destination: None,
             ..AppConfig::default()
         }
     }

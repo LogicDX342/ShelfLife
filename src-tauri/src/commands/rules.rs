@@ -204,6 +204,6 @@ mod tests {
             .err()
             .expect("in-watch destination should fail");
 
-        assert_eq!(error.code, "RULE_INVALID_DESTINATION");
+        assert_eq!(error.code, "MOVE_DESTINATION_WATCHED");
     }
 }

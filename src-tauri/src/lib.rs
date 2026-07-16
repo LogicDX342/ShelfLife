@@ -32,6 +32,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_active_files,
             commands::explain_file,
+            commands::filter_existing_directories,
             commands::open_file_location,
             commands::execute_triage_action,
             commands::execute_bulk_triage_action,

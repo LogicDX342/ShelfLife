@@ -52,7 +52,7 @@ impl AppError {
     pub fn path_out_of_scope(path: &str) -> Self {
         Self::with_details(
             "PATH_OUT_OF_SCOPE",
-            "The path is outside configured watch targets or the safe folder. No file was changed.",
+            "The path is outside configured watch targets. No file was changed.",
             true,
             path,
         )

@@ -13,7 +13,7 @@ use crate::storage::Database;
 const MOCK_ROOT_DIR: &str = "mock-mode";
 const MOCK_DB_FILE: &str = "shelflife.sqlite";
 const MOCK_WATCH_DIR: &str = "watch";
-const MOCK_SAFE_DIR: &str = "safe";
+const MOCK_MOVE_DESTINATION_DIR: &str = "sorted";
 const MOCK_TARGET_ID: &str = "mock-watch";
 const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
@@ -41,7 +41,7 @@ const MOCK_FILES: &[MockFileSpec] = &[
 #[derive(Clone, Copy)]
 enum MockRuleAction {
     Trash,
-    MoveToSafeFolder,
+    Move,
     Ignore,
 }
 
@@ -60,7 +60,7 @@ type MockRuleSpec = (
 #[rustfmt::skip]
 const MOCK_RULES: &[MockRuleSpec] = &[
     ("clean-exe-rule", "Clean Installer Executables", 10, 3, &["exe"], None, MockRuleAction::Trash, RuleMode::AskFirst),
-    ("archive-zip-rule", "Archive Large Datasets", 20, 5, &["zip", "tar.gz"], Some(100 * 1024), MockRuleAction::MoveToSafeFolder, RuleMode::Automatic),
+    ("archive-zip-rule", "Archive Large Datasets", 20, 5, &["zip", "tar.gz"], Some(100 * 1024), MockRuleAction::Move, RuleMode::Automatic),
     ("ignore-log-rule", "Ignore Log Files", 5, 30, &["log"], None, MockRuleAction::Ignore, RuleMode::Automatic),
 ];
 
@@ -92,7 +92,7 @@ const MOCK_AUDIT_ENTRIES: &[MockAuditSpec] = &[
 pub struct MockWorkspace {
     pub db_path: PathBuf,
     watch_dir: PathBuf,
-    safe_dir: PathBuf,
+    move_destination_dir: PathBuf,
 }
 
 pub fn is_mock_mode() -> bool {
@@ -112,14 +112,14 @@ pub fn reset_mock_workspace(app: &App) -> Result<MockWorkspace, Box<dyn std::err
     }
 
     let watch_dir = root.join(MOCK_WATCH_DIR);
-    let safe_dir = root.join(MOCK_SAFE_DIR);
+    let move_destination_dir = root.join(MOCK_MOVE_DESTINATION_DIR);
     std::fs::create_dir_all(&watch_dir)?;
-    std::fs::create_dir_all(&safe_dir)?;
+    std::fs::create_dir_all(&move_destination_dir)?;
 
     Ok(MockWorkspace {
         db_path: root.join(MOCK_DB_FILE),
         watch_dir,
-        safe_dir,
+        move_destination_dir,
     })
 }
 
@@ -144,7 +144,10 @@ pub fn seed_mock_workspace(
     let now = SystemTime::now();
     let now_secs = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
     let watch_path = workspace.watch_dir.to_string_lossy().into_owned();
-    let safe_path = workspace.safe_dir.to_string_lossy().into_owned();
+    let move_destination_path = workspace
+        .move_destination_dir
+        .to_string_lossy()
+        .into_owned();
 
     storage::save_config(
         db,
@@ -159,7 +162,7 @@ pub fn seed_mock_workspace(
             default_ttl_seconds: 30 * SECONDS_PER_DAY,
             stale_threshold_seconds: 5 * SECONDS_PER_DAY,
             decaying_threshold_seconds: SECONDS_PER_DAY,
-            safe_folder_path: safe_path.clone(),
+            default_move_destination: Some(move_destination_path.clone()),
             dropzone_enabled: true,
             ..AppConfig::default()
         },
@@ -168,8 +171,8 @@ pub fn seed_mock_workspace(
     for (id, name, priority, ttl_days, extensions, minimum_size, action, mode) in MOCK_RULES {
         let action = match *action {
             MockRuleAction::Trash => RuleAction::Trash,
-            MockRuleAction::MoveToSafeFolder => RuleAction::Move {
-                destination_folder: safe_path.clone(),
+            MockRuleAction::Move => RuleAction::Move {
+                destination_folder: move_destination_path.clone(),
                 rename_template: None,
             },
             MockRuleAction::Ignore => RuleAction::Ignore,
@@ -269,7 +272,7 @@ pub fn seed_mock_workspace(
                     .to_string_lossy()
                     .into_owned(),
                 destination_path: (*destination).map(|relative_path| {
-                    join_mock_path(&workspace.safe_dir, relative_path)
+                    join_mock_path(&workspace.move_destination_dir, relative_path)
                         .to_string_lossy()
                         .into_owned()
                 }),

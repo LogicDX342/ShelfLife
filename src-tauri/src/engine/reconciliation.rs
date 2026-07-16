@@ -631,7 +631,7 @@ mod tests {
 
         let config = AppConfig {
             watch_targets: Vec::new(),
-            safe_folder_path: path_string(&fixture.root.join("safe")),
+            default_move_destination: None,
             ..AppConfig::default()
         };
         storage::save_config(&fixture.db, &config).expect("config should save");
@@ -846,7 +846,7 @@ mod tests {
                     recursive: true,
                     ignore_patterns: Vec::new(),
                 }],
-                safe_folder_path: path_string(&self.root.join("safe")),
+                default_move_destination: None,
                 ..AppConfig::default()
             };
             storage::save_config(&self.db, &config).expect("config should save");
@@ -861,7 +861,7 @@ mod tests {
                     recursive: false,
                     ignore_patterns,
                 }],
-                safe_folder_path: path_string(&self.root.join("safe")),
+                default_move_destination: None,
                 ..AppConfig::default()
             };
             storage::save_config(&self.db, &config).expect("config should save");

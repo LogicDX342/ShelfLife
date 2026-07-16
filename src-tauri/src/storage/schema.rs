@@ -4,7 +4,7 @@ diesel::table! {
         default_ttl_seconds -> BigInt,
         stale_threshold_seconds -> BigInt,
         decaying_threshold_seconds -> BigInt,
-        safe_folder_path -> Text,
+        default_move_destination -> Nullable<Text>,
         notifications_enabled -> Bool,
         start_at_login -> Bool,
         close_behavior -> Text,

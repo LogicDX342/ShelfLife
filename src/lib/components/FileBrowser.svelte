@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
 
   import { getConfig } from '$lib/api/config';
+  import { selectDirectory } from '$lib/api/files';
   import { executeBulkTriageAction } from '$lib/api/triage';
   import EmptyState from '$lib/components/common/EmptyState.svelte';
   import PageBody from '$lib/components/common/PageBody.svelte';
@@ -18,6 +19,11 @@
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { AppConfig, TrackedFile, UserTriageAction } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
+  import {
+    getDestinationOptions,
+    loadRecentMoveDestinations,
+    recordRecentMoveDestination,
+  } from '$lib/utils/moveDestinations';
 
   import ConfirmDialog from './ConfirmDialog.svelte';
   import FileCard from './FileCard.svelte';
@@ -25,20 +31,45 @@
   let config = $state<AppConfig | null>(null);
   let currentDirectory = $state('');
   let selectedPaths = $state<string[]>([]);
-  let bulkAction = $state<'MoveToSafeFolder' | 'Pin' | 'Ignore' | 'Snooze' | 'TrashNow'>(
-    'MoveToSafeFolder',
-  );
+  let bulkAction = $state<'Move' | 'Pin' | 'Ignore' | 'Snooze' | 'TrashNow'>('Move');
   let bulkSnoozeDays = $state(7);
+  let bulkMoveDestination = $state('');
+  let bulkDefaultMoveDestination = $state<string | null>(null);
+  let bulkRecentMoveDestinations = $state<string[]>([]);
+  let bulkPickedMoveDestination = $state<string | null>(null);
+  let bulkMoveLoading = $state(false);
+  let bulkMoveReady = $state(false);
   let confirmBulk = $state(false);
 
   let visibleFoldersCount = $state(50);
   let visibleFilesCount = $state(50);
+  let bulkMoveDestinationOptions = $derived(
+    getDestinationOptions(
+      bulkDefaultMoveDestination,
+      bulkRecentMoveDestinations,
+      bulkPickedMoveDestination,
+      {
+        default: i18n.t('file.defaultDestination'),
+        recent: i18n.t('file.recentDestination'),
+        chosen: i18n.t('file.chosenDestination'),
+      },
+    ),
+  );
 
   // Reset rendering limits on folder navigation
   $effect(() => {
     if (currentDirectory || currentDirectory === '') {
       visibleFoldersCount = 50;
       visibleFilesCount = 50;
+    }
+  });
+
+  $effect(() => {
+    if (selectedPaths.length === 0 || bulkAction !== 'Move') {
+      bulkMoveReady = false;
+    } else if (!bulkMoveReady) {
+      bulkMoveReady = true;
+      void refreshBulkMoveDestinations();
     }
   });
 
@@ -219,8 +250,13 @@
       const action: UserTriageAction =
         bulkAction === 'Snooze'
           ? { Snooze: { seconds: bulkSnoozeDays * 24 * 60 * 60 } }
-          : bulkAction;
+          : bulkAction === 'Move'
+            ? { Move: { destination_folder: bulkMoveDestination.trim() } }
+            : bulkAction;
       const result = await executeBulkTriageAction(selectedPaths, action);
+      if (bulkAction === 'Move' && result.entries.length > 0) {
+        recordRecentMoveDestination(bulkMoveDestination);
+      }
       const summary = i18n.t('browser.bulkSummary', {
         action: bulkAction,
         succeeded: result.entries.length,
@@ -231,6 +267,44 @@
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('browser.errorBulkAction')));
     }
+  }
+
+  async function refreshBulkMoveDestinations() {
+    bulkMoveLoading = true;
+    try {
+      config ??= await getConfig();
+      bulkDefaultMoveDestination = config.default_move_destination;
+      bulkRecentMoveDestinations = await loadRecentMoveDestinations(bulkDefaultMoveDestination);
+      bulkPickedMoveDestination = null;
+      bulkMoveDestination = bulkDefaultMoveDestination ?? bulkRecentMoveDestinations[0] ?? '';
+    } catch (reason) {
+      notifications.error(getErrorMessage(reason, i18n.t('file.errorMoveDestinations')));
+    } finally {
+      bulkMoveLoading = false;
+    }
+  }
+
+  async function chooseBulkMoveDestination() {
+    try {
+      const selected = await selectDirectory(
+        i18n.t('file.selectMoveDestination'),
+        bulkMoveDestination || bulkDefaultMoveDestination || bulkRecentMoveDestinations[0],
+      );
+      if (selected) {
+        bulkPickedMoveDestination = selected;
+        bulkMoveDestination = selected;
+      }
+    } catch (reason) {
+      notifications.error(getErrorMessage(reason, i18n.t('file.errorMoveDestinations')));
+    }
+  }
+
+  function bulkActionLabel() {
+    if (bulkAction === 'Move') return i18n.t('file.actionMove');
+    if (bulkAction === 'Pin') return i18n.t('file.pin');
+    if (bulkAction === 'Ignore') return i18n.t('file.ignore');
+    if (bulkAction === 'Snooze') return i18n.t('file.snooze');
+    return i18n.t('file.trash');
   }
 
   function getWorstStateColors(state: string) {
@@ -429,45 +503,84 @@
 <!-- Sticky Bulk Action Bar at Bottom -->
 {#if selectedPaths.length > 0}
   <div
-    class="fixed bottom-6 left-[88px] right-6 flex items-center justify-between border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl animate-slide-up md:left-[264px]"
+    class="fixed bottom-6 left-[88px] right-6 flex flex-col gap-3 border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl animate-slide-up md:left-[264px]"
   >
-    <div class="flex items-center gap-4">
-      <div class="flex flex-col">
-        <span class="text-sm font-semibold text-primary">
-          {i18n.t('dashboard.selected', { count: selectedPaths.length })}
-        </span>
-        <span class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark">
-          {formatBytes(selectedSize)}
-        </span>
+    <div class="flex items-center justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="flex flex-col">
+          <span class="text-sm font-semibold text-primary">
+            {i18n.t('dashboard.selected', { count: selectedPaths.length })}
+          </span>
+          <span class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark">
+            {formatBytes(selectedSize)}
+          </span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <Button variant="outline" onclick={() => (selectedPaths = [])}>
+          {i18n.t('dashboard.clearSelection')}
+        </Button>
+
+        <Select.Root type="single" bind:value={bulkAction}>
+          <Select.Trigger>
+            <span data-slot="select-value">{bulkActionLabel()}</span>
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              <Select.Item value="Move" label={i18n.t('file.actionMove')} />
+              <Select.Item value="Pin" label={i18n.t('file.pin')} />
+              <Select.Item value="Ignore" label={i18n.t('file.ignore')} />
+              <Select.Item value="Snooze" label={i18n.t('file.snooze')} />
+              <Select.Item value="TrashNow" label={i18n.t('file.trash')} />
+            </Select.Group>
+          </Select.Content>
+        </Select.Root>
+        {#if bulkAction === 'Snooze'}
+          <Input min="1" type="number" bind:value={bulkSnoozeDays} class="w-16 text-xs" />
+        {/if}
+
+        {#if bulkAction !== 'Move'}
+          <Button onclick={() => (confirmBulk = true)}>
+            {i18n.t('browser.applyAction')}
+          </Button>
+        {/if}
       </div>
     </div>
-    <div class="flex items-center gap-2">
-      <Button variant="outline" onclick={() => (selectedPaths = [])}>
-        {i18n.t('dashboard.clearSelection')}
-      </Button>
 
-      <Select.Root type="single" bind:value={bulkAction}>
-        <Select.Trigger>
-          <span data-slot="select-value">{bulkAction}</span>
-        </Select.Trigger>
-        <Select.Content>
-          <Select.Group>
-            <Select.Item value="MoveToSafeFolder" label="MoveToSafeFolder" />
-            <Select.Item value="Pin" label="Pin" />
-            <Select.Item value="Ignore" label="Ignore" />
-            <Select.Item value="Snooze" label="Snooze" />
-            <Select.Item value="TrashNow" label="TrashNow" />
-          </Select.Group>
-        </Select.Content>
-      </Select.Root>
-      {#if bulkAction === 'Snooze'}
-        <Input min="1" type="number" bind:value={bulkSnoozeDays} class="w-16 text-xs" />
-      {/if}
-
-      <Button onclick={() => (confirmBulk = true)}>
-        {i18n.t('browser.applyAction')}
-      </Button>
-    </div>
+    {#if bulkAction === 'Move'}
+      <div class="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">
+        {#if bulkMoveDestinationOptions.length > 0}
+          <Select.Root type="single" bind:value={bulkMoveDestination} disabled={bulkMoveLoading}>
+            <Select.Trigger class="min-w-64 flex-1">
+              <span data-slot="select-value">
+                {bulkMoveDestination || i18n.t('file.chooseDestination')}
+              </span>
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Group>
+                {#each bulkMoveDestinationOptions as option (option.path)}
+                  <Select.Item value={option.path} label={option.path}>
+                    <span class="flex flex-col gap-0.5">
+                      <span>{option.label}</span>
+                      <span class="text-muted-foreground">{option.path}</span>
+                    </span>
+                  </Select.Item>
+                {/each}
+              </Select.Group>
+            </Select.Content>
+          </Select.Root>
+        {/if}
+        <Button variant="outline" disabled={bulkMoveLoading} onclick={chooseBulkMoveDestination}>
+          {i18n.t('file.chooseAnotherFolder')}
+        </Button>
+        <Button
+          disabled={bulkMoveLoading || !bulkMoveDestination.trim()}
+          onclick={() => (confirmBulk = true)}
+        >
+          {i18n.t('file.actionMove')}
+        </Button>
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -475,7 +588,7 @@
   open={confirmBulk}
   title={i18n.t('dialog.confirmTitle')}
   message={i18n.t('browser.bulkConfirmMsg', {
-    action: bulkAction,
+    action: bulkActionLabel(),
     count: selectedPaths.length,
     size: formatBytes(selectedSize),
   })}

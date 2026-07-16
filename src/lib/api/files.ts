@@ -17,3 +17,7 @@ export function openFileLocation(path: string) {
 export function selectDirectory(title?: string, defaultPath?: string) {
   return invoke<string | null>('select_directory', { title, defaultPath });
 }
+
+export function filterExistingDirectories(paths: string[]) {
+  return invoke<string[]>('filter_existing_directories', { paths });
+}
