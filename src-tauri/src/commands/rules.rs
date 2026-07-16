@@ -1,7 +1,7 @@
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::models::{AppError, AutomationRule, RuleMatchExplanation, RuleMode};
+use crate::models::{AppError, AutomationRule, RuleMatchExplanation};
 use crate::rules::CompiledRuleSet;
 use crate::runtime::AppRuntime;
 use crate::storage::{self, Database};
@@ -18,10 +18,9 @@ pub async fn save_rule(
     mut rule: AutomationRule,
 ) -> Result<AutomationRule, AppError> {
     let now = crate::engine::now_seconds();
-    if rule.id.trim().is_empty() {
+    if rule.id.is_empty() {
         rule.id = Uuid::new_v4().to_string();
         rule.created_at = now;
-        rule.mode = RuleMode::PreviewOnly;
     }
     rule.updated_at = now;
 
