@@ -35,6 +35,7 @@ pub fn run() {
             commands::filter_existing_directories,
             commands::open_file_location,
             commands::execute_triage_action,
+            commands::confirm_rule_action,
             commands::execute_bulk_triage_action,
             commands::undo_audit_entry,
             commands::list_audit_entries,

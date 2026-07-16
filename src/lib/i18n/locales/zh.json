@@ -67,6 +67,10 @@
     "actionMove": "移动",
     "actionLabel": "操作",
     "confirmMsg": "将对“{name}”执行“{action}”，该操作会记录在审计日志中。是否可撤销取决于操作类型和文件状态。",
+    "confirmRuleAction": "确认操作",
+    "confirmRuleMsg": "确认对“{name}”执行规则“{rule}”建议的“{action}”。",
+    "confirmMoveRuleMsg": "确认按照规则“{rule}”的建议，将“{name}”移动到“{destination}”。",
+    "confirmMoveRuleMsgWithRename": "确认按照规则“{rule}”的建议，将“{name}”移动到“{destination}”。同时将应用规则的重命名模板。",
     "errorOpenLocation": "无法打开文件位置。",
     "openFolder": "打开所在文件夹",
     "moveTitle": "移动目标路径",
@@ -321,6 +325,7 @@
     "RULE_PREVIEW_ONLY": "仅预览模式的规则无法在投放区修改文件。",
     "RULE_IGNORE_OUTSIDE_TARGET": "忽略规则只能对监控目标文件夹内的文件生效。",
     "RULE_NOT_MATCHED": "所选规则已不再匹配此文件，未执行任何文件更改。",
+    "RULE_NOT_EXPIRED": "此文件尚不符合建议规则操作的执行条件。",
     "UNDO_FAILED": "撤销失败。",
     "UNDO_UNAVAILABLE": "此审计记录不可撤销。",
     "WATCHER_ERROR": "文件监控器运行失败。"

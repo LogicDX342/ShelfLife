@@ -12,7 +12,9 @@ use crate::models::{
     AppConfig, AppError, AuditActionKind, AuditEntry, AutomationRule, Expiry, FileDecayState,
     RuleAction, RuleMatchExplanation, RuleMode, TrackedFile, UndoStatus, UserTriageAction,
 };
-use crate::rules::{validate_rename_template, validate_reserved_name, CompiledRuleSet};
+use crate::rules::{
+    validate_rename_template, validate_reserved_name, CompiledRuleSet, RuleVerdict,
+};
 use crate::storage;
 use crate::storage::Database;
 use std::sync::OnceLock;
@@ -112,6 +114,69 @@ pub(crate) fn execute_automation_rule_action(
             rule_id: Some(rule.id.clone()),
             rule_name: Some(rule.name.clone()),
             explanation: Some(explanation),
+        },
+    )
+}
+
+pub(crate) fn execute_confirmed_rule_action(
+    db: &Database,
+    path: &str,
+    rule_id: &str,
+) -> Result<AuditEntry, FileActionFailure> {
+    let config = storage::get_config(db)?;
+    let tracked = storage::tracked::get_tracked_file(db, path)?.ok_or_else(|| {
+        AppError::new(
+            "RULE_NOT_MATCHED",
+            "The proposed rule is no longer the effective match for this file. No file was changed.",
+            true,
+        )
+    })?;
+    let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
+    let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())?;
+    let RuleVerdict::Matched {
+        effective_rule,
+        effective_explanation,
+        ..
+    } = projection.decision.verdict
+    else {
+        return Err(AppError::new(
+            "RULE_NOT_MATCHED",
+            "The proposed rule is no longer the effective match for this file. No file was changed.",
+            true,
+        )
+        .into());
+    };
+
+    if effective_rule.id != rule_id || !matches!(effective_rule.mode, RuleMode::AskFirst) {
+        return Err(AppError::new(
+            "RULE_NOT_MATCHED",
+            "The proposed rule is no longer the effective AskFirst match for this file. No file was changed.",
+            true,
+        )
+        .into());
+    }
+
+    if !matches!(
+        projection.tracked.expiry,
+        Expiry::At(expires_at) if expires_at <= now_seconds()
+    ) {
+        return Err(AppError::new(
+            "RULE_NOT_EXPIRED",
+            "This file is not currently eligible for the proposed rule action. No file was changed.",
+            true,
+        )
+        .into());
+    }
+
+    execute_file_action(
+        db,
+        path,
+        RequestedFileAction::Rule(&effective_rule.action),
+        SourcePolicy::Watched,
+        ActionAuditContext {
+            rule_id: Some(effective_rule.id.clone()),
+            rule_name: Some(effective_rule.name.clone()),
+            explanation: Some(*effective_explanation),
         },
     )
 }
@@ -1025,15 +1090,16 @@ mod tests {
     use std::path::Path;
 
     use crate::models::{
-        AppError, AuditActionKind, AuditEntry, Expiry, FileDecayState, UndoStatus, UserTriageAction,
+        AppError, AuditActionKind, AuditEntry, Expiry, FileDecayState, RuleAction, RuleMode,
+        UndoStatus, UserTriageAction,
     };
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
     use crate::storage::Database;
 
     use super::{
-        execute_triage_action_audited, ingest_dropzone_file_audited, move_file_across_devices,
-        render_rename_template,
+        execute_confirmed_rule_action, execute_triage_action_audited, ingest_dropzone_file_audited,
+        move_file_across_devices, render_rename_template,
     };
 
     fn execute_triage_action(
@@ -1089,6 +1155,43 @@ mod tests {
                 .expect("tracked lookup should work")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn confirmed_ask_first_move_uses_the_proposed_rule_action() {
+        let fixture = Fixture::new("shelflife-confirm-rule");
+        let source = fixture.write_watch_file("report.zip", "download");
+        fixture.save_config();
+        fixture.track_file(&source);
+
+        let mut tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
+            .expect("tracked lookup should work")
+            .expect("tracked file should exist");
+        let now = crate::engine::freshness::now_seconds();
+        tracked.freshness_at = now.saturating_sub(2);
+        tracked.expiry = Expiry::At(now.saturating_sub(1));
+        storage::tracked::upsert_tracked_file(&fixture.db, &tracked)
+            .expect("tracked file should update");
+
+        let mut rule = fixture.rule();
+        rule.mode = RuleMode::AskFirst;
+        rule.ttl_seconds = 1;
+        rule.action = RuleAction::Move {
+            destination_folder: path_string(&fixture.outside),
+            rename_template: Some(String::from("confirmed-{name}.{ext}")),
+        };
+        storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
+
+        let entry = execute_confirmed_rule_action(&fixture.db, &path_string(&source), &rule.id)
+            .map_err(|failure| failure.error)
+            .expect("confirmation should execute the rule proposal");
+
+        let destination = fixture.outside.join("confirmed-report.zip");
+        assert!(!source.exists());
+        assert!(destination.exists());
+        assert_eq!(entry.rule_id, Some(rule.id));
+        assert_eq!(entry.rule_name, Some(rule.name));
+        assert_eq!(entry.destination_path, Some(path_string(&destination)));
     }
 
     #[test]

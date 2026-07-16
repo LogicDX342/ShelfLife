@@ -54,6 +54,43 @@ pub async fn execute_triage_action(
 }
 
 #[tauri::command]
+pub async fn confirm_rule_action(
+    app_handle: AppHandle,
+    state: State<'_, AppRuntime>,
+    path: String,
+    rule_id: String,
+) -> Result<AuditEntry, AppError> {
+    match state.run_exclusive_engine_operation(|db| {
+        engine::executor::execute_confirmed_rule_action(db, &path, &rule_id)
+    }) {
+        Ok(entry) => {
+            let _ = app_handle.emit("action_completed", &entry);
+            let _ = app_handle.emit("audit_updated", &entry);
+            notify_if_enabled(
+                &app_handle,
+                &state,
+                "Action completed",
+                format!(
+                    "{} recorded for {}.",
+                    audit_action_kind_label(&entry.action_kind),
+                    entry.file_name
+                ),
+            );
+            Ok(entry)
+        }
+        Err(failure) => {
+            let error = failure.error;
+            if let Some(entry) = failure.audit_entry {
+                let _ = app_handle.emit("audit_updated", entry.as_ref());
+            }
+            let _ = app_handle.emit("action_failed", &error);
+            notify_if_enabled(&app_handle, &state, "Action failed", error.message.clone());
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
 pub async fn execute_bulk_triage_action(
     app_handle: AppHandle,
     state: State<'_, AppRuntime>,

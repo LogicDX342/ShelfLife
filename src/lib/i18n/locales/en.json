@@ -67,6 +67,10 @@
     "actionMove": "Move",
     "actionLabel": "Action",
     "confirmMsg": "{action} will be recorded in the audit log for {name}. Undo availability depends on the action and file state.",
+    "confirmRuleAction": "Confirm Action",
+    "confirmRuleMsg": "Confirm the {action} proposed by {rule} for {name}.",
+    "confirmMoveRuleMsg": "Confirm moving {name} to {destination} as proposed by {rule}.",
+    "confirmMoveRuleMsgWithRename": "Confirm moving {name} to {destination} as proposed by {rule}. The rule's rename template will also be applied.",
     "errorOpenLocation": "Could not open file location.",
     "openFolder": "Open Folder",
     "moveTitle": "Move Destination",
@@ -321,6 +325,7 @@
     "RULE_PREVIEW_ONLY": "PreviewOnly rules cannot change files from the dropzone.",
     "RULE_IGNORE_OUTSIDE_TARGET": "Ignore rules can only change files inside watch targets from the dropzone.",
     "RULE_NOT_MATCHED": "The selected rule is no longer the effective match for this file. No file was changed.",
+    "RULE_NOT_EXPIRED": "This file is not yet eligible for the proposed rule action.",
     "UNDO_FAILED": "Undo failed.",
     "UNDO_UNAVAILABLE": "Undo is unavailable for this audit entry.",
     "WATCHER_ERROR": "File watcher failed."

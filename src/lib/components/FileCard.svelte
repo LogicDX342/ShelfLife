@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconCircleCheck from '@lucide/svelte/icons/circle-check';
   import IconClock from '@lucide/svelte/icons/clock';
   import IconEyeOff from '@lucide/svelte/icons/eye-off';
   import IconDocument from '@lucide/svelte/icons/file';
@@ -9,7 +10,7 @@
 
   import { getConfig } from '$lib/api/config';
   import { explainFile, openFileLocation, selectDirectory } from '$lib/api/files';
-  import { executeTriageAction } from '$lib/api/triage';
+  import { confirmRuleAction, executeTriageAction } from '$lib/api/triage';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
@@ -46,6 +47,28 @@
   let matchedExplanations = $derived(
     explanations.filter((e) => e.rule_id !== null && e.proposed_action !== null),
   );
+  let effectiveExplanation = $derived(
+    matchedExplanations.find((explanation) => explanation.mode !== 'PreviewOnly') ?? null,
+  );
+  let currentTime = $state(Math.floor(Date.now() / 1000));
+  let confirmableExplanation = $derived.by(() => {
+    if (effectiveExplanation?.mode !== 'AskFirst' || !effectiveExplanation.rule_id) return null;
+    if (typeof file.expiry !== 'object' || !('At' in file.expiry)) return null;
+    return file.expiry.At <= currentTime ? effectiveExplanation : null;
+  });
+
+  $effect(() => {
+    if (effectiveExplanation?.mode !== 'AskFirst') return;
+    if (typeof file.expiry !== 'object' || !('At' in file.expiry)) return;
+    currentTime = Math.floor(Date.now() / 1000);
+    const millisecondsUntilExpiry = Math.max(0, (file.expiry.At - currentTime) * 1000);
+    if (millisecondsUntilExpiry === 0) return;
+    const timer = window.setTimeout(
+      () => (currentTime = Math.floor(Date.now() / 1000)),
+      Math.min(millisecondsUntilExpiry, 2_147_483_647),
+    );
+    return () => window.clearTimeout(timer);
+  });
 
   let busy = $state(false);
   let moveOpen = $state(false);
@@ -58,6 +81,7 @@
   let snoozeDays = $state('7');
   let customSnoozeDays = $state(7);
   let pendingAction = $state<UserTriageAction | null>(null);
+  let pendingRule = $state<RuleMatchExplanation | null>(null);
   let pendingTitle = $state('');
   let pendingMessage = $state('');
 
@@ -116,6 +140,7 @@
   }
 
   function queueAction(action: UserTriageAction) {
+    pendingRule = null;
     pendingAction = action;
     pendingTitle = actionName(action);
     pendingMessage = i18n.t('file.confirmMsg', {
@@ -124,11 +149,57 @@
     });
   }
 
-  async function confirmPendingAction() {
-    if (!pendingAction) return;
-    const action = pendingAction;
+  function queueRuleConfirmation(explanation: RuleMatchExplanation) {
+    if (!explanation.rule_id || !explanation.proposed_action) return;
     pendingAction = null;
-    await act(action);
+    pendingRule = explanation;
+    pendingTitle = i18n.t('file.confirmRuleAction');
+    const ruleName = explanation.rule_name ?? i18n.t('file.noRule');
+    if (typeof explanation.proposed_action === 'object' && 'Move' in explanation.proposed_action) {
+      pendingMessage = i18n.t(
+        explanation.proposed_action.Move.rename_template
+          ? 'file.confirmMoveRuleMsgWithRename'
+          : 'file.confirmMoveRuleMsg',
+        {
+          destination: explanation.proposed_action.Move.destination_folder,
+          rule: ruleName,
+          name: file.file_name,
+        },
+      );
+    } else {
+      const action = explanation.proposed_action;
+      pendingMessage = i18n.t('file.confirmRuleMsg', {
+        action:
+          action === 'Trash'
+            ? i18n.t('file.trash')
+            : action === 'Ignore'
+              ? i18n.t('file.ignore')
+              : i18n.t('file.actionMove'),
+        rule: ruleName,
+        name: file.file_name,
+      });
+    }
+  }
+
+  async function confirmPendingAction() {
+    if (pendingRule?.rule_id) {
+      const ruleId = pendingRule.rule_id;
+      pendingRule = null;
+      busy = true;
+      try {
+        await confirmRuleAction(file.path, ruleId);
+      } catch (reason) {
+        notifications.error(getErrorMessage(reason, i18n.t('file.errorAction')));
+      } finally {
+        busy = false;
+      }
+      return;
+    }
+    if (pendingAction) {
+      const action = pendingAction;
+      pendingAction = null;
+      await act(action);
+    }
   }
 
   function snoozeAction() {
@@ -356,8 +427,20 @@
       </Button>
     </div>
 
-    <!-- Right Action (Delete/Trash) -->
-    <div>
+    <!-- Right Action -->
+    <div class="flex flex-wrap gap-2">
+      {#if confirmableExplanation}
+        <Button
+          variant="default"
+          size="sm"
+          disabled={busy}
+          onclick={() => queueRuleConfirmation(confirmableExplanation)}
+          class="h-8 text-xs gap-1.5"
+        >
+          <IconCircleCheck class="w-3.5 h-3.5" />
+          {i18n.t('file.confirmRuleAction')}
+        </Button>
+      {/if}
       <Button
         variant="destructive"
         size="sm"
@@ -497,11 +580,14 @@
 
   <!-- Modal Confirmation Dialog -->
   <ConfirmDialog
-    open={pendingAction !== null}
+    open={pendingAction !== null || pendingRule !== null}
     title={pendingTitle}
     message={pendingMessage}
     confirmLabel={pendingTitle}
-    onCancel={() => (pendingAction = null)}
+    onCancel={() => {
+      pendingAction = null;
+      pendingRule = null;
+    }}
     onConfirm={confirmPendingAction}
   />
 </Card.Root>
