@@ -20,12 +20,17 @@ src-tauri/src/
 │   ├── mod.rs               # Re-exports all command functions
 │   ├── config.rs            # config, close behavior, watch pause/resume, reconciliation scan
 │   ├── dropzone.rs          # dropzone preview/ingest/rule-group/hide commands
+│   ├── external.rs          # external URL opening
 │   ├── files.rs             # active files, rule explanations, previews, file location, directory picker
 │   ├── rules.rs             # list/save/test/delete automation rules
-│   └── triage.rs            # single/bulk triage, undo, audit listing, notifications
+│   ├── tray.rs              # tray label updates
+│   ├── triage.rs            # single/bulk triage, undo, audit listing, notifications
+│   └── updates.rs           # app update check/install
 ├── runtime/                 # Tauri lifecycle orchestration and background workers
 │   ├── mod.rs               # AppRuntime, setup(), watcher/dropzone sync, pause/resume
+│   ├── mock.rs              # debug mock data generation
 │   ├── reconciliation.rs    # Async/manual/periodic reconciliation orchestration and events
+│   ├── resource_limits.rs   # CPU usage limits for background tasks
 │   └── rule_scheduler.rs    # Async/periodic automatic rule execution scheduling and events
 ├── engine/                  # File hygiene engine (no Tauri dependency)
 │   ├── mod.rs               # Re-exports
@@ -36,17 +41,19 @@ src-tauri/src/
 │   ├── quiescence.rs        # Transient/system/hidden path checks and file stability checks
 │   ├── reconciliation.rs    # Full and incremental watched-path reconciliation
 │   ├── rule_execution.rs    # Expired automatic rule execution and failure audit entries
+│   ├── rule_projection.rs   # Tracked-file rule projection and automatic-rule candidate computation
 │   ├── rule_refresh.rs      # Recompute tracked files after rule changes
 │   └── watcher.rs           # notify watcher setup, debounced stable-path emission
 ├── rules/                   # Rule engine (no Tauri dependency)
 │   ├── mod.rs               # Re-exports
 │   ├── conditions.rs        # Extension, glob, regex, size, origin matching
-│   ├── evaluator.rs         # Rule decisions, effective verdicts, scope-specific evaluation
 │   ├── explanation.rs       # RuleMatchExplanation generation
-│   └── regex_cache.rs       # Shared compiled-regex cache
+│   ├── rule_set.rs          # CompiledRuleSet, decide_file, RuleDecision/RuleVerdict
+│   └── validation.rs        # Rule validation, rename template validation
 ├── storage/                 # SQLite/Diesel persistence layer
 │   ├── mod.rs               # Database init, DDL bootstrap, config persistence
 │   ├── audit.rs             # AuditEntry CRUD and sequence management
+│   ├── migrations.rs        # Schema migrations
 │   ├── rules.rs             # AutomationRule CRUD
 │   ├── schema.rs            # Diesel table! metadata mirroring SCHEMA_SQL
 │   ├── test_util.rs         # Rust test fixtures
@@ -57,8 +64,6 @@ src-tauri/src/
     ├── config.rs            # AppConfig, WatchTarget, CloseBehavior
     ├── dropzone.rs          # Dropzone preview/action result models
     ├── error.rs             # AppError and Diesel/io conversions
-    ├── origin.rs            # OriginEvidence
-    ├── preview.rs           # FilePreview, FilePreviewContent
     ├── rule.rs              # AutomationRule, RuleMode, RuleAction, RuleConditions
     ├── runtime.rs           # ReconciliationReport
     └── tracked_file.rs      # TrackedFile, FileDecayState, Expiry
@@ -78,7 +83,6 @@ src-tauri/src/
 - Keep tracked-file secondary index invariants inside `storage/`; expose coherent storage operations instead of making callers coordinate index updates manually.
 - `models/` contains data structures with serde derives plus basic defaults/conversions only. No workflow logic.
 - Automatic rule failures are stored as audit entries. Do not reintroduce in-memory retry/backoff state unless `SPEC.md` is updated first.
-- Archive/resource-limit v2 work is not currently implemented in the Rust model. Do not refer to `RuleAction::Archive` or `sysinfo` unless you are implementing that feature and updating `SPEC.md`.
 
 ### Frontend (Svelte 5) — `src/`
 
@@ -90,6 +94,7 @@ src/
 │   ├── +layout.svelte            # Root layout, title bar/sidebar/providers, close behavior dialog
 │   ├── +layout.ts                # SSR disabled (SPA mode)
 │   ├── +page.svelte              # Dashboard route
+│   ├── about/+page.svelte        # About page route
 │   ├── audit/+page.svelte        # Audit log route
 │   ├── browser/+page.svelte      # File browser route
 │   ├── dropzone/+page.svelte     # Dropzone window route
@@ -100,12 +105,16 @@ src/
     ├── api/                      # Typed Tauri invoke wrappers only
     │   ├── config.ts
     │   ├── dropzone.ts
+    │   ├── external.ts
     │   ├── files.ts
     │   ├── rules.ts
-    │   └── triage.ts
+    │   ├── tray.ts
+    │   ├── triage.ts
+    │   └── updates.ts
     ├── components/               # Product UI modules
-    │   ├── common/               # Shared shell states: PageHeader, EmptyState, LoadingState
+    │   ├── common/               # Shared shell states: PageHeader, PageBody, EmptyState, LoadingState
     │   ├── ui/                   # shadcn-svelte primitives; keep product logic out of these files
+    │   ├── AboutView.svelte
     │   ├── AuditRow.svelte
     │   ├── AuditView.svelte
     │   ├── ConfirmDialog.svelte
@@ -127,7 +136,9 @@ src/
     │   ├── StatusBar.svelte
     │   ├── TitleBar.svelte
     │   └── WatchTargetCard.svelte
-    ├── i18n/i18n.svelte.ts       # Central translation registry and language/theme state
+    ├── i18n/                     # Internationalization
+    │   ├── i18n.svelte.ts        # Central translation registry and language/theme state
+    │   └── locales/              # Locale-specific translation files
     ├── live/liveSnapshots.ts     # Owner of backend event names, coalesced refresh, focus refresh
     ├── stores/                   # Svelte 5 rune state classes
     │   ├── audit.svelte.ts
@@ -136,7 +147,9 @@ src/
     │   └── rules.svelte.ts
     ├── types/index.ts            # TypeScript mirrors of Rust IPC models
     ├── utils.ts                  # shadcn/classname helpers
-    └── utils/format.ts           # File size/date/error formatting
+    └── utils/
+        ├── format.ts             # File size/date/error formatting
+        └── moveDestinations.ts   # Recent move destination persistence and deduplication
 ```
 
 **Rules:**
