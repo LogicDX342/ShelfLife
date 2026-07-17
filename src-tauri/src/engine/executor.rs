@@ -609,19 +609,21 @@ pub fn undo_audit_entry(db: &Database, audit_id: &str) -> Result<AuditEntry, App
         AuditActionKind::Trash => undo_trash(db, &entry),
     };
 
-    match result {
-        Ok(()) => entry.undo_status = UndoStatus::Completed,
-        Err(error) => {
-            entry.undo_status = UndoStatus::Failed {
-                reason: error.message.clone(),
-            };
-            storage::audit::upsert_audit_entry(db, &entry)?;
+    let terminal_error = if let Err(error) = result {
+        if error.recoverable {
             return Err(error);
         }
-    }
+        entry.undo_status = UndoStatus::Unavailable {
+            reason: error.message.clone(),
+        };
+        Some(error)
+    } else {
+        entry.undo_status = UndoStatus::Completed;
+        None
+    };
 
     storage::audit::upsert_audit_entry(db, &entry)?;
-    Ok(entry)
+    terminal_error.map_or(Ok(entry), Err)
 }
 
 fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
@@ -631,7 +633,7 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
         AppError::new(
             "UNDO_UNAVAILABLE",
             "The audit entry did not record a destination path.",
-            true,
+            false,
         )
     })?;
     let from = PathBuf::from(destination);
@@ -639,14 +641,14 @@ fn undo_move_like(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     if !from_dropzone {
         validate_move_source_for_undo(&from, &config)?;
     }
-    if !from.exists() {
+    if !from.try_exists()? {
         return Err(AppError::new(
             "UNDO_FAILED",
             "The moved file is no longer at its recorded destination.",
-            true,
+            false,
         ));
     }
-    if to.exists() {
+    if to.try_exists()? {
         return Err(AppError::new(
             "UNDO_FAILED",
             "A file already exists at the original path.",
@@ -730,7 +732,7 @@ fn undo_trash(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
         AppError::new(
             "UNDO_FAILED",
             "The deleted file could not be found in the Recycle Bin.",
-            true,
+            false,
         )
     })?;
 
@@ -1343,6 +1345,78 @@ mod tests {
             Expiry::At(restored.freshness_at + fixture.config().default_ttl_seconds)
         );
         assert!(matches!(restored.state, FileDecayState::Fresh));
+    }
+
+    #[test]
+    fn retryable_undo_failure_remains_available() {
+        let fixture = Fixture::new("shelflife-undo-retry");
+        let source = fixture.write_watch_file("notes.txt", "original");
+        fixture.save_config();
+        let entry = execute_triage_action(
+            &fixture.db,
+            &path_string(&source),
+            UserTriageAction::Move {
+                destination_folder: path_string(&fixture.safe),
+            },
+        )
+        .expect("move should succeed");
+        fixture.write_file(&source, "collision");
+
+        let error = super::undo_audit_entry(&fixture.db, &entry.id)
+            .expect_err("restore collision should prevent undo");
+
+        assert!(error.recoverable);
+        let failed_attempt = storage::audit::get_audit_entry_by_id(&fixture.db, &entry.id)
+            .expect("audit lookup should work")
+            .expect("audit entry should exist");
+        assert!(matches!(failed_attempt.undo_status, UndoStatus::Available));
+
+        std::fs::remove_file(&source).expect("collision should be removable");
+        let retried = super::undo_audit_entry(&fixture.db, &entry.id)
+            .expect("undo should succeed after the collision is removed");
+
+        assert!(matches!(retried.undo_status, UndoStatus::Completed));
+        assert_eq!(
+            std::fs::read_to_string(source).expect("restored file should be readable"),
+            "original"
+        );
+    }
+
+    #[test]
+    fn terminal_undo_failure_becomes_unavailable() {
+        let fixture = Fixture::new("shelflife-terminal-undo");
+        let source = fixture.write_watch_file("notes.txt", "original");
+        fixture.save_config();
+        let entry = execute_triage_action(
+            &fixture.db,
+            &path_string(&source),
+            UserTriageAction::Move {
+                destination_folder: path_string(&fixture.safe),
+            },
+        )
+        .expect("move should succeed");
+        std::fs::remove_file(
+            entry
+                .destination_path
+                .as_ref()
+                .expect("destination should exist"),
+        )
+        .expect("moved file should be removable");
+
+        let error = super::undo_audit_entry(&fixture.db, &entry.id)
+            .expect_err("a missing moved file cannot be restored");
+
+        assert!(!error.recoverable);
+        let failed_attempt = storage::audit::get_audit_entry_by_id(&fixture.db, &entry.id)
+            .expect("audit lookup should work")
+            .expect("audit entry should exist");
+        assert!(matches!(
+            failed_attempt.undo_status,
+            UndoStatus::Unavailable { .. }
+        ));
+        let retry_error = super::undo_audit_entry(&fixture.db, &entry.id)
+            .expect_err("terminal undo failure should not be retryable");
+        assert_eq!(retry_error.code, "UNDO_UNAVAILABLE");
     }
 
     #[test]

@@ -180,6 +180,13 @@ pub async fn undo_audit_entry(
             Ok(entry)
         }
         Err(error) => {
+            if !error.recoverable {
+                if let Ok(Some(entry)) =
+                    state.with_database(|db| storage::audit::get_audit_entry_by_id(db, &audit_id))
+                {
+                    let _ = app_handle.emit("audit_updated", &entry);
+                }
+            }
             let _ = app_handle.emit("action_failed", &error);
             let mut body = error.message.clone();
             if let Some(details) = &error.details {
