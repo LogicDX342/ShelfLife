@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::engine;
 use crate::engine::paths::PathScope;
@@ -202,18 +202,7 @@ pub async fn execute_dropzone_rule_group(
 #[tauri::command]
 pub async fn hide_dropzone(app_handle: AppHandle) -> Result<(), AppError> {
     crate::dropzone::record_dropzone_drop();
-    if let Some(window) = app_handle.get_webview_window("dropzone") {
-        window.hide().map_err(|error| {
-            AppError::with_details(
-                "ACTION_FAILED",
-                "Dropzone window could not be hidden.",
-                true,
-                error.to_string(),
-            )
-        })?;
-    }
-
-    Ok(())
+    crate::dropzone::destroy_dropzone(&app_handle)
 }
 
 fn emit_dropzone_failures(app_handle: &AppHandle, failures: &[DropzoneActionFailure]) {

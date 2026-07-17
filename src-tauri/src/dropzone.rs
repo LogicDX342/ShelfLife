@@ -3,7 +3,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager, PhysicalPosition, Position};
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, Position, WebviewWindow, WebviewWindowBuilder,
+};
 
 use crate::engine::ShakeDetector;
 use crate::models::AppError;
@@ -34,7 +36,7 @@ pub fn sync_dropzone_monitor(app_handle: &AppHandle, enabled: bool) -> Result<()
         start_monitor(app_handle.clone());
     } else {
         stop_monitor();
-        hide_dropzone(app_handle)?;
+        destroy_dropzone(app_handle)?;
     }
     Ok(())
 }
@@ -77,6 +79,8 @@ fn monitor_cursor(app_handle: AppHandle, stop: Arc<AtomicBool>) {
     let started = Instant::now();
     let mut detector = ShakeDetector::new();
     let mut release_started_at: Option<Instant> = None;
+    let mut dropzone_prepared = false;
+    let mut dropzone_shown = false;
 
     while !stop.load(Ordering::Relaxed) {
         let left_button_down =
@@ -85,16 +89,29 @@ fn monitor_cursor(app_handle: AppHandle, stop: Arc<AtomicBool>) {
         let has_point = unsafe { GetCursorPos(&mut point) != 0 };
         let shake_eligible = left_button_down && shell_drag_image_is_visible();
 
+        if shake_eligible && !dropzone_prepared && !dropzone_shown {
+            prepare_dropzone(&app_handle);
+            dropzone_prepared = true;
+        }
+
         if left_button_down {
             release_started_at = None;
-        } else if AWAITING_DROP.load(Ordering::Relaxed) {
+        } else if dropzone_prepared || AWAITING_DROP.load(Ordering::Relaxed) {
             let released_at = release_started_at.get_or_insert_with(Instant::now);
             if released_at.elapsed() >= Duration::from_millis(350) {
-                let _ = hide_dropzone(&app_handle);
+                let _ = destroy_dropzone(&app_handle);
                 AWAITING_DROP.store(false, Ordering::Relaxed);
                 detector.reset();
                 release_started_at = None;
+                dropzone_prepared = false;
+                dropzone_shown = false;
             }
+        } else if dropzone_shown {
+            // The frontend accepted the drop and cleared AWAITING_DROP. Keep the
+            // dropzone open while the user chooses what to do with the files.
+            detector.reset();
+            release_started_at = None;
+            dropzone_shown = false;
         }
 
         if has_point
@@ -106,6 +123,8 @@ fn monitor_cursor(app_handle: AppHandle, stop: Arc<AtomicBool>) {
             )
         {
             show_dropzone_near_cursor(&app_handle, point.x, point.y);
+            dropzone_prepared = false;
+            dropzone_shown = true;
         }
 
         thread::sleep(Duration::from_millis(16));
@@ -128,12 +147,32 @@ fn monitor_cursor(_app_handle: AppHandle, stop: Arc<AtomicBool>) {
     }
 }
 
+fn prepare_dropzone(app_handle: &AppHandle) {
+    let main_thread_handle = app_handle.clone();
+    let _ = app_handle.run_on_main_thread(move || {
+        if let Err(error) = get_or_create_dropzone(&main_thread_handle) {
+            let _ = main_thread_handle.emit("action_failed", error);
+        }
+    });
+}
+
 fn show_dropzone_near_cursor(app_handle: &AppHandle, cursor_x: i32, cursor_y: i32) {
-    let Some(window) = app_handle.get_webview_window(DROPZONE_LABEL) else {
-        return;
+    AWAITING_DROP.store(true, Ordering::Relaxed);
+    let main_thread_handle = app_handle.clone();
+    let _ = app_handle.run_on_main_thread(move || {
+        show_dropzone_on_main_thread(&main_thread_handle, cursor_x, cursor_y)
+    });
+}
+
+fn show_dropzone_on_main_thread(app_handle: &AppHandle, cursor_x: i32, cursor_y: i32) {
+    let window = match get_or_create_dropzone(app_handle) {
+        Ok(window) => window,
+        Err(error) => {
+            let _ = app_handle.emit("action_failed", error);
+            return;
+        }
     };
 
-    AWAITING_DROP.store(true, Ordering::Relaxed);
     let (x, y) = clamp_to_monitor(
         &window,
         cursor_x + CURSOR_OFFSET_X,
@@ -144,18 +183,44 @@ fn show_dropzone_near_cursor(app_handle: &AppHandle, cursor_x: i32, cursor_y: i3
     let _ = window.set_focus();
 }
 
-fn hide_dropzone(app_handle: &AppHandle) -> Result<(), AppError> {
+fn get_or_create_dropzone(app_handle: &AppHandle) -> Result<WebviewWindow, AppError> {
     if let Some(window) = app_handle.get_webview_window(DROPZONE_LABEL) {
-        window.hide().map_err(|error| {
-            AppError::with_details(
-                "ACTION_FAILED",
-                "Dropzone window could not be hidden.",
-                true,
-                error.to_string(),
+        return Ok(window);
+    }
+
+    let config = app_handle
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|config| config.label == DROPZONE_LABEL)
+        .ok_or_else(|| {
+            AppError::new(
+                "WINDOW_CONFIG_MISSING",
+                "The dropzone window configuration is missing.",
+                false,
             )
         })?;
+
+    WebviewWindowBuilder::from_config(app_handle, config)
+        .and_then(WebviewWindowBuilder::build)
+        .map_err(dropzone_window_error)
+}
+
+pub(crate) fn destroy_dropzone(app_handle: &AppHandle) -> Result<(), AppError> {
+    if let Some(window) = app_handle.get_webview_window(DROPZONE_LABEL) {
+        window.destroy().map_err(dropzone_window_error)?;
     }
     Ok(())
+}
+
+fn dropzone_window_error(error: tauri::Error) -> AppError {
+    AppError::with_details(
+        "ACTION_FAILED",
+        "The dropzone window could not be updated.",
+        true,
+        error.to_string(),
+    )
 }
 
 fn clamp_to_monitor(
