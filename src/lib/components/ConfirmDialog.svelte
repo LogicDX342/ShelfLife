@@ -28,8 +28,13 @@
   }>();
 </script>
 
-<Dialog.Root {open}>
-  <Dialog.Content role="alertdialog" showCloseButton={false}>
+<Dialog.Root {open} onOpenChange={(value) => !value && onCancel()}>
+  <Dialog.Content
+    role="alertdialog"
+    showCloseButton={false}
+    escapeKeydownBehavior={disabled ? 'ignore' : 'close'}
+    interactOutsideBehavior={disabled ? 'ignore' : 'close'}
+  >
     <Dialog.Header>
       <Dialog.Title>{title}</Dialog.Title>
     </Dialog.Header>
