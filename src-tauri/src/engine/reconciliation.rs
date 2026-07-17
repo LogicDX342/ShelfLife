@@ -6,11 +6,6 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
 use std::sync::Mutex;
 
-enum ObservedFile {
-    Ignored(String),
-    Present(Box<TrackedFile>),
-}
-
 struct ReconciliationPlan {
     report: ReconciliationReport,
     to_insert: Vec<TrackedFile>,
@@ -28,16 +23,12 @@ struct ObservationContext<'a> {
     config: &'a AppConfig,
     rules: &'a CompiledRuleSet,
     now: u64,
-    ignore_set: Option<&'a GlobSet>,
-    canonical_root: Option<&'a Path>,
 }
 
 use crate::engine::paths::PathScope;
 use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
 use crate::engine::{project_watched_file, tracked_file_from_metadata};
-use crate::models::{
-    AppConfig, AppError, FileDecayState, ReconciliationReport, TrackedFile, WatchTarget,
-};
+use crate::models::{AppConfig, AppError, ReconciliationReport, TrackedFile, WatchTarget};
 use crate::rules::CompiledRuleSet;
 use crate::storage::{self, Database};
 
@@ -56,6 +47,7 @@ pub fn reconcile_with_report_with_progress(
         .collect();
 
     let mut observations = Vec::new();
+    let mut excluded_paths = HashSet::new();
 
     for target in config.watch_targets.iter().filter(|t| t.enabled) {
         let root = PathBuf::from(&target.path);
@@ -67,8 +59,32 @@ pub fn reconcile_with_report_with_progress(
         let ignore_set = build_glob_set(&target.ignore_patterns)?;
         // Canonicalize root once — reused inside target_ignores_path.
         let canonical_root = root.canonicalize().ok();
-        let files = scan_target_paths(&root, target.recursive, ignore_set.as_ref())?;
-        let path_results: Result<Vec<Option<ObservedFile>>, AppError> = files
+        excluded_paths.extend(
+            existing_map
+                .values()
+                .filter(|file| file.watch_target_id == target.id)
+                .filter(|file| {
+                    target_ignores_path(
+                        Path::new(&file.path),
+                        ignore_set.as_ref(),
+                        &root,
+                        canonical_root.as_deref(),
+                    )
+                })
+                .map(|file| file.path.clone()),
+        );
+        let files = scan_target_paths(&root, target.recursive, ignore_set.as_ref())?
+            .into_iter()
+            .filter(|file| {
+                !target_ignores_path(
+                    &file.path,
+                    ignore_set.as_ref(),
+                    &root,
+                    canonical_root.as_deref(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let path_results: Result<Vec<Option<TrackedFile>>, AppError> = files
             .into_par_iter()
             .map(|file| {
                 let path_string = file.path.to_string_lossy().to_string();
@@ -77,8 +93,6 @@ pub fn reconcile_with_report_with_progress(
                     config: &config,
                     rules: &rule_set,
                     now,
-                    ignore_set: ignore_set.as_ref(),
-                    canonical_root: canonical_root.as_deref(),
                 };
                 observe_path_with_metadata(
                     &file.path,
@@ -92,7 +106,8 @@ pub fn reconcile_with_report_with_progress(
         observations.extend(path_results?.into_iter().flatten());
     }
 
-    let paths_to_remove = paths_to_remove_for(&existing_map, &scope, &observations);
+    let paths_to_remove =
+        paths_to_remove_for(&existing_map, &scope, &observations, &excluded_paths);
     reconcile_observations(
         db,
         &existing_map,
@@ -104,7 +119,7 @@ pub fn reconcile_with_report_with_progress(
 
 fn plan_reconciliation(
     existing: &HashMap<String, TrackedFile>,
-    observations: Vec<ObservedFile>,
+    observations: Vec<TrackedFile>,
     paths_to_remove: &HashSet<String>,
 ) -> ReconciliationPlan {
     let mut observed_paths = HashSet::new();
@@ -112,34 +127,19 @@ fn plan_reconciliation(
     let mut to_insert = Vec::new();
     let mut to_update = Vec::new();
 
-    for observation in observations {
-        match observation {
-            ObservedFile::Ignored(path) => {
-                observed_paths.insert(path.clone());
-                if let Some(file) = existing.get(&path) {
-                    if !matches!(file.state, FileDecayState::Ignored) {
-                        let mut updated = file.clone();
-                        updated.state = FileDecayState::Ignored;
-                        report.updated.push(path);
-                        to_update.push(updated);
-                    }
-                }
+    for tracked in observations {
+        observed_paths.insert(tracked.path.clone());
+        match existing.get(&tracked.path) {
+            Some(file) if tracked.changed_from(file) => {
+                report.updated.push(tracked.path.clone());
+                to_update.push(tracked);
             }
-            ObservedFile::Present(tracked) => {
-                observed_paths.insert(tracked.path.clone());
-                match existing.get(&tracked.path) {
-                    Some(file) if tracked.changed_from(file) => {
-                        report.updated.push(tracked.path.clone());
-                        to_update.push(*tracked);
-                    }
-                    None => {
-                        report.indexed.push(tracked.path.clone());
-                        to_insert.push(*tracked);
-                    }
-                    _ => {}
-                };
+            None => {
+                report.indexed.push(tracked.path.clone());
+                to_insert.push(tracked);
             }
-        }
+            _ => {}
+        };
     }
 
     let mut to_remove = Vec::new();
@@ -188,6 +188,7 @@ pub fn reconcile_paths(
     }
 
     let mut observations = Vec::new();
+    let mut excluded_paths = HashSet::new();
 
     for path in &paths {
         let path_string = path.to_string_lossy().to_string();
@@ -198,22 +199,27 @@ pub fn reconcile_paths(
         };
 
         let ignore_set = build_glob_set(&target.ignore_patterns)?;
-        let canonical_root = PathBuf::from(&target.path).canonicalize().ok();
+        let root = PathBuf::from(&target.path);
+        let canonical_root = root.canonicalize().ok();
+
+        if target_ignores_path(path, ignore_set.as_ref(), &root, canonical_root.as_deref()) {
+            excluded_paths.insert(path_string);
+            continue;
+        }
 
         let context = ObservationContext {
             target,
             config: &config,
             rules: &rule_set,
             now,
-            ignore_set: ignore_set.as_ref(),
-            canonical_root: canonical_root.as_deref(),
         };
         if let Some(observation) = observe_path(path, existing_map.get(&path_string), &context)? {
             observations.push(observation);
         }
     }
 
-    let paths_to_remove = paths_to_remove_for(&existing_map, &scope, &observations);
+    let paths_to_remove =
+        paths_to_remove_for(&existing_map, &scope, &observations, &excluded_paths);
     reconcile_observations(db, &existing_map, observations, &paths_to_remove, None)
 }
 
@@ -221,7 +227,7 @@ fn observe_path(
     path: &Path,
     existing: Option<&TrackedFile>,
     context: &ObservationContext<'_>,
-) -> Result<Option<ObservedFile>, AppError> {
+) -> Result<Option<TrackedFile>, AppError> {
     // Single stat — symlink_metadata covers both symlink detection and file metadata.
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
@@ -235,46 +241,39 @@ fn observe_path_with_metadata(
     metadata: &fs::Metadata,
     existing: Option<&TrackedFile>,
     context: &ObservationContext<'_>,
-) -> Result<Option<ObservedFile>, AppError> {
+) -> Result<Option<TrackedFile>, AppError> {
     if is_transient_path(path) {
         return Ok(None);
     }
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Ok(None);
     }
-    let path_string = path.to_string_lossy().to_string();
-    if target_ignores_path(path, context.ignore_set, context.canonical_root) {
-        return Ok(Some(ObservedFile::Ignored(path_string)));
-    }
-
     let tracked =
         tracked_file_from_metadata(path, metadata, existing, context.config, &context.target.id);
     let tracked =
         project_watched_file(tracked, context.config, context.rules, context.now)?.tracked;
 
-    Ok(Some(ObservedFile::Present(Box::new(tracked))))
+    Ok(Some(tracked))
 }
 
 fn paths_to_remove_for(
     existing: &HashMap<String, TrackedFile>,
     scope: &PathScope<'_>,
-    observations: &[ObservedFile],
+    observations: &[TrackedFile],
+    excluded_paths: &HashSet<String>,
 ) -> HashSet<String> {
-    let observed_paths: HashSet<&str> = observations
-        .iter()
-        .map(|observation| match observation {
-            ObservedFile::Ignored(path) => path.as_str(),
-            ObservedFile::Present(file) => file.path.as_str(),
-        })
-        .collect();
+    let observed_paths: HashSet<&str> =
+        observations.iter().map(|file| file.path.as_str()).collect();
 
     existing
         .iter()
         .filter(|(path_string, _)| !observed_paths.contains(path_string.as_str()))
         .filter_map(|(path_string, file)| {
             let path = Path::new(path_string);
-            (!scope.is_tracked_path_active(path, &file.watch_target_id) || !path.exists())
-                .then(|| path_string.clone())
+            (excluded_paths.contains(path_string)
+                || !scope.is_tracked_path_active(path, &file.watch_target_id)
+                || !path.exists())
+            .then(|| path_string.clone())
         })
         .collect()
 }
@@ -282,7 +281,7 @@ fn paths_to_remove_for(
 fn reconcile_observations(
     db: &Database,
     existing: &HashMap<String, TrackedFile>,
-    observations: Vec<ObservedFile>,
+    observations: Vec<TrackedFile>,
     paths_to_remove: &HashSet<String>,
     progress_cb: Option<&(dyn Fn(usize, usize) + Send + Sync)>,
 ) -> Result<ReconciliationReport, AppError> {
@@ -443,6 +442,7 @@ fn build_glob_set(patterns: &[String]) -> Result<Option<GlobSet>, AppError> {
 fn target_ignores_path(
     path: &Path,
     ignore_set: Option<&GlobSet>,
+    root: &Path,
     canonical_root: Option<&Path>,
 ) -> bool {
     let Some(ignore_set) = ignore_set else {
@@ -453,10 +453,19 @@ fn target_ignores_path(
         .and_then(|value| value.to_str())
         .unwrap_or_default();
     // Use the pre-canonicalized root to avoid a per-file syscall.
-    let relative = canonical_root
-        .and_then(|root| path.strip_prefix(root).ok())
+    let relative = path
+        .strip_prefix(root)
+        .ok()
+        .or_else(|| canonical_root.and_then(|root| path.strip_prefix(root).ok()))
         .unwrap_or(path);
-    ignore_set.is_match(file_name) || ignore_set.is_match(relative)
+    ignore_set.is_match(file_name)
+        || ignore_set.is_match(relative)
+        || relative.ancestors().skip(1).any(|ancestor| {
+            ignore_set.is_match(ancestor)
+                || ancestor
+                    .file_name()
+                    .is_some_and(|name| ignore_set.is_match(name))
+        })
 }
 
 #[cfg(test)]
@@ -470,9 +479,7 @@ mod tests {
     use crate::models::{AppConfig, AppError, Expiry, FileDecayState, TrackedFile, WatchTarget};
     use crate::storage::{self, Database};
 
-    use super::{
-        plan_reconciliation, reconcile_paths, reconcile_with_report_with_progress, ObservedFile,
-    };
+    use super::{plan_reconciliation, reconcile_paths, reconcile_with_report_with_progress};
 
     fn tracked(path: &str) -> TrackedFile {
         TrackedFile {
@@ -480,10 +487,7 @@ mod tests {
             file_name: path.into(),
             watch_target_id: "watch".into(),
             size_bytes: 1,
-            first_seen_at: 1,
             last_observed_mtime: Some(1),
-            last_observed_atime: None,
-            last_user_action_at: None,
             freshness_at: 1,
             expiry: Expiry::At(2),
             state: FileDecayState::Fresh,
@@ -509,11 +513,7 @@ mod tests {
 
         let plan = plan_reconciliation(
             &existing,
-            vec![
-                ObservedFile::Present(Box::new(unchanged)),
-                ObservedFile::Present(Box::new(updated)),
-                ObservedFile::Present(Box::new(tracked("indexed"))),
-            ],
+            vec![unchanged, updated, tracked("indexed")],
             &paths_to_remove,
         );
 
@@ -535,33 +535,6 @@ mod tests {
             vec!["updated"]
         );
         assert_eq!(plan.to_remove, vec!["removed"]);
-    }
-
-    #[test]
-    fn planner_removes_inactive_files_and_marks_ignored_observations() {
-        let inactive = tracked("inactive");
-        let ignored = tracked("ignored");
-        let existing = [
-            (inactive.path.clone(), inactive),
-            (ignored.path.clone(), ignored),
-        ]
-        .into_iter()
-        .collect();
-        let paths_to_remove = [String::from("inactive")].into_iter().collect();
-
-        let plan = plan_reconciliation(
-            &existing,
-            vec![ObservedFile::Ignored("ignored".into())],
-            &paths_to_remove,
-        );
-
-        assert_eq!(plan.to_remove, vec!["inactive"]);
-        assert_eq!(plan.report.removed, vec!["inactive"]);
-        assert_eq!(plan.report.updated, vec!["ignored"]);
-        assert!(plan
-            .to_update
-            .iter()
-            .any(|file| file.path == "ignored" && file.state == FileDecayState::Ignored));
     }
 
     fn reconcile(db: &Database) -> Result<Vec<String>, AppError> {
@@ -679,7 +652,7 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_marks_existing_file_ignored_when_ignore_pattern_is_added() {
+    fn reconcile_removes_existing_file_when_ignore_pattern_is_added() {
         let fixture = Fixture::new();
         let file = fixture.write_watch_file("skip.me", "ignored later");
         fixture.save_config();
@@ -692,18 +665,16 @@ mod tests {
         fixture.save_config_with_ignore_patterns(vec![String::from("*.me")]);
         let report = reconcile_with_report_with_progress(&fixture.db, None)
             .expect("reconciliation should succeed");
-        let tracked = storage::tracked::list_tracked_files(&fixture.db)
-            .expect("tracked list should work")
-            .into_iter()
-            .find(|tracked| tracked.file_name == "skip.me")
-            .expect("tracked file should exist");
-
-        assert_eq!(tracked.state, FileDecayState::Ignored);
-        assert_eq!(report.updated, vec![path_string(&file)]);
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
+        assert_eq!(report.removed, vec![path_string(&file)]);
     }
 
     #[test]
-    fn incremental_reconciliation_marks_existing_file_ignored() {
+    fn incremental_reconciliation_removes_existing_ignored_file() {
         let fixture = Fixture::new();
         let file = fixture.write_watch_file("skip.me", "ignored later");
         fixture.save_config();
@@ -712,28 +683,32 @@ mod tests {
         fixture.save_config_with_ignore_patterns(vec![String::from("*.me")]);
         let report = reconcile_paths(&fixture.db, vec![file.clone()])
             .expect("incremental reconciliation should succeed");
-        let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
-            .expect("tracked lookup should work")
-            .expect("tracked file should exist");
-
-        assert_eq!(tracked.state, FileDecayState::Ignored);
-        assert_eq!(report.updated, vec![path_string(&file)]);
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
+        assert_eq!(report.removed, vec![path_string(&file)]);
     }
 
     #[test]
-    fn incremental_reconciliation_removes_deleted_ignored_file() {
+    fn reconcile_removes_files_beneath_newly_ignored_directory() {
         let fixture = Fixture::new();
-        let file = fixture.write_watch_file("skip.me", "ignored later");
-        fixture.save_config();
+        let ignored_directory = fixture.watch.join("ignored");
+        fs::create_dir_all(&ignored_directory).expect("ignored directory should exist");
+        let file = ignored_directory.join("keep.txt");
+        fs::write(&file, "ignored later").expect("ignored file should exist");
+        fixture.save_config_recursive();
         reconcile(&fixture.db).expect("initial reconciliation should succeed");
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
+                .expect("tracked lookup should work")
+                .is_some()
+        );
 
-        fixture.save_config_with_ignore_patterns(vec![String::from("*.me")]);
-        reconcile_paths(&fixture.db, vec![file.clone()])
-            .expect("incremental ignore reconciliation should succeed");
-        fs::remove_file(&file).expect("test file should be removable");
-
-        let report = reconcile_paths(&fixture.db, vec![file.clone()])
-            .expect("incremental deletion reconciliation should succeed");
+        fixture.save_config_recursive_with_ignore_patterns(vec![String::from("ignored")]);
+        let report = reconcile_with_report_with_progress(&fixture.db, None)
+            .expect("reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
@@ -838,13 +813,17 @@ mod tests {
         }
 
         fn save_config_recursive(&self) {
+            self.save_config_recursive_with_ignore_patterns(Vec::new());
+        }
+
+        fn save_config_recursive_with_ignore_patterns(&self, ignore_patterns: Vec<String>) {
             let config = AppConfig {
                 watch_targets: vec![WatchTarget {
                     id: String::from("watch"),
                     path: path_string(&self.watch),
                     enabled: true,
                     recursive: true,
-                    ignore_patterns: Vec::new(),
+                    ignore_patterns,
                 }],
                 default_move_destination: None,
                 ..AppConfig::default()
@@ -959,7 +938,7 @@ mod tests {
             .expect("tracked lookup should work")
             .expect("tracked file should exist");
 
-        assert_eq!(tracked.state, FileDecayState::Ignored);
+        assert_eq!(tracked.state, FileDecayState::RuleIgnored);
         assert_eq!(
             tracked.expiry,
             crate::models::Expiry::At(

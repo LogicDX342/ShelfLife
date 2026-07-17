@@ -44,7 +44,7 @@ class FilesState {
       else if (state === 'Stale') stale++;
       else if (state === 'Decaying') decaying++;
       else if (state === 'Pinned') pinned++;
-      else if (state === 'Ignored') ignored++;
+      else if (state === 'ManuallyIgnored' || state === 'RuleIgnored') ignored++;
     }
 
     return { fresh, stale, decaying, pinned, ignored };

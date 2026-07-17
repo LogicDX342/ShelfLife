@@ -55,7 +55,8 @@ pub fn list_tracked_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
                     WHEN 'stale' THEN 1
                     WHEN 'fresh' THEN 2
                     WHEN 'pinned' THEN 3
-                    WHEN 'ignored' THEN 4
+                    WHEN 'manually_ignored' THEN 4
+                    WHEN 'rule_ignored' THEN 4
                     ELSE 5
                 END
                 ",
@@ -219,10 +220,7 @@ fn upsert_tracked_files_tx(
             tracked_files::file_name.eq(excluded(tracked_files::file_name)),
             tracked_files::watch_target_id.eq(excluded(tracked_files::watch_target_id)),
             tracked_files::size_bytes.eq(excluded(tracked_files::size_bytes)),
-            tracked_files::first_seen_at.eq(excluded(tracked_files::first_seen_at)),
             tracked_files::last_observed_mtime.eq(excluded(tracked_files::last_observed_mtime)),
-            tracked_files::last_observed_atime.eq(excluded(tracked_files::last_observed_atime)),
-            tracked_files::last_user_action_at.eq(excluded(tracked_files::last_user_action_at)),
             tracked_files::freshness_at.eq(excluded(tracked_files::freshness_at)),
             tracked_files::expiry_kind.eq(excluded(tracked_files::expiry_kind)),
             tracked_files::expires_at.eq(excluded(tracked_files::expires_at)),
@@ -266,18 +264,9 @@ fn tracked_write_rows(files: &[TrackedFile]) -> Result<Vec<TrackedWriteRow<'_>>,
                 file_name: &file.file_name,
                 watch_target_id: &file.watch_target_id,
                 size_bytes: u64_to_i64(file.size_bytes, "tracked_files.size_bytes")?,
-                first_seen_at: u64_to_i64(file.first_seen_at, "tracked_files.first_seen_at")?,
                 last_observed_mtime: opt_u64_to_i64(
                     file.last_observed_mtime,
                     "tracked_files.last_observed_mtime",
-                )?,
-                last_observed_atime: opt_u64_to_i64(
-                    file.last_observed_atime,
-                    "tracked_files.last_observed_atime",
-                )?,
-                last_user_action_at: opt_u64_to_i64(
-                    file.last_user_action_at,
-                    "tracked_files.last_user_action_at",
                 )?,
                 freshness_at: u64_to_i64(file.freshness_at, "tracked_files.freshness_at")?,
                 expiry_kind,
@@ -319,18 +308,9 @@ fn tracked_file_from_row(
         file_name: row.file_name,
         watch_target_id: row.watch_target_id,
         size_bytes: i64_to_u64(row.size_bytes, "tracked_files.size_bytes")?,
-        first_seen_at: i64_to_u64(row.first_seen_at, "tracked_files.first_seen_at")?,
         last_observed_mtime: opt_i64_to_u64(
             row.last_observed_mtime,
             "tracked_files.last_observed_mtime",
-        )?,
-        last_observed_atime: opt_i64_to_u64(
-            row.last_observed_atime,
-            "tracked_files.last_observed_atime",
-        )?,
-        last_user_action_at: opt_i64_to_u64(
-            row.last_user_action_at,
-            "tracked_files.last_user_action_at",
         )?,
         freshness_at: i64_to_u64(row.freshness_at, "tracked_files.freshness_at")?,
         expiry: expiry_from_parts(&row.expiry_kind, row.expires_at)?,
@@ -348,10 +328,7 @@ struct TrackedRow {
     file_name: String,
     watch_target_id: String,
     size_bytes: i64,
-    first_seen_at: i64,
     last_observed_mtime: Option<i64>,
-    last_observed_atime: Option<i64>,
-    last_user_action_at: Option<i64>,
     freshness_at: i64,
     expiry_kind: String,
     expires_at: Option<i64>,
@@ -368,10 +345,7 @@ struct TrackedWriteRow<'a> {
     file_name: &'a str,
     watch_target_id: &'a str,
     size_bytes: i64,
-    first_seen_at: i64,
     last_observed_mtime: Option<i64>,
-    last_observed_atime: Option<i64>,
-    last_user_action_at: Option<i64>,
     freshness_at: i64,
     expiry_kind: &'a str,
     expires_at: Option<i64>,
@@ -429,7 +403,8 @@ fn state_label(state: &FileDecayState) -> &'static str {
         FileDecayState::Stale => "stale",
         FileDecayState::Decaying => "decaying",
         FileDecayState::Pinned => "pinned",
-        FileDecayState::Ignored => "ignored",
+        FileDecayState::ManuallyIgnored => "manually_ignored",
+        FileDecayState::RuleIgnored => "rule_ignored",
     }
 }
 
@@ -439,7 +414,8 @@ fn state_from_label(value: &str) -> Result<FileDecayState, AppError> {
         "stale" => Ok(FileDecayState::Stale),
         "decaying" => Ok(FileDecayState::Decaying),
         "pinned" => Ok(FileDecayState::Pinned),
-        "ignored" => Ok(FileDecayState::Ignored),
+        "manually_ignored" => Ok(FileDecayState::ManuallyIgnored),
+        "rule_ignored" => Ok(FileDecayState::RuleIgnored),
         other => Err(storage_data_error(
             "Stored file decay state is not recognized.",
             other,
@@ -645,10 +621,7 @@ mod tests {
             file_name: format!("batch-{index}.zip"),
             watch_target_id: String::from("watch"),
             size_bytes: index as u64,
-            first_seen_at: 1,
             last_observed_mtime: None,
-            last_observed_atime: None,
-            last_user_action_at: None,
             freshness_at: 1,
             expiry: Expiry::At(2),
             state: FileDecayState::Fresh,

@@ -20,7 +20,12 @@
   import * as Select from '$lib/components/ui/select';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
-  import type { RuleMatchExplanation, TrackedFile, UserTriageAction } from '$lib/types';
+  import type {
+    FileDecayState,
+    RuleMatchExplanation,
+    TrackedFile,
+    UserTriageAction,
+  } from '$lib/types';
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
   import {
     getDestinationOptions,
@@ -280,6 +285,10 @@
         return 'border-l-4 border-l-neutral-400';
     }
   }
+
+  function isIgnored(state: FileDecayState) {
+    return state === 'ManuallyIgnored' || state === 'RuleIgnored';
+  }
 </script>
 
 <Card.Root
@@ -334,12 +343,12 @@
           {formatBytes(file.size_bytes)}
         </span>
         <span class="text-[10px] text-muted-foreground mt-0.5">
-          {i18n.t('file.firstSeen')}: {formatDate(file.first_seen_at)}
+          {i18n.t('file.lastUpdated')}: {formatDate(file.freshness_at)}
         </span>
       </div>
 
       <Badge variant="outline" class="font-medium text-xs px-2.5 py-0.5">
-        {i18n.t(`tab.${file.state.toLowerCase()}`)}
+        {i18n.t(isIgnored(file.state) ? 'tab.ignored' : `tab.${file.state.toLowerCase()}`)}
       </Badge>
     </div>
   </div>
@@ -370,7 +379,7 @@
           <IconEyeOff class="w-3.5 h-3.5" />
           {i18n.t('file.ignore')}
         </Button>
-      {:else if file.state === 'Ignored'}
+      {:else if isIgnored(file.state)}
         <Button
           variant="outline"
           size="sm"

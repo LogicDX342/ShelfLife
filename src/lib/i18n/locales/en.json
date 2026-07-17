@@ -36,7 +36,7 @@
     "healthyFiles": "Healthy Files",
     "healthyDesc": "Files are fresh or permanent",
     "ignoredFiles": "Ignored Files",
-    "ignoredDesc": "Files excluded from active rules",
+    "ignoredDesc": "Files excluded from review and automation",
     "subtitle": "Manage and triage files before they expire.",
     "search": "Search files by name...",
     "results": "{count} results",
@@ -57,7 +57,7 @@
     "ignored": "Ignored"
   },
   "file": {
-    "firstSeen": "First Seen",
+    "lastUpdated": "Last Updated",
     "snooze": "Snooze",
     "pin": "Pin Permanent",
     "ignore": "Ignore",

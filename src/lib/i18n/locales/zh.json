@@ -36,7 +36,7 @@
     "healthyFiles": "无需处理",
     "healthyDesc": "活跃或已固定的文件",
     "ignoredFiles": "已忽略",
-    "ignoredDesc": "被规则排除的文件",
+    "ignoredDesc": "已从审查和自动清理中排除的文件",
     "subtitle": "在文件过期前进行管理和清理。",
     "search": "按文件名搜索…",
     "results": "{count} 个结果",
@@ -57,7 +57,7 @@
     "ignored": "已忽略"
   },
   "file": {
-    "firstSeen": "首次发现",
+    "lastUpdated": "最近更新",
     "snooze": "推迟",
     "pin": "固定保留",
     "ignore": "忽略",

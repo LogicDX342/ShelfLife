@@ -203,14 +203,11 @@ CREATE TABLE IF NOT EXISTS tracked_files (
     file_name TEXT NOT NULL,
     watch_target_id TEXT NOT NULL,
     size_bytes INTEGER NOT NULL,
-    first_seen_at INTEGER NOT NULL,
     last_observed_mtime INTEGER,
-    last_observed_atime INTEGER,
-    last_user_action_at INTEGER,
     freshness_at INTEGER NOT NULL,
     expiry_kind TEXT NOT NULL CHECK (expiry_kind IN ('at', 'permanent', 'snoozed_until')),
     expires_at INTEGER,
-    state TEXT NOT NULL CHECK (state IN ('fresh', 'stale', 'decaying', 'pinned', 'ignored')),
+    state TEXT NOT NULL CHECK (state IN ('fresh', 'stale', 'decaying', 'pinned', 'manually_ignored', 'rule_ignored')),
     origin_url TEXT
 );
 

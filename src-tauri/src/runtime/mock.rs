@@ -32,7 +32,7 @@ const MOCK_FILES: &[MockFileSpec] = &[
     ("todo_list.txt", "1. Refactor Svelte components\n2. Add mock mode\n", 1, 0, None),
     ("Installers/chrome_installer.exe", "EXE dummy content", 10_000, 2, Some((170_000, Some(3), FileDecayState::Decaying, &["clean-exe-rule"]))),
     ("Documents/2025/annual_report_2025.pdf", "PDF dummy content", 100, 10, Some((1_600, Some(30), FileDecayState::Stale, &[]))),
-    ("Logs/temporary_log.log", "DEBUG: App started\nINFO: Log initialized\n", 1, 12, Some((50, Some(30), FileDecayState::Ignored, &["ignore-log-rule"]))),
+    ("Logs/temporary_log.log", "DEBUG: App started\nINFO: Log initialized\n", 1, 12, Some((50, Some(30), FileDecayState::RuleIgnored, &["ignore-log-rule"]))),
     ("Archives/huge_dataset.zip", "ZIP dummy content", 20_000, 6, Some((340_000, Some(5), FileDecayState::Decaying, &["archive-zip-rule"]))),
     ("Photos/vacation_photo.jpg", "JPG dummy content", 50, 20, Some((1_000, Some(30), FileDecayState::Stale, &[]))),
     ("Notes/important_notes.txt", "This is an important pinned file that will not decay.", 1, 0, Some((52, None, FileDecayState::Pinned, &[]))),
@@ -125,9 +125,7 @@ pub fn reset_mock_workspace(app: &App) -> Result<MockWorkspace, Box<dyn std::err
 
 fn set_file_times(path: &Path, time: SystemTime) -> Result<(), std::io::Error> {
     let file = std::fs::File::options().write(true).open(path)?;
-    let times = std::fs::FileTimes::new()
-        .set_accessed(time)
-        .set_modified(time);
+    let times = std::fs::FileTimes::new().set_modified(time);
     file.set_times(times)
 }
 
@@ -235,13 +233,10 @@ pub fn seed_mock_workspace(
                     .to_string(),
                 watch_target_id: String::from(MOCK_TARGET_ID),
                 size_bytes: *size_bytes,
-                first_seen_at: observed_at,
                 last_observed_mtime: Some(observed_at),
-                last_observed_atime: Some(observed_at),
-                last_user_action_at: permanent.then_some(observed_at),
                 freshness_at: observed_at,
                 expiry,
-                state: state.clone(),
+                state: *state,
                 matched_rule_ids: matched_rule_ids.iter().map(ToString::to_string).collect(),
                 origin_url,
             },

@@ -19,24 +19,6 @@ pub fn system_time_seconds(time: SystemTime) -> Option<u64> {
         .map(|value| value.as_secs())
 }
 
-pub fn calculate_freshness_at(
-    first_seen_at: u64,
-    last_observed_mtime: Option<u64>,
-    last_observed_atime: Option<u64>,
-    last_user_action_at: Option<u64>,
-) -> u64 {
-    [
-        Some(first_seen_at),
-        last_observed_mtime,
-        last_observed_atime,
-        last_user_action_at,
-    ]
-    .into_iter()
-    .flatten()
-    .max()
-    .unwrap_or(first_seen_at)
-}
-
 pub fn classify_decay_state(
     freshness_at: u64,
     expiry: &Expiry,
@@ -118,22 +100,16 @@ pub fn tracked_file_from_metadata(
         .and_then(|value| value.to_str())
         .unwrap_or_default()
         .to_string();
-    let first_seen_at = existing.map(|file| file.first_seen_at).unwrap_or(now);
     let last_observed_mtime = metadata.modified().ok().and_then(system_time_seconds);
-    let last_observed_atime = metadata.accessed().ok().and_then(system_time_seconds);
-    let last_user_action_at = existing.and_then(|file| file.last_user_action_at);
-    let freshness_at = calculate_freshness_at(
-        first_seen_at,
-        last_observed_mtime,
-        last_observed_atime,
-        last_user_action_at,
-    );
+    let baseline_freshness = existing.map(|file| file.freshness_at).unwrap_or(now);
+    let freshness_at =
+        last_observed_mtime.map_or(baseline_freshness, |mtime| baseline_freshness.max(mtime));
     let expiry = existing
         .map(|file| file.expiry.clone())
         .unwrap_or_else(|| Expiry::At(freshness_at + config.default_ttl_seconds));
     let state = existing
-        .filter(|file| matches!(file.state, FileDecayState::Ignored))
-        .map(|file| file.state.clone())
+        .filter(|file| matches!(file.state, FileDecayState::ManuallyIgnored))
+        .map(|file| file.state)
         .unwrap_or_else(|| classify_decay_state(freshness_at, &expiry, now, config));
 
     TrackedFile {
@@ -143,10 +119,7 @@ pub fn tracked_file_from_metadata(
             .map(|f| f.watch_target_id.clone())
             .unwrap_or_else(|| watch_target_id.to_string()),
         size_bytes: metadata.len(),
-        first_seen_at,
         last_observed_mtime,
-        last_observed_atime,
-        last_user_action_at,
         freshness_at,
         expiry,
         state,

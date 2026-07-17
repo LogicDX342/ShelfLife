@@ -88,7 +88,8 @@
       Stale: 4,
       Fresh: 3,
       Pinned: 2,
-      Ignored: 1,
+      ManuallyIgnored: 1,
+      RuleIgnored: 1,
     };
     return (priority[state1] || 0) >= (priority[state2] || 0) ? state1 : state2;
   }
@@ -317,7 +318,8 @@
         return 'bg-red-500 text-red-500 border-red-500/20';
       case 'Pinned':
         return 'bg-blue-500 text-blue-500 border-blue-500/20';
-      case 'Ignored':
+      case 'ManuallyIgnored':
+      case 'RuleIgnored':
         return 'bg-neutral-400 text-neutral-400 border-neutral-400/20';
       default:
         return 'bg-neutral-500 text-neutral-500 border-neutral-500/20';

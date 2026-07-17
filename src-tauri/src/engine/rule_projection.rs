@@ -38,7 +38,10 @@ pub fn automatic_rule_candidate(
     let Expiry::At(expires_at) = file.expiry else {
         return Ok(None);
     };
-    if matches!(file.state, FileDecayState::Ignored) {
+    if matches!(
+        file.state,
+        FileDecayState::ManuallyIgnored | FileDecayState::RuleIgnored
+    ) {
         return Ok(None);
     }
 
@@ -101,13 +104,12 @@ fn apply_rule_decision(
 
     if matches!(tracked.expiry, Expiry::Permanent) {
         tracked.state = FileDecayState::Pinned;
-    } else if matched_rule_is_ignore {
-        tracked.state = FileDecayState::Ignored;
-    } else if matches!(tracked.state, FileDecayState::Ignored)
-        && tracked.last_user_action_at.is_some()
-    {
-    } else {
-        tracked.state = classify_decay_state(tracked.freshness_at, &tracked.expiry, now, config);
+    } else if tracked.state != FileDecayState::ManuallyIgnored {
+        tracked.state = if matched_rule_is_ignore {
+            FileDecayState::RuleIgnored
+        } else {
+            classify_decay_state(tracked.freshness_at, &tracked.expiry, now, config)
+        };
     }
 }
 
@@ -199,7 +201,7 @@ mod tests {
         let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())
             .expect("projection should build");
 
-        assert_eq!(projection.tracked.state, FileDecayState::Ignored);
+        assert_eq!(projection.tracked.state, FileDecayState::RuleIgnored);
         assert_eq!(
             projection.tracked.expiry,
             Expiry::At(projection.tracked.freshness_at + AppConfig::default().default_ttl_seconds)
@@ -211,15 +213,14 @@ mod tests {
         let fixture = Fixture::new("shelflife-rule-projection");
         let config = fixture.config();
         let mut tracked = tracked_fixture_file(&fixture, &config, "download.txt");
-        tracked.state = FileDecayState::Ignored;
-        tracked.last_user_action_at = Some(now_seconds());
+        tracked.state = FileDecayState::ManuallyIgnored;
 
         let rule_set = CompiledRuleSet::compile(Vec::<AutomationRule>::new(), &config)
             .expect("rule set should compile");
         let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())
             .expect("projection should build");
 
-        assert_eq!(projection.tracked.state, FileDecayState::Ignored);
+        assert_eq!(projection.tracked.state, FileDecayState::ManuallyIgnored);
         assert!(projection.tracked.matched_rule_ids.is_empty());
     }
 
@@ -277,7 +278,7 @@ mod tests {
         );
 
         let mut ignored = tracked;
-        ignored.state = FileDecayState::Ignored;
+        ignored.state = FileDecayState::ManuallyIgnored;
         let automatic_rule_set = CompiledRuleSet::compile(vec![automatic_rule], &config)
             .expect("rule set should compile");
         assert!(

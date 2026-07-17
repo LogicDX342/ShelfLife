@@ -112,18 +112,11 @@ Runs on: app startup, watch target changes, crash recovery, and at a low-frequen
 
 ## 4. Freshness and Expiry Model
 
-The app must not depend on a single OS timestamp. Creation date and last-accessed date may be missing or unreliable.
+The app must not depend on a single OS timestamp because filesystem timestamps may be missing or unreliable.
 
 ### Freshness formula
 
-```
-freshness_at = max(
-  first_seen_at,
-  last_observed_mtime if present,
-  last_observed_atime if platform marked reliable,
-  last_user_action_at if present
-)
-```
+On first discovery, `freshness_at` is the maximum of the current time and the file's modification time when present. Later reconciliation keeps freshness monotonic by taking the maximum of the stored `freshness_at` and the latest observed modification time. Explicit user actions update `freshness_at` directly; snoozing sets it to the snooze deadline.
 
 ### Expiry formula
 
@@ -197,7 +190,7 @@ A rule may match origin only when `origin_url` contains a matching domain. Absen
 5. Select the first matching enabled rule as the effective verdict.
 6. Queue proposed action based on the effective rule mode.
 
-`matched_rule_ids` is informational and preserves all matching rule ids in priority order. Effective behavior comes from the rule verdict. A higher-priority PreviewOnly rule blocks lower-priority executable rules. Ignore takes effect immediately as `FileDecayState::Ignored` and does not apply a rule TTL.
+`matched_rule_ids` is informational and preserves all matching rule ids in priority order. Effective behavior comes from the rule verdict. A higher-priority PreviewOnly rule blocks lower-priority executable rules. Ignore takes effect immediately as `FileDecayState::RuleIgnored` and does not apply a rule TTL. A direct user ignore uses `FileDecayState::ManuallyIgnored` and persists independently of rule projection.
 
 ### Compiled rule-set seam
 

@@ -124,26 +124,27 @@ CREATE TABLE tracked_files_v2 (
     file_name TEXT NOT NULL,
     watch_target_id TEXT NOT NULL,
     size_bytes INTEGER NOT NULL,
-    first_seen_at INTEGER NOT NULL,
     last_observed_mtime INTEGER,
-    last_observed_atime INTEGER,
-    last_user_action_at INTEGER,
     freshness_at INTEGER NOT NULL,
     expiry_kind TEXT NOT NULL CHECK (expiry_kind IN ('at', 'permanent', 'snoozed_until')),
     expires_at INTEGER,
-    state TEXT NOT NULL CHECK (state IN ('fresh', 'stale', 'decaying', 'pinned', 'ignored')),
+    state TEXT NOT NULL CHECK (state IN ('fresh', 'stale', 'decaying', 'pinned', 'manually_ignored', 'rule_ignored')),
     origin_url TEXT
 );
 
 INSERT INTO tracked_files_v2 (
-    path, file_name, watch_target_id, size_bytes, first_seen_at,
-    last_observed_mtime, last_observed_atime, last_user_action_at,
+    path, file_name, watch_target_id, size_bytes, last_observed_mtime,
     freshness_at, expiry_kind, expires_at, state, origin_url
 )
 SELECT
-    path, file_name, watch_target_id, size_bytes, first_seen_at,
-    last_observed_mtime, last_observed_atime, last_user_action_at,
-    freshness_at, expiry_kind, expires_at, state, NULL
+    path, file_name, watch_target_id, size_bytes, last_observed_mtime,
+    freshness_at, expiry_kind, expires_at,
+    CASE
+        WHEN state = 'ignored' AND last_user_action_at IS NOT NULL THEN 'manually_ignored'
+        WHEN state = 'ignored' THEN 'rule_ignored'
+        ELSE state
+    END,
+    NULL
 FROM tracked_files
 WHERE state <> 'missing';
 
@@ -181,6 +182,7 @@ mod tests {
     use diesel::sql_types::{Integer, Nullable, Text};
     use uuid::Uuid;
 
+    use crate::models::FileDecayState;
     use crate::storage;
 
     #[test]
@@ -213,6 +215,15 @@ mod tests {
             Some("https://downloads.example.com/")
         );
         assert_eq!(tracked.matched_rule_ids, vec![String::from("rule-a")]);
+        let manually_ignored =
+            storage::tracked::get_tracked_file(&db, "C:\\watch\\manually-ignored.zip")
+                .expect("manual ignore lookup should work")
+                .expect("manually ignored file should survive migration");
+        assert_eq!(manually_ignored.state, FileDecayState::ManuallyIgnored);
+        let rule_ignored = storage::tracked::get_tracked_file(&db, "C:\\watch\\rule-ignored.zip")
+            .expect("rule ignore lookup should work")
+            .expect("rule ignored file should survive migration");
+        assert_eq!(rule_ignored.state, FileDecayState::RuleIgnored);
         assert!(
             storage::tracked::get_tracked_file(&db, "C:\\watch\\missing.zip")
                 .expect("missing lookup should work")
@@ -345,6 +356,22 @@ INSERT INTO tracked_files (
 ) VALUES (
     'C:\watch\missing.zip', 'missing.zip', 'watch', 10, 1, 2,
     'at', 3, 'missing', 'unknown'
+);
+
+INSERT INTO tracked_files (
+    path, file_name, watch_target_id, size_bytes, first_seen_at,
+    last_user_action_at, freshness_at, expiry_kind, expires_at, state, origin_kind
+) VALUES (
+    'C:\watch\manually-ignored.zip', 'manually-ignored.zip', 'watch', 10, 1,
+    2, 2, 'at', 3, 'ignored', 'unknown'
+);
+
+INSERT INTO tracked_files (
+    path, file_name, watch_target_id, size_bytes, first_seen_at,
+    freshness_at, expiry_kind, expires_at, state, origin_kind
+) VALUES (
+    'C:\watch\rule-ignored.zip', 'rule-ignored.zip', 'watch', 10, 1,
+    2, 'at', 3, 'ignored', 'unknown'
 );
 
 INSERT INTO tracked_file_rules (file_path, ordinal, rule_id)

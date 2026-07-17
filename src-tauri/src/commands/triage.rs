@@ -280,7 +280,7 @@ mod tests {
                 .expect("tracked lookup should work")
                 .expect("tracked file should exist")
                 .state,
-            FileDecayState::Ignored
+            FileDecayState::ManuallyIgnored
         );
         assert!(outside.exists());
     }

@@ -306,13 +306,13 @@ fn execute_file_action(
     };
     storage::audit::upsert_audit_entry(db, &entry)?;
 
+    tracked.freshness_at = tracked.freshness_at.max(timestamp);
     let undo_status = match apply_prepared_file_action(&source, &mut tracked, &prepared) {
         Ok(status) => status,
         Err(error) => return Err(fail_audited(db, entry, error)),
     };
 
     let retained_file = if prepared.retains_tracking() {
-        tracked.last_user_action_at = Some(timestamp);
         Some(&tracked)
     } else {
         None
@@ -373,7 +373,7 @@ fn finalize_recorded_action(
 enum PreparedFileAction {
     Pin,
     Snooze { until: u64 },
-    Ignore,
+    Ignore { state: FileDecayState },
     Move { destination: PathBuf },
     Trash,
 }
@@ -383,14 +383,14 @@ impl PreparedFileAction {
         match self {
             Self::Pin => AuditActionKind::Pin,
             Self::Snooze { .. } => AuditActionKind::Snooze,
-            Self::Ignore => AuditActionKind::Ignore,
+            Self::Ignore { .. } => AuditActionKind::Ignore,
             Self::Move { .. } => AuditActionKind::Move,
             Self::Trash => AuditActionKind::Trash,
         }
     }
 
     fn retains_tracking(&self) -> bool {
-        matches!(self, Self::Pin | Self::Snooze { .. } | Self::Ignore)
+        matches!(self, Self::Pin | Self::Snooze { .. } | Self::Ignore { .. })
     }
 }
 
@@ -412,12 +412,16 @@ fn prepare_file_action(
             })?;
             Ok(PreparedFileAction::Snooze { until })
         }
-        RequestedFileAction::User(UserTriageAction::Ignore) => Ok(PreparedFileAction::Ignore),
+        RequestedFileAction::User(UserTriageAction::Ignore) => Ok(PreparedFileAction::Ignore {
+            state: FileDecayState::ManuallyIgnored,
+        }),
         RequestedFileAction::User(UserTriageAction::Move { destination_folder }) => {
             prepare_move_action(source, config, PathBuf::from(destination_folder), None)
         }
         RequestedFileAction::User(UserTriageAction::TrashNow) => Ok(PreparedFileAction::Trash),
-        RequestedFileAction::Rule(RuleAction::Ignore) => Ok(PreparedFileAction::Ignore),
+        RequestedFileAction::Rule(RuleAction::Ignore) => Ok(PreparedFileAction::Ignore {
+            state: FileDecayState::RuleIgnored,
+        }),
         RequestedFileAction::Rule(RuleAction::Move {
             destination_folder,
             rename_template,
@@ -459,8 +463,8 @@ fn apply_prepared_file_action(
             tracked.state = FileDecayState::Fresh;
             Ok(UndoStatus::Available)
         }
-        PreparedFileAction::Ignore => {
-            tracked.state = FileDecayState::Ignored;
+        PreparedFileAction::Ignore { state } => {
+            tracked.state = *state;
             Ok(UndoStatus::Available)
         }
         PreparedFileAction::Move { destination } => {
@@ -571,7 +575,7 @@ pub(crate) fn ingest_dropzone_file_audited(
     };
     let mut tracked =
         tracked_file_from_metadata(&destination, &metadata, None, &config, &target.id);
-    tracked.last_user_action_at = Some(timestamp);
+    tracked.freshness_at = tracked.freshness_at.max(timestamp);
 
     entry.undo_status = UndoStatus::Available;
     if let Err(error) = finalize_recorded_action(db, &original_tracked_path, Some(&tracked), &entry)
@@ -667,7 +671,6 @@ fn undo_state_only(db: &Database, entry: &AuditEntry) -> Result<(), AppError> {
     if let Some(mut tracked) = storage::tracked::get_tracked_file(db, &entry.source_path)? {
         let config = storage::get_config(db)?;
         let now = now_seconds();
-        tracked.last_user_action_at = Some(now);
         tracked.freshness_at = now;
         tracked.expiry = Expiry::At(now + config.default_ttl_seconds);
         tracked.state = FileDecayState::Fresh;
@@ -776,7 +779,6 @@ fn sync_restored_tracking(
     let now = now_seconds();
     let mut tracked =
         tracked_file_from_metadata(restored_path, &metadata, None, config, &target.id);
-    tracked.last_user_action_at = Some(now);
     tracked.freshness_at = now;
     tracked.expiry = Expiry::At(now + config.default_ttl_seconds);
     tracked.state = FileDecayState::Fresh;
@@ -1093,13 +1095,15 @@ mod tests {
         AppError, AuditActionKind, AuditEntry, Expiry, FileDecayState, RuleAction, RuleMode,
         UndoStatus, UserTriageAction,
     };
+    use crate::rules::CompiledRuleSet;
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
     use crate::storage::Database;
 
     use super::{
-        execute_confirmed_rule_action, execute_triage_action_audited, ingest_dropzone_file_audited,
-        move_file_across_devices, render_rename_template,
+        execute_confirmed_rule_action, execute_dropzone_rule_action_audited,
+        execute_triage_action_audited, ingest_dropzone_file_audited, move_file_across_devices,
+        render_rename_template,
     };
 
     fn execute_triage_action(
@@ -1192,6 +1196,42 @@ mod tests {
         assert_eq!(entry.rule_id, Some(rule.id));
         assert_eq!(entry.rule_name, Some(rule.name));
         assert_eq!(entry.destination_path, Some(path_string(&destination)));
+    }
+
+    #[test]
+    fn dropzone_rule_ignore_records_rule_provenance() {
+        let fixture = Fixture::new("shelflife-dropzone-rule-ignore");
+        let source = fixture.write_watch_file("report.zip", "download");
+        fixture.save_config();
+        fixture.track_file(&source);
+
+        let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
+            .expect("tracked lookup should work")
+            .expect("tracked file should exist");
+
+        let mut rule = fixture.rule();
+        rule.mode = RuleMode::AskFirst;
+        rule.action = RuleAction::Ignore;
+        let explanation = CompiledRuleSet::compile(vec![rule.clone()], &fixture.config())
+            .expect("rule set should compile")
+            .explain_file(&tracked)
+            .into_iter()
+            .next()
+            .expect("rule should explain the tracked file");
+
+        execute_dropzone_rule_action_audited(
+            &fixture.db,
+            &path_string(&source),
+            &rule,
+            explanation,
+        )
+        .map_err(|failure| failure.error)
+        .expect("dropzone should execute the rule proposal");
+
+        let tracked = storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
+            .expect("tracked lookup should work")
+            .expect("ignored file should remain tracked");
+        assert_eq!(tracked.state, FileDecayState::RuleIgnored);
     }
 
     #[test]
@@ -1298,13 +1338,9 @@ mod tests {
         let restored = storage::tracked::get_tracked_file(&fixture.db, &path_string(&source))
             .expect("tracked lookup should work")
             .expect("restored file should remain tracked");
-        let refreshed_at = restored
-            .last_user_action_at
-            .expect("undo should record a user action");
-        assert_eq!(restored.freshness_at, refreshed_at);
         assert_eq!(
             restored.expiry,
-            Expiry::At(refreshed_at + fixture.config().default_ttl_seconds)
+            Expiry::At(restored.freshness_at + fixture.config().default_ttl_seconds)
         );
         assert!(matches!(restored.state, FileDecayState::Fresh));
     }
@@ -1444,7 +1480,7 @@ mod tests {
             .expect("tracked file should exist");
 
         assert_eq!(entry.action_kind, AuditActionKind::Ignore);
-        assert_eq!(tracked.state, FileDecayState::Ignored);
+        assert_eq!(tracked.state, FileDecayState::ManuallyIgnored);
         assert_eq!(
             storage::audit::list_audit_entries(&fixture.db)
                 .expect("audit list should work")

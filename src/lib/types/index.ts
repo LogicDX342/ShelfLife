@@ -1,4 +1,5 @@
-export type FileDecayState = 'Fresh' | 'Stale' | 'Decaying' | 'Pinned' | 'Ignored';
+export type FileDecayState =
+  'Fresh' | 'Stale' | 'Decaying' | 'Pinned' | 'ManuallyIgnored' | 'RuleIgnored';
 
 export type Expiry = { At: number } | 'Permanent' | { SnoozedUntil: number };
 
@@ -7,10 +8,7 @@ export type TrackedFile = {
   file_name: string;
   watch_target_id: string;
   size_bytes: number;
-  first_seen_at: number;
   last_observed_mtime: number | null;
-  last_observed_atime: number | null;
-  last_user_action_at: number | null;
   freshness_at: number;
   expiry: Expiry;
   state: FileDecayState;

@@ -122,7 +122,7 @@ mod tests {
 
         for (path, state) in [
             (&fresh, FileDecayState::Fresh),
-            (&ignored, FileDecayState::Ignored),
+            (&ignored, FileDecayState::ManuallyIgnored),
         ] {
             let metadata = fs::metadata(path).expect("metadata should exist");
             let config = AppConfig::default();
