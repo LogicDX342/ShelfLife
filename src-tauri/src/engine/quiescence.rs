@@ -30,18 +30,18 @@ pub fn is_system_directory(path: &Path) -> bool {
     lower == "$recycle.bin" || lower == "system volume information"
 }
 
-/// Returns true if the directory is hidden and should be skipped by default.
+/// Returns true if the path is hidden and should be skipped by default.
 /// On Windows, checks `FILE_ATTRIBUTE_HIDDEN`. On other platforms, checks for
-/// a leading dot in the directory name.
+/// a leading dot in the file or directory name.
 #[cfg(target_os = "windows")]
-pub fn is_hidden_directory(_path: &Path, metadata: &Metadata) -> bool {
+pub fn is_hidden_path(_path: &Path, metadata: &Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
     const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
     metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn is_hidden_directory(path: &Path, _metadata: &Metadata) -> bool {
+pub fn is_hidden_path(path: &Path, _metadata: &Metadata) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
         .is_some_and(|n| n.starts_with('.'))

@@ -26,7 +26,7 @@ struct ObservationContext<'a> {
 }
 
 use crate::engine::paths::PathScope;
-use crate::engine::quiescence::{is_hidden_directory, is_system_directory, is_transient_path};
+use crate::engine::quiescence::{is_hidden_path, is_system_directory, is_transient_path};
 use crate::engine::{project_watched_file, tracked_file_from_metadata};
 use crate::models::{AppConfig, AppError, ReconciliationReport, TrackedFile, WatchTarget};
 use crate::rules::CompiledRuleSet;
@@ -248,6 +248,9 @@ fn observe_path_with_metadata(
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Ok(None);
     }
+    if is_hidden_path(path, metadata) {
+        return Ok(None);
+    }
     let tracked =
         tracked_file_from_metadata(path, metadata, existing, context.config, &context.target.id);
     let tracked =
@@ -272,7 +275,9 @@ fn paths_to_remove_for(
             let path = Path::new(path_string);
             (excluded_paths.contains(path_string)
                 || !scope.is_tracked_path_active(path, &file.watch_target_id)
-                || !path.exists())
+                || !path.exists()
+                || fs::symlink_metadata(path)
+                    .is_ok_and(|metadata| metadata.is_file() && is_hidden_path(path, &metadata)))
             .then(|| path_string.clone())
         })
         .collect()
@@ -385,13 +390,12 @@ fn scan_target_paths_inner(
         if metadata.file_type().is_symlink() {
             continue;
         }
+        if is_hidden_path(&path, &metadata) {
+            continue;
+        }
         if metadata.is_dir() && recursive {
             // System directories are always skipped — no override.
             if is_system_directory(&path) {
-                continue;
-            }
-            // Hidden directories are always skipped.
-            if is_hidden_directory(&path, &metadata) {
                 continue;
             }
             // Non-hidden dirs can be excluded by ignore_patterns.
@@ -541,6 +545,22 @@ mod tests {
         Ok(reconcile_with_report_with_progress(db, None)?.indexed)
     }
 
+    #[cfg(windows)]
+    fn set_hidden(path: &Path) {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN, INVALID_FILE_ATTRIBUTES,
+        };
+
+        let path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let attributes = unsafe { GetFileAttributesW(path.as_ptr()) };
+        assert_ne!(attributes, INVALID_FILE_ATTRIBUTES);
+        assert_ne!(
+            unsafe { SetFileAttributesW(path.as_ptr(), attributes | FILE_ATTRIBUTE_HIDDEN) },
+            0
+        );
+    }
+
     #[test]
     fn reconcile_indexes_existing_files_and_removes_deleted_rows() {
         let fixture = Fixture::new();
@@ -629,6 +649,44 @@ mod tests {
         assert!(indexed.is_empty());
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&partial))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reconcile_skips_hidden_files() {
+        let fixture = Fixture::new();
+        let hidden = fixture.write_watch_file("hidden.txt", "hidden");
+        set_hidden(&hidden);
+        fixture.save_config();
+
+        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
+
+        assert!(indexed.is_empty());
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&hidden))
+                .expect("tracked lookup should work")
+                .is_none()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn incremental_reconciliation_removes_file_that_becomes_hidden() {
+        let fixture = Fixture::new();
+        let file = fixture.write_watch_file("visible.txt", "body");
+        fixture.save_config();
+        reconcile(&fixture.db).expect("initial reconciliation should succeed");
+        set_hidden(&file);
+
+        let report = reconcile_paths(&fixture.db, vec![file.clone()])
+            .expect("incremental reconciliation should succeed");
+
+        assert_eq!(report.removed, vec![path_string(&file)]);
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
                 .is_none()
         );
