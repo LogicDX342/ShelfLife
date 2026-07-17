@@ -89,12 +89,15 @@
   }
 
   async function finishAction(actionResult: DropzoneActionResult) {
-    if (actionResult.failures.length === 0) {
+    const completedPaths = new Set(actionResult.entries.map((entry) => entry.source_path));
+    const remainingPaths = droppedPaths.filter((path) => !completedPaths.has(path));
+
+    if (remainingPaths.length === 0) {
       await finishChoice();
       return;
     }
 
-    preview = await previewDropzoneFiles(actionResult.failures.map((failure) => failure.path));
+    preview = await previewDropzoneFiles(remainingPaths);
   }
 
   async function finishChoice() {
