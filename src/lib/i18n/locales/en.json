@@ -296,6 +296,9 @@
     "ruleFailed": "Rule action failed.",
     "watchTargets": "Watch targets",
     "ruleGroups": "Rule groups",
+    "actionTrash": "Trash",
+    "actionMove": "Move to {path}",
+    "actionIgnore": "Ignore",
     "badge": {
       "preview": "{count} preview",
       "unmatched": "{count} unmatched",

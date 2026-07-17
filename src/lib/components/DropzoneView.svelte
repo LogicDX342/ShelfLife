@@ -1,7 +1,8 @@
 <script lang="ts">
-  import IconArchive from '@lucide/svelte/icons/archive';
+  import IconEyeOff from '@lucide/svelte/icons/eye-off';
   import IconFolderInput from '@lucide/svelte/icons/folder-input';
   import IconLoader from '@lucide/svelte/icons/loader-circle';
+  import IconDelete from '@lucide/svelte/icons/trash-2';
   import IconX from '@lucide/svelte/icons/x';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount } from 'svelte';
@@ -193,17 +194,58 @@
             {#each preview.rule_groups as group (group.rule_id)}
               <Button
                 variant="secondary"
-                class="justify-start h-auto min-h-10"
+                class="flex flex-col items-stretch h-auto p-3 w-full text-left gap-1"
                 disabled={executingKey !== null}
                 onclick={() => runRuleGroup(group)}
               >
-                {#if executingKey === `rule:${group.rule_id}`}
-                  <IconLoader data-icon="inline-start" class="animate-spin" />
-                {:else}
-                  <IconArchive data-icon="inline-start" />
-                {/if}
-                <span class="min-w-0 flex-1 truncate text-left">{group.rule_name}</span>
-                <Badge variant="outline">{group.file_count}</Badge>
+                <div class="flex items-center gap-2 w-full min-w-0">
+                  {#if executingKey === `rule:${group.rule_id}`}
+                    <IconLoader
+                      data-icon="inline-start"
+                      class="w-4 h-4 animate-spin text-muted-foreground shrink-0"
+                    />
+                  {:else if group.action === 'Trash'}
+                    <IconDelete
+                      data-icon="inline-start"
+                      class="w-4 h-4 text-destructive shrink-0"
+                    />
+                  {:else if typeof group.action === 'object' && 'Move' in group.action}
+                    <IconFolderInput
+                      data-icon="inline-start"
+                      class="w-4 h-4 text-primary shrink-0"
+                    />
+                  {:else if group.action === 'Ignore'}
+                    <IconEyeOff
+                      data-icon="inline-start"
+                      class="w-4 h-4 text-muted-foreground shrink-0"
+                    />
+                  {/if}
+                  <span class="min-w-0 flex-1 font-medium truncate">{group.rule_name}</span>
+                  <Badge variant="outline" class="shrink-0">{group.file_count}</Badge>
+                </div>
+
+                <div
+                  class="text-[10px] text-muted-foreground flex items-center gap-1.5 pl-6 min-w-0"
+                >
+                  {#if group.action === 'Trash'}
+                    <span class="text-destructive font-semibold uppercase tracking-wider shrink-0"
+                      >{i18n.t('dropzone.actionTrash')}</span
+                    >
+                  {:else if typeof group.action === 'object' && 'Move' in group.action}
+                    <span
+                      class="text-primary font-semibold truncate"
+                      title={group.action.Move.destination_folder}
+                    >
+                      {i18n.t('dropzone.actionMove', {
+                        path: group.action.Move.destination_folder,
+                      })}
+                    </span>
+                  {:else if group.action === 'Ignore'}
+                    <span class="font-semibold uppercase tracking-wider shrink-0"
+                      >{i18n.t('dropzone.actionIgnore')}</span
+                    >
+                  {/if}
+                </div>
               </Button>
             {/each}
           </div>

@@ -296,6 +296,9 @@
     "ruleFailed": "规则操作失败。",
     "watchTargets": "监控目标",
     "ruleGroups": "规则组",
+    "actionTrash": "移至回收站",
+    "actionMove": "移动至 {path}",
+    "actionIgnore": "忽略",
     "badge": {
       "preview": "{count} 个预览",
       "unmatched": "{count} 个未匹配",
