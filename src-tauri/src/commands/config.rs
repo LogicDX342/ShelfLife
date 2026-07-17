@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::engine::paths::validate_config_paths;
@@ -74,11 +74,7 @@ pub async fn resolve_close_request(
 
     match behavior {
         CloseBehavior::Ask | CloseBehavior::HideToTray => {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                if window.hide().is_ok() {
-                    state.set_window_visible(false);
-                }
-            }
+            crate::tray::close_main_window_to_tray(&app_handle)?;
         }
         CloseBehavior::Quit => {
             app_handle.exit(0);
