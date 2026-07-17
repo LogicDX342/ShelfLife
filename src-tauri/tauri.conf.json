@@ -24,6 +24,7 @@
       },
       {
         "label": "dropzone",
+        "create": false,
         "title": "ShelfLife Dropzone",
         "url": "/dropzone",
         "width": 360,

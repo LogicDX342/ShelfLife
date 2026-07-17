@@ -3,10 +3,16 @@ use std::sync::Mutex;
 use serde::Deserialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{App, AppHandle, Emitter, Manager, Runtime, Window, WindowEvent};
+use tauri::utils::config::WebviewUrl;
+use tauri::{
+    App, AppHandle, Emitter, Manager, Runtime, WebviewWindow, WebviewWindowBuilder, Window,
+    WindowEvent,
+};
 
 use crate::models::{AppError, CloseBehavior};
 use crate::runtime::AppRuntime;
+
+const MAIN_WINDOW_LABEL: &str = "main";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct TrayLabels {
@@ -47,9 +53,9 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         .tooltip(&labels.tooltip)
         .show_menu_on_left_click(false)
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
-            "open" => show_main_window(app_handle, None),
-            "review" => show_main_window(app_handle, Some("/")),
-            "preferences" => show_main_window(app_handle, Some("/settings")),
+            "open" => request_main_window(app_handle, None),
+            "review" => request_main_window(app_handle, Some("/")),
+            "preferences" => request_main_window(app_handle, Some("/settings")),
             "pause" => pause_watching(app_handle),
             "resume" => resume_watching(app_handle),
             "reconcile" => run_reconciliation(app_handle),
@@ -63,7 +69,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
                 ..
             } = event
             {
-                show_main_window(tray.app_handle(), None);
+                request_main_window(tray.app_handle(), None);
             }
         });
 
@@ -166,27 +172,93 @@ pub fn hide_window_on_close(window: &Window, event: &WindowEvent) {
                 let _ = window.emit("close_behavior_requested", ());
             }
             CloseBehavior::HideToTray => {
-                let runtime = window.state::<AppRuntime>();
-                runtime.set_window_visible(false);
-                let _ = window.hide();
+                let _ = close_main_window_to_tray(window.app_handle());
             }
             CloseBehavior::Quit => window.app_handle().exit(0),
         }
     }
 }
 
-fn show_main_window(app_handle: &AppHandle, route: Option<&str>) {
-    let runtime = app_handle.state::<AppRuntime>();
-    runtime.set_window_visible(true);
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-        if let Some(route) = route {
-            let script = format!("window.location.href = '{}';", route);
-            let _ = window.eval(&script);
-        }
+pub(crate) fn request_main_window(app_handle: &AppHandle, route: Option<&str>) {
+    if let Err(error) = show_main_window(app_handle, route) {
+        let _ = app_handle.emit("action_failed", error);
     }
+}
+
+fn show_main_window(
+    app_handle: &AppHandle,
+    route: Option<&str>,
+) -> Result<WebviewWindow, AppError> {
+    let existing_window = app_handle.get_webview_window(MAIN_WINDOW_LABEL);
+    let was_existing = existing_window.is_some();
+    let window = match existing_window {
+        Some(window) => window,
+        None => build_main_window(app_handle, route)?,
+    };
+
+    window.unminimize().map_err(window_error)?;
+    window.show().map_err(window_error)?;
+    window.set_focus().map_err(window_error)?;
+
+    if let (true, Some(route)) = (was_existing, route) {
+        let mut url = window.url().map_err(window_error)?;
+        url.set_path(route);
+        url.set_query(None);
+        url.set_fragment(None);
+        window.navigate(url).map_err(window_error)?;
+    }
+
+    app_handle.state::<AppRuntime>().set_window_visible(true);
+    Ok(window)
+}
+
+fn build_main_window(
+    app_handle: &AppHandle,
+    route: Option<&str>,
+) -> Result<WebviewWindow, AppError> {
+    let mut config = app_handle
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|config| config.label == MAIN_WINDOW_LABEL)
+        .cloned()
+        .ok_or_else(|| {
+            AppError::new(
+                "WINDOW_CONFIG_MISSING",
+                "The main window configuration is missing.",
+                false,
+            )
+        })?;
+
+    if let Some(route) = route {
+        config.url = WebviewUrl::App(route.into());
+    }
+
+    WebviewWindowBuilder::from_config(app_handle, &config)
+        .and_then(WebviewWindowBuilder::build)
+        .map_err(window_error)
+}
+
+pub(crate) fn close_main_window_to_tray(app_handle: &AppHandle) -> Result<(), AppError> {
+    app_handle.state::<AppRuntime>().set_window_visible(false);
+
+    let dropzone_result = crate::dropzone::destroy_dropzone(app_handle);
+    let main_result = app_handle
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .map(|window| window.destroy().map_err(window_error))
+        .unwrap_or(Ok(()));
+
+    main_result.and(dropzone_result)
+}
+
+fn window_error(error: tauri::Error) -> AppError {
+    AppError::with_details(
+        "WINDOW_ERROR",
+        "The application window could not be updated.",
+        true,
+        error.to_string(),
+    )
 }
 
 fn pause_watching(app_handle: &AppHandle) {
