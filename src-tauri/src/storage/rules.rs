@@ -8,7 +8,8 @@ use crate::storage::schema::automation_rules;
 use crate::storage::{
     delete_owner_rows, i64_to_u64, insert_ordered_values, load_ordered_values,
     load_ordered_values_by_owner, rule_action_from_parts, rule_action_parts, rule_mode_from_label,
-    rule_mode_label, storage_data_error, u64_to_i64, Database,
+    rule_mode_label, rule_timing_from_parts, rule_timing_parts, storage_data_error, u64_to_i64,
+    Database,
 };
 
 pub fn list_rules(db: &Database) -> Result<Vec<AutomationRule>, AppError> {
@@ -69,6 +70,7 @@ pub fn save_rule(db: &Database, rule: &AutomationRule) -> Result<(), AppError> {
 fn save_rule_tx(conn: &mut SqliteConnection, rule: &AutomationRule) -> Result<(), AppError> {
     let (action_kind, action_destination_folder, action_rename_template) =
         rule_action_parts(&rule.action);
+    let (timing_kind, timing_seconds) = rule_timing_parts(&rule.timing);
     let (size_kind, size_min, size_max) = size_condition_parts(&rule.conditions.size)?;
     let row = RuleWriteRow {
         id: &rule.id,
@@ -76,7 +78,8 @@ fn save_rule_tx(conn: &mut SqliteConnection, rule: &AutomationRule) -> Result<()
         enabled: rule.enabled,
         priority: rule.priority,
         watch_path: &rule.watch_path,
-        ttl_seconds: u64_to_i64(rule.ttl_seconds, "automation_rules.ttl_seconds")?,
+        ttl_seconds: u64_to_i64(timing_seconds, "automation_rules.ttl_seconds")?,
+        timing_kind,
         mode: rule_mode_label(&rule.mode),
         created_at: u64_to_i64(rule.created_at, "automation_rules.created_at")?,
         updated_at: u64_to_i64(rule.updated_at, "automation_rules.updated_at")?,
@@ -202,7 +205,7 @@ fn rule_from_row(row: RuleRow, children: RuleChildValues) -> Result<AutomationRu
         enabled: row.enabled,
         priority: row.priority,
         watch_path: row.watch_path,
-        ttl_seconds: i64_to_u64(row.ttl_seconds, "automation_rules.ttl_seconds")?,
+        timing: rule_timing_from_parts(&row.timing_kind, row.ttl_seconds)?,
         conditions,
         action,
         mode: rule_mode_from_label(&row.mode)?,
@@ -221,6 +224,7 @@ struct RuleRow {
     priority: i32,
     watch_path: String,
     ttl_seconds: i64,
+    timing_kind: String,
     mode: String,
     created_at: i64,
     updated_at: i64,
@@ -242,6 +246,7 @@ struct RuleWriteRow<'a> {
     priority: i32,
     watch_path: &'a str,
     ttl_seconds: i64,
+    timing_kind: &'a str,
     mode: &'a str,
     created_at: i64,
     updated_at: i64,
@@ -331,7 +336,7 @@ fn size_condition_from_parts(
 
 #[cfg(test)]
 mod tests {
-    use crate::models::{RuleAction, RuleMode, SizeCondition};
+    use crate::models::{RuleAction, RuleMode, RuleTiming, SizeCondition};
     use crate::storage::test_util::{path_string, Fixture};
 
     #[test]
@@ -339,6 +344,7 @@ mod tests {
         let fixture = Fixture::new("shelflife-rule-round-trip");
         let mut rule = fixture.rule();
         rule.mode = RuleMode::Automatic;
+        rule.timing = RuleTiming::OnArrival;
         rule.action = RuleAction::Move {
             destination_folder: path_string(&fixture.safe),
             rename_template: Some(String::from("{name}-archived.{ext}")),

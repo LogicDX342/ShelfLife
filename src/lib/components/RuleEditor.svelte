@@ -13,6 +13,7 @@
     RuleAction,
     RuleMatchExplanation,
     RuleMode,
+    RuleTiming,
     SizeCondition,
   } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
@@ -32,6 +33,7 @@
   let watchPath = $state('');
   let priority = $state(0);
   let ttlDays = $state(30);
+  let timingKind = $state<'OnArrival' | 'AfterSeconds'>('AfterSeconds');
   let mode = $state<RuleMode>('PreviewOnly');
   let actionKind = $state<'Ignore' | 'Trash' | 'Move'>('Ignore');
   let destinationFolder = $state('');
@@ -99,6 +101,11 @@
     return 'Ignore';
   }
 
+  function ruleTiming(): RuleTiming {
+    if (timingKind === 'OnArrival') return 'OnArrival';
+    return { AfterSeconds: Math.max(1, ttlDays) * 24 * 60 * 60 };
+  }
+
   function actionKindFromRule(action: RuleAction) {
     if (action === 'Trash') return 'Trash';
     if (action === 'Ignore') return 'Ignore';
@@ -111,9 +118,13 @@
     enabled = next?.enabled ?? true;
     watchPath = next?.watch_path ?? '';
     priority = next?.priority ?? 0;
-    ttlDays = next ? Math.max(1, Math.round(next.ttl_seconds / 86400)) : 30;
     mode = next?.mode ?? 'PreviewOnly';
     actionKind = next ? actionKindFromRule(next.action) : 'Ignore';
+    timingKind = next?.timing === 'OnArrival' ? 'OnArrival' : 'AfterSeconds';
+    ttlDays =
+      next && typeof next.timing === 'object'
+        ? Math.max(1, Math.round(next.timing.AfterSeconds / 86400))
+        : 30;
     destinationFolder =
       next && typeof next.action === 'object' && 'Move' in next.action
         ? next.action.Move.destination_folder
@@ -153,6 +164,9 @@
     if (actionKind === 'Ignore' && mode === 'AskFirst') {
       mode = 'PreviewOnly';
     }
+    if (actionKind !== 'Move' && timingKind === 'OnArrival') {
+      timingKind = 'AfterSeconds';
+    }
   });
 
   function buildRule(): AutomationRule {
@@ -163,7 +177,7 @@
       enabled,
       priority,
       watch_path: watchPath,
-      ttl_seconds: Math.max(1, ttlDays) * 24 * 60 * 60,
+      timing: ruleTiming(),
       conditions: {
         extensions: csv(extensions),
         filename_globs: csv(filenameGlobs),
@@ -406,15 +420,36 @@
         </Field.Field>
 
         <Field.Field>
-          <Field.FieldLabel for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Field.FieldLabel>
-          <Input
-            id="ttl-days"
-            min="1"
-            type="number"
-            bind:value={ttlDays}
-            disabled={actionKind === 'Ignore'}
-          />
+          <Field.FieldLabel for="rule-timing">{i18n.t('rules.timing')}</Field.FieldLabel>
+          <Select.Root type="single" bind:value={timingKind} disabled={actionKind !== 'Move'}>
+            <Select.Trigger id="rule-timing" class="w-full">
+              <span data-slot="select-value">
+                {timingKind === 'OnArrival'
+                  ? i18n.t('rules.timingOnArrival')
+                  : i18n.t('rules.timingAfterExpiry')}
+              </span>
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Group>
+                <Select.Item value="AfterSeconds" label={i18n.t('rules.timingAfterExpiry')} />
+                <Select.Item value="OnArrival" label={i18n.t('rules.timingOnArrival')} />
+              </Select.Group>
+            </Select.Content>
+          </Select.Root>
         </Field.Field>
+
+        {#if timingKind !== 'OnArrival'}
+          <Field.Field>
+            <Field.FieldLabel for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Field.FieldLabel>
+            <Input
+              id="ttl-days"
+              min="1"
+              type="number"
+              bind:value={ttlDays}
+              disabled={actionKind === 'Ignore'}
+            />
+          </Field.Field>
+        {/if}
 
         <Field.Field>
           <Field.FieldLabel for="destination-path"

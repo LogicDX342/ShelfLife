@@ -1,10 +1,20 @@
 use std::path::Path;
 
 use crate::engine::paths::PathScope;
-use crate::models::{AppError, AutomationRule, RuleAction};
+use crate::models::{AppError, AutomationRule, RuleAction, RuleTiming};
 
 pub(crate) fn validate_rule(rule: &AutomationRule, scope: &PathScope<'_>) -> Result<(), AppError> {
     scope.validate_rule_watch_path(Path::new(&rule.watch_path))?;
+
+    if matches!(rule.timing, RuleTiming::OnArrival)
+        && !matches!(rule.action, RuleAction::Move { .. })
+    {
+        return Err(AppError::new(
+            "RULE_INVALID_TIMING",
+            "On-arrival timing is only available for move rules.",
+            true,
+        ));
+    }
 
     if let RuleAction::Move {
         destination_folder,

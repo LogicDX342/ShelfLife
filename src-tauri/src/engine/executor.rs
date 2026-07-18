@@ -1095,7 +1095,7 @@ mod tests {
 
     use crate::models::{
         AppError, AuditActionKind, AuditEntry, Expiry, FileDecayState, RuleAction, RuleMode,
-        UndoStatus, UserTriageAction,
+        RuleTiming, UndoStatus, UserTriageAction,
     };
     use crate::rules::CompiledRuleSet;
     use crate::storage;
@@ -1181,7 +1181,7 @@ mod tests {
 
         let mut rule = fixture.rule();
         rule.mode = RuleMode::AskFirst;
-        rule.ttl_seconds = 1;
+        rule.timing = RuleTiming::AfterSeconds(1);
         rule.action = RuleAction::Move {
             destination_folder: path_string(&fixture.outside),
             rename_template: Some(String::from("confirmed-{name}.{ext}")),

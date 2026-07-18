@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 use crate::engine::freshness::tracked_file_from_metadata;
 use crate::models::{
-    AppConfig, AutomationRule, RuleAction, RuleConditions, RuleMode, SizeCondition, WatchTarget,
+    AppConfig, AutomationRule, RuleAction, RuleConditions, RuleMode, RuleTiming, SizeCondition,
+    WatchTarget,
 };
 use crate::storage;
 
@@ -61,7 +62,7 @@ impl Fixture {
             enabled: true,
             priority: 10,
             watch_path: path_string(&self.watch),
-            ttl_seconds: 86_400,
+            timing: RuleTiming::AfterSeconds(86_400),
             conditions: RuleConditions {
                 extensions: vec![String::from("zip")],
                 filename_globs: Vec::new(),

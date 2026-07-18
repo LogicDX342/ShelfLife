@@ -124,7 +124,7 @@ On first discovery, `freshness_at` is the maximum of the current time and the fi
 expires_at = freshness_at + effective_ttl_seconds
 ```
 
-`effective_ttl_seconds` comes from the first matching enabled rule only when that rule can change the file and is not PreviewOnly or Ignore. PreviewOnly, Ignore, and unmatched files use the app default TTL. Pinned files use `Expiry::Permanent`.
+`effective_ttl_seconds` comes from the first matching enabled `AfterSeconds` rule only when that rule can change the file and is not PreviewOnly or Ignore. `OnArrival`, PreviewOnly, Ignore, and unmatched files use the app default TTL. Pinned files use `Expiry::Permanent`.
 
 ### Threshold scaling
 
@@ -173,7 +173,12 @@ A rule may match origin only when `origin_url` contains a matching domain. Absen
 
 - **PreviewOnly**: default for new rules. Records what would happen, changes nothing.
 - **AskFirst**: proposes actions that require user confirmation.
-- **Automatic**: acts on expired files without user confirmation.
+- **Automatic**: acts without user confirmation when the rule's timing becomes eligible.
+
+### Rule timing
+
+- **OnArrival**: for Move rules only. After an incremental watcher event indexes a new stable file, Automatic rules move it immediately. Full startup/manual reconciliation scans and existing tracked files do not trigger arrival actions, and the rule does not replace their decay TTL.
+- **AfterSeconds**: applies the configured rule TTL and becomes eligible when the file expires. This is the default for existing and newly created rules.
 
 ### Actions
 
@@ -188,7 +193,7 @@ A rule may match origin only when `origin_url` contains a matching domain. Absen
 3. Evaluate enabled rules by priority (descending, stable order for ties).
 4. Produce explanation records and matched rule ids.
 5. Select the first matching enabled rule as the effective verdict.
-6. Queue proposed action based on the effective rule mode.
+6. Queue proposed action based on the effective rule mode and timing.
 
 `matched_rule_ids` is informational and preserves all matching rule ids in priority order. Effective behavior comes from the rule verdict. A higher-priority PreviewOnly rule blocks lower-priority executable rules. Ignore takes effect immediately as `FileDecayState::RuleIgnored` and does not apply a rule TTL. A direct user ignore uses `FileDecayState::ManuallyIgnored` and persists independently of rule projection.
 
@@ -196,7 +201,7 @@ A rule may match origin only when `origin_url` contains a matching domain. Absen
 
 Raw `AutomationRule` records are compiled into one `CompiledRuleSet` before evaluation. Compilation validates regexes, globs, source-domain patterns, size ranges, watch-path scope, move destinations, and rename templates. It sorts rules by descending priority and compiles glob sets and regex patterns once.
 
-All workflows — reconciliation, incremental watcher processing, rule refresh, dropzone preview/execution, file explanations, and automatic scheduling — consume `CompiledRuleSet`. They must not independently sort raw rules, validate syntax, or rebuild matchers. Invalid rule data fails at compilation rather than during per-file match.
+All workflows — reconciliation, incremental watcher processing, arrival execution, rule refresh, dropzone preview/execution, file explanations, and expiry scheduling — consume `CompiledRuleSet`. They must not independently sort raw rules, validate syntax, or rebuild matchers. Invalid rule data fails at compilation rather than during per-file match.
 
 `RuleDecisionScope::WatchedFile` applies the rule's `watch_path`; `RuleDecisionScope::Dropzone` evaluates without watched-file path filtering.
 
