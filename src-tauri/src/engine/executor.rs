@@ -1212,7 +1212,7 @@ mod tests {
             .expect("tracked file should exist");
 
         let mut rule = fixture.rule();
-        rule.mode = RuleMode::AskFirst;
+        rule.mode = RuleMode::Automatic;
         rule.action = RuleAction::Ignore;
         let explanation = CompiledRuleSet::compile(vec![rule.clone()], &fixture.config())
             .expect("rule set should compile")

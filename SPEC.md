@@ -177,7 +177,7 @@ A rule may match origin only when `origin_url` contains a matching domain. Absen
 
 ### Rule timing
 
-- **OnArrival**: for Move rules only. After an incremental watcher event indexes a new stable file, Automatic rules move it immediately. Full startup/manual reconciliation scans and existing tracked files do not trigger arrival actions, and the rule does not replace their decay TTL.
+- **OnArrival**: for Automatic Move rules only. After an incremental watcher event indexes a new stable file, Automatic rules move it immediately. Full startup/manual reconciliation scans and existing tracked files do not trigger arrival actions, and the rule does not replace their decay TTL.
 - **AfterSeconds**: applies the configured rule TTL and becomes eligible when the file expires. This is the default for existing and newly created rules.
 
 ### Actions
