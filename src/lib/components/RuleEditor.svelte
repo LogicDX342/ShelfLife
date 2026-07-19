@@ -22,14 +22,9 @@
   type ActionKind = 'Ignore' | 'Trash' | 'Move';
   type TimingKind = 'OnArrival' | 'AfterSeconds';
 
-  let {
-    onSaved,
-    rule = null,
-    onCancel,
-  } = $props<{
+  let { onSaved, rule = null } = $props<{
     onSaved: () => Promise<void>;
     rule?: AutomationRule | null;
-    onCancel: () => void;
   }>();
 
   let name = $state('');
@@ -52,6 +47,7 @@
   let saving = $state(false);
   let testing = $state(false);
   let testResults = $state<RuleMatchExplanation[]>([]);
+  let hasTestedOnce = $state(false);
   async function browseWatchPath() {
     try {
       const selected = await selectDirectory('Select Watch Target Path', watchPath);
@@ -159,6 +155,7 @@
       }
     }
     testResults = [];
+    hasTestedOnce = false;
   }
 
   $effect(() => {
@@ -217,6 +214,7 @@
     testing = true;
     try {
       testResults = await testRule(buildRule());
+      hasTestedOnce = true;
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('rules.errorTest')));
     } finally {
@@ -512,35 +510,38 @@
         {i18n.t('rules.testRule')}
       {/if}
     </Button>
-    <Button variant="outline" type="button" onclick={onCancel}>
-      {i18n.t('dialog.cancel')}
-    </Button>
     <Button type="submit" disabled={saving}>
       {i18n.t('rules.saveRule')}
     </Button>
   </div>
 
   <!-- Live Test Panel -->
-  {#if testResults.length > 0}
+  {#if hasTestedOnce}
     <Card.Root>
       <Card.Header>
         <Card.Title>{i18n.t('rules.testResultsCount', { count: testResults.length })}</Card.Title>
       </Card.Header>
       <Card.Content>
-        <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
-          {#each testResults as result (result.file_path)}
-            <div class="flex items-center justify-between gap-2 rounded bg-muted p-2.5 text-xs">
-              <span class="truncate font-medium flex-1" title={result.file_path}
-                >{result.file_path.split('\\').pop() || result.file_path}</span
-              >
-              {#if result.size_bytes !== null}
-                <span class="text-xs text-muted-foreground flex-shrink-0">
-                  {formatBytes(result.size_bytes)}
-                </span>
-              {/if}
-            </div>
-          {/each}
-        </div>
+        {#if testResults.length === 0}
+          <p class="text-sm text-muted-foreground py-4 text-center">
+            {i18n.t('rules.testNoMatches')}
+          </p>
+        {:else}
+          <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
+            {#each testResults as result (result.file_path)}
+              <div class="flex items-center justify-between gap-2 rounded bg-muted p-2.5 text-xs">
+                <span class="truncate font-medium flex-1" title={result.file_path}
+                  >{result.file_path.split('\\').pop() || result.file_path}</span
+                >
+                {#if result.size_bytes !== null}
+                  <span class="text-xs text-muted-foreground flex-shrink-0">
+                    {formatBytes(result.size_bytes)}
+                  </span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
       </Card.Content>
     </Card.Root>
   {/if}

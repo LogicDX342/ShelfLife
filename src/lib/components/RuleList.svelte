@@ -11,17 +11,13 @@
   let {
     rules,
     loading = false,
-    testingRuleId = null,
     onEdit,
-    onTest,
     onDelete,
     onToggleEnabled,
   } = $props<{
     rules: AutomationRule[];
     loading?: boolean;
-    testingRuleId?: string | null;
     onEdit: (rule: AutomationRule) => void;
-    onTest: (rule: AutomationRule) => void;
     onDelete: (rule: AutomationRule) => void;
     onToggleEnabled: (rule: AutomationRule) => void;
   }>();
@@ -38,14 +34,7 @@
 {:else}
   <section class="space-y-3">
     {#each rules as rule (rule.id)}
-      <RuleCard
-        {rule}
-        testing={testingRuleId === rule.id}
-        {onEdit}
-        {onTest}
-        {onDelete}
-        {onToggleEnabled}
-      />
+      <RuleCard {rule} {onEdit} {onDelete} {onToggleEnabled} />
     {/each}
   </section>
 {/if}

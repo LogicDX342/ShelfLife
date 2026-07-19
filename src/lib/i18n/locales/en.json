@@ -105,7 +105,6 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "testRule": "Test Rule",
-    "testResults": "Test Results",
     "editRule": "Edit Rule: {name}",
     "errorDelete": "Could not delete rule.",
     "errorUpdateStatus": "Could not update rule status.",
@@ -118,8 +117,6 @@
     "timingAfterExpiry": "After expiry",
     "timingOnArrival": "On detection",
     "edit": "Edit",
-    "testing": "Testing...",
-    "clearResults": "Clear Results",
     "errorSelectFolder": "Could not select folder.",
     "errorSaveRule": "Could not save rule.",
     "generalSettings": "General Settings",
@@ -150,9 +147,11 @@
     "renameTemplate": "Optional Rename Template",
     "saveRule": "Save Rule",
     "testResultsCount": "Dry Run Match Results ({count} files matched)",
+    "testNoMatches": "No files matched this rule. Check your conditions or watch target path.",
     "deleteConfirmTitle": "Delete Automation Rule",
     "deleteConfirmText": "Are you sure you want to delete this rule?",
-    "delete": "Delete"
+    "delete": "Delete",
+    "backToRules": "Back to Rules"
   },
   "audit": {
     "title": "Audit Log & History",

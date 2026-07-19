@@ -6,18 +6,9 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import type { AutomationRule, RuleAction, RuleMode, RuleTiming } from '$lib/types';
 
-  let {
-    rule,
-    testing = false,
-    onEdit,
-    onTest,
-    onDelete,
-    onToggleEnabled,
-  } = $props<{
+  let { rule, onEdit, onDelete, onToggleEnabled } = $props<{
     rule: AutomationRule;
-    testing?: boolean;
     onEdit: (rule: AutomationRule) => void;
-    onTest: (rule: AutomationRule) => void;
     onDelete: (rule: AutomationRule) => void;
     onToggleEnabled: (rule: AutomationRule) => void;
   }>();
@@ -110,18 +101,6 @@
     <div class="flex items-center gap-1.5">
       <Button variant="outline" onclick={() => onEdit(rule)} aria-label="Edit Rule">
         {i18n.t('rules.edit')}
-      </Button>
-      <Button
-        variant="outline"
-        onclick={() => onTest(rule)}
-        disabled={testing}
-        aria-label="Test Rule"
-      >
-        {#if testing}
-          {i18n.t('rules.testing')}
-        {:else}
-          {i18n.t('rules.testRule')}
-        {/if}
       </Button>
       <Button variant="destructive" onclick={() => onDelete(rule)} aria-label="Delete Rule">
         {i18n.t('rules.delete')}

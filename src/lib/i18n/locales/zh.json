@@ -105,7 +105,6 @@
     "enabled": "已启用",
     "disabled": "已禁用",
     "testRule": "测试规则",
-    "testResults": "测试结果",
     "editRule": "编辑规则：{name}",
     "errorDelete": "删除规则失败。",
     "errorUpdateStatus": "更新规则状态失败。",
@@ -118,8 +117,6 @@
     "timingAfterExpiry": "文件过期后",
     "timingOnArrival": "检测到新文件时",
     "edit": "编辑",
-    "testing": "测试中…",
-    "clearResults": "清除结果",
     "errorSelectFolder": "选择文件夹失败。",
     "errorSaveRule": "保存规则失败。",
     "generalSettings": "通用设置",
@@ -150,9 +147,11 @@
     "renameTemplate": "重命名模板（可选）",
     "saveRule": "保存规则",
     "testResultsCount": "空运行匹配结果（匹配 {count} 个文件）",
+    "testNoMatches": "没有文件匹配此规则。请检查匹配条件或监控目标路径。",
     "deleteConfirmTitle": "删除自动化规则",
     "deleteConfirmText": "确定要删除该规则吗？",
-    "delete": "删除"
+    "delete": "删除",
+    "backToRules": "返回规则列表"
   },
   "audit": {
     "title": "审计日志与历史",
