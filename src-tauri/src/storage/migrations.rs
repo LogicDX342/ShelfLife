@@ -1,6 +1,6 @@
 use diesel::prelude::*;
 use diesel::sql_query;
-use diesel::sql_types::{Nullable, Text};
+use diesel::sql_types::{Integer, Nullable, Text};
 use diesel::sqlite::SqliteConnection;
 use url::Url;
 
@@ -17,6 +17,10 @@ pub(super) fn migrate(conn: &mut SqliteConnection, current_version: i64) -> Resu
                     migrate_v1_to_v2(conn)?;
                     2
                 }
+                2 => {
+                    migrate_v2_to_v3(conn)?;
+                    3
+                }
                 unsupported => {
                     return Err(AppError::with_details(
                         "DATABASE_ERROR",
@@ -31,6 +35,33 @@ pub(super) fn migrate(conn: &mut SqliteConnection, current_version: i64) -> Resu
         sql_query(format!("PRAGMA user_version = {SCHEMA_VERSION}")).execute(conn)?;
         Ok(())
     })
+}
+
+fn migrate_v2_to_v3(conn: &mut SqliteConnection) -> Result<(), AppError> {
+    let table = sql_query(
+        "SELECT EXISTS(
+             SELECT 1 FROM sqlite_master
+             WHERE type = 'table' AND name = 'automation_rules'
+         ) AS present",
+    )
+    .get_result::<TableExistsRow>(conn)?;
+    if table.present == 0 {
+        return Ok(());
+    }
+
+    sql_query(
+        "ALTER TABLE automation_rules
+         ADD COLUMN timing_kind TEXT NOT NULL DEFAULT 'after_seconds'
+         CHECK (timing_kind IN ('on_arrival', 'after_seconds'))",
+    )
+    .execute(conn)?;
+    Ok(())
+}
+
+#[derive(QueryableByName)]
+struct TableExistsRow {
+    #[diesel(sql_type = Integer)]
+    present: i32,
 }
 
 fn migrate_v1_to_v2(conn: &mut SqliteConnection) -> Result<(), AppError> {
@@ -179,7 +210,7 @@ mod tests {
 
     use diesel::prelude::*;
     use diesel::sql_query;
-    use diesel::sql_types::{Integer, Nullable, Text};
+    use diesel::sql_types::{BigInt, Integer, Nullable, Text};
     use uuid::Uuid;
 
     use crate::models::FileDecayState;
@@ -243,7 +274,7 @@ mod tests {
         let version = sql_query("PRAGMA user_version")
             .get_result::<UserVersionRow>(&mut conn)
             .expect("schema version should load");
-        assert_eq!(version.user_version, 2);
+        assert_eq!(version.user_version, 3);
 
         drop(conn);
         drop(db);
@@ -266,6 +297,46 @@ mod tests {
         fs::remove_dir_all(root).expect("database directory should be removed");
     }
 
+    #[test]
+    fn opening_v2_database_preserves_rule_ttl_as_after_seconds() {
+        let root = std::env::temp_dir().join(format!("shelflife-v2-rule-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("migration fixture directory should be created");
+        let database_path = root.join("test.sqlite");
+        let database_url = database_path.to_string_lossy().into_owned();
+        let mut conn =
+            SqliteConnection::establish(&database_url).expect("legacy database should connect");
+
+        for statement in V2_RULE_FIXTURE_SQL
+            .split(';')
+            .map(str::trim)
+            .filter(|sql| !sql.is_empty())
+        {
+            sql_query(statement)
+                .execute(&mut conn)
+                .expect("v2 rule schema should be created");
+        }
+        drop(conn);
+
+        let db = storage::open_database(&database_path).expect("v2 database should migrate");
+        let mut conn = db.connect().expect("migrated database should connect");
+        let rule = sql_query(
+            "SELECT rules.timing_kind, rules.ttl_seconds, extensions.value AS extension
+             FROM automation_rules AS rules
+             JOIN rule_extensions AS extensions ON extensions.rule_id = rules.id
+             WHERE rules.id = 'rule-a' AND extensions.ordinal = 0",
+        )
+        .get_result::<MigratedRuleRow>(&mut conn)
+        .expect("migrated rule should load");
+
+        assert_eq!(rule.timing_kind, "after_seconds");
+        assert_eq!(rule.ttl_seconds, 86_400);
+        assert_eq!(rule.extension, "zip");
+
+        drop(conn);
+        drop(db);
+        fs::remove_dir_all(root).expect("migration fixture should be removed");
+    }
+
     #[derive(QueryableByName)]
     struct UserVersionRow {
         #[diesel(sql_type = Integer)]
@@ -277,6 +348,34 @@ mod tests {
         #[diesel(sql_type = Nullable<Text>)]
         default_move_destination: Option<String>,
     }
+
+    #[derive(QueryableByName)]
+    struct MigratedRuleRow {
+        #[diesel(sql_type = Text)]
+        timing_kind: String,
+        #[diesel(sql_type = BigInt)]
+        ttl_seconds: i64,
+        #[diesel(sql_type = Text)]
+        extension: String,
+    }
+
+    const V2_RULE_FIXTURE_SQL: &str = r#"
+CREATE TABLE automation_rules (
+    id TEXT PRIMARY KEY,
+    ttl_seconds INTEGER NOT NULL
+);
+
+CREATE TABLE rule_extensions (
+    rule_id TEXT NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (rule_id, ordinal)
+);
+
+INSERT INTO automation_rules (id, ttl_seconds) VALUES ('rule-a', 86400);
+INSERT INTO rule_extensions (rule_id, ordinal, value) VALUES ('rule-a', 0, 'zip');
+PRAGMA user_version = 2;
+"#;
 
     const V1_FIXTURE_SQL: &str = r#"
 CREATE TABLE app_config (

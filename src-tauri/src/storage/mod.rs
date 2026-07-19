@@ -15,11 +15,12 @@ use diesel::sql_types::{BigInt, Integer, Text};
 use diesel::sqlite::SqliteConnection;
 
 use crate::models::{
-    AppConfig, AppError, AuditEntry, CloseBehavior, RuleAction, RuleMode, TrackedFile, WatchTarget,
+    AppConfig, AppError, AuditEntry, CloseBehavior, RuleAction, RuleMode, RuleTiming, TrackedFile,
+    WatchTarget,
 };
 use crate::storage::schema::{app_config, watch_targets};
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Clone)]
 pub struct Database {
@@ -153,6 +154,7 @@ CREATE TABLE IF NOT EXISTS automation_rules (
     priority INTEGER NOT NULL,
     watch_path TEXT NOT NULL,
     ttl_seconds INTEGER NOT NULL,
+    timing_kind TEXT NOT NULL CHECK (timing_kind IN ('on_arrival', 'after_seconds')),
     mode TEXT NOT NULL CHECK (mode IN ('preview_only', 'ask_first', 'automatic')),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -588,6 +590,27 @@ pub(crate) fn rule_mode_from_label(value: &str) -> Result<RuleMode, AppError> {
         "automatic" => Ok(RuleMode::Automatic),
         other => Err(storage_data_error(
             "Stored rule mode is not recognized.",
+            other,
+        )),
+    }
+}
+
+pub(crate) fn rule_timing_parts(timing: &RuleTiming) -> (&'static str, u64) {
+    match timing {
+        RuleTiming::OnArrival => ("on_arrival", 0),
+        RuleTiming::AfterSeconds(seconds) => ("after_seconds", *seconds),
+    }
+}
+
+pub(crate) fn rule_timing_from_parts(kind: &str, seconds: i64) -> Result<RuleTiming, AppError> {
+    match kind {
+        "on_arrival" => Ok(RuleTiming::OnArrival),
+        "after_seconds" => Ok(RuleTiming::AfterSeconds(i64_to_u64(
+            seconds,
+            "automation_rules.ttl_seconds",
+        )?)),
+        other => Err(storage_data_error(
+            "Stored rule timing is not recognized.",
             other,
         )),
     }

@@ -8,6 +8,12 @@ pub enum RuleMode {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum RuleTiming {
+    OnArrival,
+    AfterSeconds(u64),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum RuleAction {
     Trash,
     Move {
@@ -53,7 +59,7 @@ pub struct AutomationRule {
     pub enabled: bool,
     pub priority: i32,
     pub watch_path: String,
-    pub ttl_seconds: u64,
+    pub timing: RuleTiming,
     pub conditions: RuleConditions,
     pub action: RuleAction,
     pub mode: RuleMode,

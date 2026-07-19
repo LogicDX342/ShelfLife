@@ -13,6 +13,11 @@ struct ReconciliationPlan {
     to_remove: Vec<String>,
 }
 
+pub struct IncrementalReconciliationOutcome {
+    pub report: ReconciliationReport,
+    pub arrival_candidates: Vec<AutomaticRuleCandidate>,
+}
+
 struct ScannedFile {
     path: PathBuf,
     metadata: fs::Metadata,
@@ -27,7 +32,10 @@ struct ObservationContext<'a> {
 
 use crate::engine::paths::PathScope;
 use crate::engine::quiescence::{is_hidden_path, is_system_directory, is_transient_path};
-use crate::engine::{project_watched_file, tracked_file_from_metadata};
+use crate::engine::{
+    arrival_rule_candidate, project_watched_file, tracked_file_from_metadata,
+    AutomaticRuleCandidate, TrackedRuleProjection,
+};
 use crate::models::{AppConfig, AppError, ReconciliationReport, TrackedFile, WatchTarget};
 use crate::rules::CompiledRuleSet;
 use crate::storage::{self, Database};
@@ -100,6 +108,7 @@ pub fn reconcile_with_report_with_progress(
                     existing_map.get(&path_string),
                     &context,
                 )
+                .map(|result| result.map(|projection| projection.tracked))
             })
             .collect();
 
@@ -166,7 +175,7 @@ fn plan_reconciliation(
 pub fn reconcile_paths(
     db: &Database,
     paths: Vec<PathBuf>,
-) -> Result<ReconciliationReport, AppError> {
+) -> Result<IncrementalReconciliationOutcome, AppError> {
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
     let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
@@ -188,6 +197,7 @@ pub fn reconcile_paths(
     }
 
     let mut observations = Vec::new();
+    let mut arrival_candidates = Vec::new();
     let mut excluded_paths = HashSet::new();
 
     for path in &paths {
@@ -213,21 +223,30 @@ pub fn reconcile_paths(
             rules: &rule_set,
             now,
         };
-        if let Some(observation) = observe_path(path, existing_map.get(&path_string), &context)? {
-            observations.push(observation);
+        if let Some(projection) = observe_path(path, existing_map.get(&path_string), &context)? {
+            if !existing_map.contains_key(&path_string) {
+                if let Some(candidate) = arrival_rule_candidate(&projection) {
+                    arrival_candidates.push(candidate);
+                }
+            }
+            observations.push(projection.tracked);
         }
     }
 
     let paths_to_remove =
         paths_to_remove_for(&existing_map, &scope, &observations, &excluded_paths);
-    reconcile_observations(db, &existing_map, observations, &paths_to_remove, None)
+    let report = reconcile_observations(db, &existing_map, observations, &paths_to_remove, None)?;
+    Ok(IncrementalReconciliationOutcome {
+        report,
+        arrival_candidates,
+    })
 }
 
 fn observe_path(
     path: &Path,
     existing: Option<&TrackedFile>,
     context: &ObservationContext<'_>,
-) -> Result<Option<TrackedFile>, AppError> {
+) -> Result<Option<TrackedRuleProjection>, AppError> {
     // Single stat — symlink_metadata covers both symlink detection and file metadata.
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
@@ -241,7 +260,7 @@ fn observe_path_with_metadata(
     metadata: &fs::Metadata,
     existing: Option<&TrackedFile>,
     context: &ObservationContext<'_>,
-) -> Result<Option<TrackedFile>, AppError> {
+) -> Result<Option<TrackedRuleProjection>, AppError> {
     if is_transient_path(path) {
         return Ok(None);
     }
@@ -253,10 +272,12 @@ fn observe_path_with_metadata(
     }
     let tracked =
         tracked_file_from_metadata(path, metadata, existing, context.config, &context.target.id);
-    let tracked =
-        project_watched_file(tracked, context.config, context.rules, context.now)?.tracked;
-
-    Ok(Some(tracked))
+    Ok(Some(project_watched_file(
+        tracked,
+        context.config,
+        context.rules,
+        context.now,
+    )?))
 }
 
 fn paths_to_remove_for(
@@ -684,7 +705,7 @@ mod tests {
         let report = reconcile_paths(&fixture.db, vec![file.clone()])
             .expect("incremental reconciliation should succeed");
 
-        assert_eq!(report.removed, vec![path_string(&file)]);
+        assert_eq!(report.report.removed, vec![path_string(&file)]);
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
@@ -746,7 +767,7 @@ mod tests {
                 .expect("tracked lookup should work")
                 .is_none()
         );
-        assert_eq!(report.removed, vec![path_string(&file)]);
+        assert_eq!(report.report.removed, vec![path_string(&file)]);
     }
 
     #[test]
@@ -930,7 +951,7 @@ mod tests {
             enabled: true,
             priority: 10,
             watch_path: path_string(&fixture.watch),
-            ttl_seconds: 24 * 60 * 60, // 1 day
+            timing: crate::models::RuleTiming::AfterSeconds(24 * 60 * 60), // 1 day
             conditions: crate::models::RuleConditions {
                 extensions: vec![String::from("zip")],
                 filename_globs: Vec::new(),
@@ -975,7 +996,7 @@ mod tests {
             enabled: true,
             priority: 10,
             watch_path: path_string(&fixture.watch),
-            ttl_seconds: 1,
+            timing: crate::models::RuleTiming::AfterSeconds(1),
             conditions: crate::models::RuleConditions {
                 extensions: vec![String::from("zip")],
                 filename_globs: Vec::new(),

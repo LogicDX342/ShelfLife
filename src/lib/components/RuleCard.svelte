@@ -4,7 +4,7 @@
   import * as Card from '$lib/components/ui/card';
   import { Switch } from '$lib/components/ui/switch';
   import { i18n } from '$lib/i18n/i18n.svelte';
-  import type { AutomationRule, RuleAction, RuleMode } from '$lib/types';
+  import type { AutomationRule, RuleAction, RuleMode, RuleTiming } from '$lib/types';
 
   let {
     rule,
@@ -36,6 +36,12 @@
 
   function folderName(path: string) {
     return path.split(/[\\/]/).pop() || path;
+  }
+
+  function timingLabel(timing: RuleTiming) {
+    return timing === 'OnArrival'
+      ? i18n.t('rules.timingOnArrival')
+      : i18n.t('rules.ttlDays', { days: Math.round(timing.AfterSeconds / 86400) });
   }
 </script>
 
@@ -83,7 +89,7 @@
       {/if}
       {#if rule.action !== 'Ignore'}
         <Badge variant="secondary">
-          {i18n.t('rules.ttlDays', { days: Math.round(rule.ttl_seconds / 86400) })}
+          {timingLabel(rule.timing)}
         </Badge>
       {/if}
     </div>

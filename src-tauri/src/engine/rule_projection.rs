@@ -1,7 +1,7 @@
 use crate::engine::freshness::classify_decay_state;
 use crate::models::{
     AppConfig, AppError, AutomationRule, Expiry, FileDecayState, RuleAction, RuleMatchExplanation,
-    RuleMode, TrackedFile,
+    RuleMode, RuleTiming, TrackedFile,
 };
 use crate::rules::{CompiledRuleSet, RuleDecision, RuleDecisionScope, RuleVerdict};
 
@@ -12,7 +12,8 @@ pub struct TrackedRuleProjection {
 
 #[derive(Debug, Clone)]
 pub struct AutomaticRuleCandidate {
-    pub expires_at: u64,
+    pub file_path: String,
+    pub eligible_at: Option<u64>,
     pub rule: AutomationRule,
     pub explanation: RuleMatchExplanation,
 }
@@ -38,34 +39,53 @@ pub fn automatic_rule_candidate(
     let Expiry::At(expires_at) = file.expiry else {
         return Ok(None);
     };
-    if matches!(
-        file.state,
-        FileDecayState::ManuallyIgnored | FileDecayState::RuleIgnored
-    ) {
-        return Ok(None);
-    }
-
     let projection = project_watched_file(
         file.clone(),
         config,
         rule_set,
         crate::engine::freshness::now_seconds(),
     )?;
-    match projection.decision.verdict {
+    Ok(match_candidate(&projection, Some(expires_at)))
+}
+
+pub fn arrival_rule_candidate(
+    projection: &TrackedRuleProjection,
+) -> Option<AutomaticRuleCandidate> {
+    match_candidate(projection, None)
+}
+
+fn match_candidate(
+    projection: &TrackedRuleProjection,
+    eligible_at: Option<u64>,
+) -> Option<AutomaticRuleCandidate> {
+    let file = &projection.tracked;
+    if matches!(
+        file.state,
+        FileDecayState::ManuallyIgnored | FileDecayState::RuleIgnored
+    ) {
+        return None;
+    }
+
+    match &projection.decision.verdict {
         RuleVerdict::Matched {
             effective_rule,
             effective_explanation,
             ..
         } if matches!(effective_rule.mode, RuleMode::Automatic)
+            && matches!(
+                (&effective_rule.timing, eligible_at),
+                (RuleTiming::OnArrival, None) | (RuleTiming::AfterSeconds(_), Some(_))
+            )
             && !matches!(effective_rule.action, RuleAction::Ignore) =>
         {
-            Ok(Some(AutomaticRuleCandidate {
-                expires_at,
-                rule: *effective_rule,
-                explanation: *effective_explanation,
-            }))
+            Some(AutomaticRuleCandidate {
+                file_path: file.path.clone(),
+                eligible_at,
+                rule: effective_rule.as_ref().clone(),
+                explanation: effective_explanation.as_ref().clone(),
+            })
         }
-        RuleVerdict::Matched { .. } | RuleVerdict::Unmatched => Ok(None),
+        RuleVerdict::Matched { .. } | RuleVerdict::Unmatched => None,
     }
 }
 
@@ -84,10 +104,10 @@ fn apply_rule_decision(
     let (matched_rule_ttl, matched_rule_is_ignore) = match &decision.verdict {
         RuleVerdict::Matched {
             effective_rule,
-            rule_ttl_seconds,
+            expiry_ttl_seconds,
             ..
         } => (
-            *rule_ttl_seconds,
+            *expiry_ttl_seconds,
             !matches!(effective_rule.mode, RuleMode::PreviewOnly)
                 && matches!(effective_rule.action, RuleAction::Ignore),
         ),
@@ -98,6 +118,7 @@ fn apply_rule_decision(
         if let Some(ttl) = matched_rule_ttl {
             tracked.expiry = Expiry::At(tracked.freshness_at + ttl);
         } else {
+            // OnArrival rules retain normal decay as fallback if their immediate action fails.
             tracked.expiry = Expiry::At(tracked.freshness_at + config.default_ttl_seconds);
         }
     }
@@ -118,11 +139,13 @@ mod tests {
     use std::fs;
 
     use crate::engine::freshness::{now_seconds, tracked_file_from_metadata};
-    use crate::models::{AppConfig, AutomationRule, Expiry, FileDecayState, RuleAction, RuleMode};
+    use crate::models::{
+        AppConfig, AutomationRule, Expiry, FileDecayState, RuleAction, RuleMode, RuleTiming,
+    };
     use crate::rules::CompiledRuleSet;
     use crate::storage::test_util::Fixture;
 
-    use super::{automatic_rule_candidate, project_watched_file};
+    use super::{arrival_rule_candidate, automatic_rule_candidate, project_watched_file};
 
     #[test]
     fn automatic_rule_applies_matched_ids_and_rule_ttl() {
@@ -156,12 +179,12 @@ mod tests {
         preview_rule.id = String::from("preview-zip-rule");
         preview_rule.priority = 20;
         preview_rule.mode = RuleMode::PreviewOnly;
-        preview_rule.ttl_seconds = 1;
+        preview_rule.timing = RuleTiming::AfterSeconds(1);
         let mut automatic_rule = fixture.rule();
         automatic_rule.id = String::from("auto-zip-rule");
         automatic_rule.priority = 10;
         automatic_rule.mode = RuleMode::Automatic;
-        automatic_rule.ttl_seconds = 1;
+        automatic_rule.timing = RuleTiming::AfterSeconds(1);
         let rule_set =
             CompiledRuleSet::compile(vec![automatic_rule.clone(), preview_rule], &config)
                 .expect("rule set should compile");
@@ -180,7 +203,7 @@ mod tests {
         );
         assert_eq!(
             projection.tracked.expiry,
-            Expiry::At(projection.tracked.freshness_at + automatic_rule.ttl_seconds)
+            Expiry::At(projection.tracked.freshness_at + 1)
         );
         let candidate = candidate.expect("lower automatic rule should remain actionable");
         assert_eq!(candidate.rule.id, automatic_rule.id);
@@ -194,7 +217,7 @@ mod tests {
         let mut rule = fixture.rule();
         rule.mode = RuleMode::Automatic;
         rule.action = RuleAction::Ignore;
-        rule.ttl_seconds = 1;
+        rule.timing = RuleTiming::AfterSeconds(1);
 
         let rule_set =
             CompiledRuleSet::compile(vec![rule], &config).expect("rule set should compile");
@@ -240,7 +263,7 @@ mod tests {
             .expect("candidate should evaluate")
             .expect("automatic rule should be actionable");
 
-        assert_eq!(candidate.expires_at, expires_at);
+        assert_eq!(candidate.eligible_at, Some(expires_at));
         assert_eq!(candidate.rule.id, automatic_rule.id);
         assert_eq!(
             candidate.explanation.rule_id,
@@ -284,6 +307,39 @@ mod tests {
         assert!(
             automatic_rule_candidate(&ignored, &config, &automatic_rule_set)
                 .expect("candidate should evaluate")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn arrival_rule_retains_default_expiry_until_immediate_move_succeeds() {
+        let fixture = Fixture::new("shelflife-arrival-rule-projection");
+        let config = fixture.config();
+        let tracked = tracked_fixture_file(&fixture, &config, "download.zip");
+        let mut rule = fixture.rule();
+        rule.mode = RuleMode::Automatic;
+        rule.timing = RuleTiming::OnArrival;
+        rule.action = RuleAction::Move {
+            destination_folder: fixture.outside.to_string_lossy().into_owned(),
+            rename_template: None,
+        };
+        let rule_set =
+            CompiledRuleSet::compile(vec![rule.clone()], &config).expect("rule set should compile");
+
+        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())
+            .expect("projection should build");
+        let arrival =
+            arrival_rule_candidate(&projection).expect("arrival rule should be actionable");
+
+        assert_eq!(arrival.rule.id, rule.id);
+        assert_eq!(arrival.eligible_at, None);
+        assert_eq!(
+            projection.tracked.expiry,
+            Expiry::At(projection.tracked.freshness_at + AppConfig::default().default_ttl_seconds)
+        );
+        assert!(
+            automatic_rule_candidate(&projection.tracked, &config, &rule_set)
+                .expect("expiry candidate should evaluate")
                 .is_none()
         );
     }

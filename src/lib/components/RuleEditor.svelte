@@ -5,6 +5,7 @@
   import * as Card from '$lib/components/ui/card';
   import * as Field from '$lib/components/ui/field';
   import { Input } from '$lib/components/ui/input';
+  import * as InputGroup from '$lib/components/ui/input-group';
   import * as Select from '$lib/components/ui/select';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
@@ -13,9 +14,13 @@
     RuleAction,
     RuleMatchExplanation,
     RuleMode,
+    RuleTiming,
     SizeCondition,
   } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
+
+  type ActionKind = 'Ignore' | 'Trash' | 'Move';
+  type TimingKind = 'OnArrival' | 'AfterSeconds';
 
   let {
     onSaved,
@@ -32,8 +37,9 @@
   let watchPath = $state('');
   let priority = $state(0);
   let ttlDays = $state(30);
+  let timingKind = $state<TimingKind>('AfterSeconds');
   let mode = $state<RuleMode>('PreviewOnly');
-  let actionKind = $state<'Ignore' | 'Trash' | 'Move'>('Ignore');
+  let actionKind = $state<ActionKind>('Ignore');
   let destinationFolder = $state('');
   let renameTemplate = $state('');
   let extensions = $state('');
@@ -99,29 +105,39 @@
     return 'Ignore';
   }
 
-  function actionKindFromRule(action: RuleAction) {
-    if (action === 'Trash') return 'Trash';
-    if (action === 'Ignore') return 'Ignore';
-    if ('Move' in action) return 'Move';
-    return 'Ignore';
+  function ruleTiming(): RuleTiming {
+    if (timingKind === 'OnArrival') return 'OnArrival';
+    return { AfterSeconds: Math.max(1, ttlDays) * 24 * 60 * 60 };
   }
 
   function applyRule(next: AutomationRule | null) {
+    const nextActionKind: ActionKind = next
+      ? typeof next.action === 'object'
+        ? 'Move'
+        : next.action
+      : 'Ignore';
+    const nextMoveAction = next && typeof next.action === 'object' ? next.action.Move : null;
+    const nextTimingKind =
+      nextActionKind === 'Move' && next?.timing === 'OnArrival' && next?.mode === 'Automatic'
+        ? 'OnArrival'
+        : 'AfterSeconds';
+
     name = next?.name ?? '';
     enabled = next?.enabled ?? true;
     watchPath = next?.watch_path ?? '';
     priority = next?.priority ?? 0;
-    ttlDays = next ? Math.max(1, Math.round(next.ttl_seconds / 86400)) : 30;
-    mode = next?.mode ?? 'PreviewOnly';
-    actionKind = next ? actionKindFromRule(next.action) : 'Ignore';
-    destinationFolder =
-      next && typeof next.action === 'object' && 'Move' in next.action
-        ? next.action.Move.destination_folder
-        : '';
-    renameTemplate =
-      next && typeof next.action === 'object' && 'Move' in next.action
-        ? (next.action.Move.rename_template ?? '')
-        : '';
+    actionKind = nextActionKind;
+    mode =
+      nextActionKind === 'Ignore' && next?.mode === 'AskFirst'
+        ? 'PreviewOnly'
+        : (next?.mode ?? 'PreviewOnly');
+    timingKind = nextTimingKind;
+    ttlDays =
+      next && typeof next.timing === 'object'
+        ? Math.max(1, Math.round(next.timing.AfterSeconds / 86400))
+        : 30;
+    destinationFolder = nextMoveAction?.destination_folder ?? '';
+    renameTemplate = nextMoveAction?.rename_template ?? '';
     extensions = next?.conditions.extensions.join(', ') ?? '';
     filenameGlobs = next?.conditions.filename_globs.join(', ') ?? '';
     filenameRegexes = next?.conditions.filename_regexes.join(', ') ?? '';
@@ -150,6 +166,12 @@
   });
 
   $effect(() => {
+    if (actionKind !== 'Move') {
+      timingKind = 'AfterSeconds';
+    }
+    if (timingKind === 'OnArrival' && mode !== 'Automatic') {
+      mode = 'Automatic';
+    }
     if (actionKind === 'Ignore' && mode === 'AskFirst') {
       mode = 'PreviewOnly';
     }
@@ -163,7 +185,7 @@
       enabled,
       priority,
       watch_path: watchPath,
-      ttl_seconds: Math.max(1, ttlDays) * 24 * 60 * 60,
+      timing: ruleTiming(),
       conditions: {
         extensions: csv(extensions),
         filename_globs: csv(filenameGlobs),
@@ -178,15 +200,11 @@
     };
   }
 
-  function reset() {
-    applyRule(null);
-  }
-
   async function submit() {
     saving = true;
     try {
       await saveRule(buildRule());
-      if (!rule) reset();
+      if (!rule) applyRule(null);
       await onSaved();
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('rules.errorSaveRule')));
@@ -206,12 +224,6 @@
     }
   }
 
-  function modeLabel(value: RuleMode) {
-    if (value === 'AskFirst') return i18n.t('rules.modeAskFirst');
-    if (value === 'Automatic') return i18n.t('rules.modeAutomatic');
-    return i18n.t('rules.modePreviewOnly');
-  }
-
   function sizeKindLabel(value: typeof sizeKind) {
     if (value === 'LessThan') return i18n.t('rules.lessThan');
     if (value === 'GreaterThan') return i18n.t('rules.greaterThan');
@@ -219,10 +231,16 @@
     return i18n.t('rules.anySize');
   }
 
-  function actionKindLabel(value: typeof actionKind) {
-    if (value === 'Trash') return i18n.t('file.trash');
+  function actionKindLabel(value: ActionKind) {
+    if (value === 'Trash') return i18n.t('rules.actionTrashLabel');
     if (value === 'Move') return i18n.t('rules.actionMoveLabel');
     return i18n.t('rules.actionIgnoreLabel');
+  }
+
+  function modeLabel(value: RuleMode) {
+    if (value === 'AskFirst') return i18n.t('rules.modeAskFirst');
+    if (value === 'Automatic') return i18n.t('rules.modeAutomatic');
+    return i18n.t('rules.modePreviewOnly');
   }
 </script>
 
@@ -268,26 +286,6 @@
         <Field.Field>
           <Field.FieldLabel for="rule-priority">{i18n.t('rules.priority')}</Field.FieldLabel>
           <Input id="rule-priority" type="number" bind:value={priority} />
-        </Field.Field>
-
-        <Field.Field>
-          <Field.FieldLabel for="rule-mode">{i18n.t('rules.mode')}</Field.FieldLabel>
-          <Select.Root type="single" bind:value={mode}>
-            <Select.Trigger id="rule-mode" class="w-full">
-              <span data-slot="select-value">{modeLabel(mode)}</span>
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Group>
-                <Select.Item value="PreviewOnly" label={i18n.t('rules.modePreviewOnly')} />
-                <Select.Item
-                  value="AskFirst"
-                  label={i18n.t('rules.modeAskFirst')}
-                  disabled={actionKind === 'Ignore'}
-                />
-                <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
-              </Select.Group>
-            </Select.Content>
-          </Select.Root>
         </Field.Field>
       </Field.FieldGroup>
     </Card.Content>
@@ -384,70 +382,123 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- Section 3: Action Execution -->
+  <!-- Section 3: Rule behavior -->
   <Card.Root>
-    <Card.Header><Card.Title>{i18n.t('rules.action')}</Card.Title></Card.Header>
+    <Card.Header>
+      <Card.Title>{i18n.t('rules.behavior')}</Card.Title>
+      <Card.Description>{i18n.t('rules.behaviorDescription')}</Card.Description>
+    </Card.Header>
     <Card.Content>
-      <Field.FieldGroup class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Field.Field>
-          <Field.FieldLabel for="action-kind">{i18n.t('rules.action')}</Field.FieldLabel>
-          <Select.Root type="single" bind:value={actionKind}>
-            <Select.Trigger id="action-kind" class="w-full">
-              <span data-slot="select-value">{actionKindLabel(actionKind)}</span>
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Group>
-                <Select.Item value="Ignore" label={i18n.t('rules.actionIgnoreLabel')} />
-                <Select.Item value="Trash" label={i18n.t('file.trash')} />
-                <Select.Item value="Move" label={i18n.t('rules.actionMoveLabel')} />
-              </Select.Group>
-            </Select.Content>
-          </Select.Root>
-        </Field.Field>
+      <Field.FieldGroup>
+        <Field.FieldGroup class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Field.Field>
+            <Field.FieldLabel for="action-kind">{i18n.t('rules.action')}</Field.FieldLabel>
+            <Select.Root type="single" bind:value={actionKind}>
+              <Select.Trigger id="action-kind" class="w-full">
+                <span data-slot="select-value">{actionKindLabel(actionKind)}</span>
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Group>
+                  <Select.Item value="Ignore" label={i18n.t('rules.actionIgnoreLabel')} />
+                  <Select.Item value="Trash" label={i18n.t('rules.actionTrashLabel')} />
+                  <Select.Item value="Move" label={i18n.t('rules.actionMoveLabel')} />
+                </Select.Group>
+              </Select.Content>
+            </Select.Root>
+          </Field.Field>
 
-        <Field.Field>
-          <Field.FieldLabel for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Field.FieldLabel>
-          <Input
-            id="ttl-days"
-            min="1"
-            type="number"
-            bind:value={ttlDays}
-            disabled={actionKind === 'Ignore'}
-          />
-        </Field.Field>
+          <Field.Field>
+            <Field.FieldLabel for="rule-mode">{i18n.t('rules.mode')}</Field.FieldLabel>
+            <Select.Root type="single" bind:value={mode} disabled={timingKind === 'OnArrival'}>
+              <Select.Trigger id="rule-mode" class="w-full">
+                <span data-slot="select-value">{modeLabel(mode)}</span>
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Group>
+                  <Select.Item
+                    value="PreviewOnly"
+                    label={i18n.t('rules.modePreviewOnly')}
+                    disabled={timingKind === 'OnArrival'}
+                  />
+                  <Select.Item
+                    value="AskFirst"
+                    label={i18n.t('rules.modeAskFirst')}
+                    disabled={actionKind === 'Ignore' || timingKind === 'OnArrival'}
+                  />
+                  <Select.Item value="Automatic" label={i18n.t('rules.modeAutomatic')} />
+                </Select.Group>
+              </Select.Content>
+            </Select.Root>
+          </Field.Field>
+        </Field.FieldGroup>
 
-        <Field.Field>
-          <Field.FieldLabel for="destination-path"
-            >{i18n.t('rules.destinationPath')}</Field.FieldLabel
-          >
-          <div class="flex gap-2 w-full">
-            <Input
-              id="destination-path"
-              bind:value={destinationFolder}
-              placeholder="C:\SortedFiles"
-              required={actionKind === 'Move'}
-              disabled={actionKind !== 'Move'}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onclick={browseDestinationPath}
-              disabled={actionKind !== 'Move'}
-            >
-              {i18n.t('settings.browse')}
-            </Button>
-          </div>
-        </Field.Field>
-        <Field.Field>
-          <Field.FieldLabel for="rename-template">{i18n.t('rules.renameTemplate')}</Field.FieldLabel
-          >
-          <Input
-            id="rename-template"
-            bind:value={renameTemplate}
-            placeholder={'{date}-{name}.{ext}'}
-            disabled={actionKind !== 'Move'}
-          />
-        </Field.Field>
+        {#if actionKind !== 'Ignore'}
+          <Field.FieldGroup class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {#if actionKind === 'Move'}
+              <Field.Field>
+                <Field.FieldLabel for="rule-timing">{i18n.t('rules.timing')}</Field.FieldLabel>
+                <Select.Root type="single" bind:value={timingKind}>
+                  <Select.Trigger id="rule-timing" class="w-full">
+                    <span data-slot="select-value">
+                      {timingKind === 'OnArrival'
+                        ? i18n.t('rules.timingOnArrival')
+                        : i18n.t('rules.timingAfterExpiry')}
+                    </span>
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      <Select.Item value="AfterSeconds" label={i18n.t('rules.timingAfterExpiry')} />
+                      <Select.Item value="OnArrival" label={i18n.t('rules.timingOnArrival')} />
+                    </Select.Group>
+                  </Select.Content>
+                </Select.Root>
+              </Field.Field>
+            {/if}
+
+            <Field.Field>
+              <Field.FieldLabel for="ttl-days">{i18n.t('rules.ttlDaysLabel')}</Field.FieldLabel>
+              <Input
+                id="ttl-days"
+                min="1"
+                type="number"
+                disabled={timingKind === 'OnArrival'}
+                bind:value={ttlDays}
+              />
+            </Field.Field>
+
+            {#if actionKind === 'Move'}
+              <Field.Field>
+                <Field.FieldLabel for="destination-path"
+                  >{i18n.t('rules.destinationPath')}</Field.FieldLabel
+                >
+                <InputGroup.Root>
+                  <InputGroup.Input
+                    id="destination-path"
+                    bind:value={destinationFolder}
+                    placeholder="C:\SortedFiles"
+                    required
+                  />
+                  <InputGroup.Addon align="inline-end">
+                    <InputGroup.Button onclick={browseDestinationPath}>
+                      {i18n.t('settings.browse')}
+                    </InputGroup.Button>
+                  </InputGroup.Addon>
+                </InputGroup.Root>
+              </Field.Field>
+
+              <Field.Field>
+                <Field.FieldLabel for="rename-template"
+                  >{i18n.t('rules.renameTemplate')}</Field.FieldLabel
+                >
+                <Input
+                  id="rename-template"
+                  bind:value={renameTemplate}
+                  placeholder={'{date}-{name}.{ext}'}
+                />
+              </Field.Field>
+            {/if}
+          </Field.FieldGroup>
+        {/if}
       </Field.FieldGroup>
     </Card.Content>
   </Card.Root>
