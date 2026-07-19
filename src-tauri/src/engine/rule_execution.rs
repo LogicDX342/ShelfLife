@@ -1,7 +1,7 @@
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::engine::automatic_rule_candidate;
+use crate::engine::{automatic_rule_candidate, AutomaticRuleCandidate};
 use crate::models::{
     AppError, AuditActionKind, AuditEntry, AutomationRule, RuleAction, RuleMatchExplanation,
     TrackedFile, UndoStatus,
@@ -20,31 +20,60 @@ pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionRep
     let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
     let now = crate::engine::freshness::now_seconds();
     let files = storage::tracked::list_tracked_files(db)?;
-    let mut failed_attempts = storage::audit::list_failed_automatic_rule_attempts(db)?;
-
-    let mut entries = Vec::new();
-    let mut failures = Vec::new();
+    let mut candidates = Vec::new();
 
     for file in files {
         let Some(candidate) = automatic_rule_candidate(&file, &config, &rule_set)? else {
             continue;
         };
-        if candidate.expires_at > now {
+        let Some(eligible_at) = candidate.eligible_at else {
+            continue;
+        };
+        if eligible_at > now {
             continue;
         }
-        if failed_attempts.contains(&(file.path.clone(), candidate.rule.id.clone())) {
+        candidates.push((file, candidate.rule, candidate.explanation));
+    }
+
+    execute_automatic_rule_candidates(db, candidates)
+}
+
+pub fn execute_arrival_automatic_rules(
+    db: &Database,
+    candidates: &[AutomaticRuleCandidate],
+) -> Result<RuleExecutionReport, AppError> {
+    let mut executions = Vec::with_capacity(candidates.len());
+
+    for candidate in candidates {
+        let Some(file) = storage::tracked::get_tracked_file(db, &candidate.file_path)? else {
+            continue;
+        };
+        executions.push((file, candidate.rule.clone(), candidate.explanation.clone()));
+    }
+
+    execute_automatic_rule_candidates(db, executions)
+}
+
+fn execute_automatic_rule_candidates(
+    db: &Database,
+    candidates: impl IntoIterator<Item = (TrackedFile, AutomationRule, RuleMatchExplanation)>,
+) -> Result<RuleExecutionReport, AppError> {
+    let mut failed_attempts = storage::audit::list_failed_automatic_rule_attempts(db)?;
+    let mut entries = Vec::new();
+    let mut failures = Vec::new();
+
+    for (file, rule, explanation) in candidates {
+        if failed_attempts.contains(&(file.path.clone(), rule.id.clone())) {
             continue;
         }
 
         match crate::engine::executor::execute_automation_rule_action(
             db,
             &file.path,
-            &candidate.rule,
-            candidate.explanation.clone(),
+            &rule,
+            explanation.clone(),
         ) {
-            Ok(entry) => {
-                entries.push(entry);
-            }
+            Ok(entry) => entries.push(entry),
             Err(failure) => {
                 let error = failure.error;
                 let failure_entry = match failure.audit_entry {
@@ -52,14 +81,14 @@ pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionRep
                     None => append_failed_rule_execution_audit_entry(
                         db,
                         &file,
-                        &candidate.rule,
-                        candidate.explanation,
+                        &rule,
+                        explanation,
                         &error,
                     )?,
                 };
                 entries.push(failure_entry);
                 failures.push(error);
-                failed_attempts.insert((file.path.clone(), candidate.rule.id));
+                failed_attempts.insert((file.path, rule.id));
             }
         }
     }
@@ -84,9 +113,12 @@ pub fn next_automatic_rule_execution_delay(
         if failed_attempts.contains(&(file.path.clone(), candidate.rule.id.clone())) {
             continue;
         }
+        let Some(eligible_at) = candidate.eligible_at else {
+            continue;
+        };
         nearest_expiry = Some(match nearest_expiry {
-            Some(existing) => existing.min(candidate.expires_at),
-            None => candidate.expires_at,
+            Some(existing) => existing.min(eligible_at),
+            None => eligible_at,
         });
     }
 
@@ -142,11 +174,50 @@ fn audit_action_kind_for_rule_action(action: &RuleAction) -> AuditActionKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::models::{AuditActionKind, Expiry, RuleAction, RuleMode, UndoStatus};
+    use crate::models::{AuditActionKind, Expiry, RuleAction, RuleMode, RuleTiming, UndoStatus};
     use crate::storage;
     use crate::storage::test_util::{path_string, Fixture};
 
-    use super::execute_expired_automatic_rules;
+    use super::{execute_arrival_automatic_rules, execute_expired_automatic_rules};
+
+    #[test]
+    fn arrival_move_rule_executes_only_for_newly_indexed_paths() {
+        let fixture = Fixture::new("shelflife-arrival-rule-execution");
+        fixture.save_config();
+        let arriving = fixture.write_watch_file("arriving.zip", "body");
+        let existing = fixture.write_watch_file("existing.zip", "body");
+        fixture.track_file(&existing);
+
+        let mut rule = fixture.rule();
+        rule.mode = RuleMode::Automatic;
+        rule.timing = RuleTiming::OnArrival;
+        rule.action = RuleAction::Move {
+            destination_folder: path_string(&fixture.outside),
+            rename_template: None,
+        };
+        storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
+
+        let outcome =
+            crate::engine::reconciliation::reconcile_paths(&fixture.db, vec![arriving.clone()])
+                .expect("incremental reconciliation should succeed");
+        assert_eq!(outcome.report.indexed, vec![path_string(&arriving)]);
+        assert_eq!(outcome.arrival_candidates.len(), 1);
+
+        let report = execute_arrival_automatic_rules(&fixture.db, &outcome.arrival_candidates)
+            .expect("arrival rule execution should run");
+
+        assert!(report.failures.is_empty());
+        assert_eq!(report.entries.len(), 1);
+        assert!(!arriving.exists());
+        assert!(fixture.outside.join("arriving.zip").exists());
+        assert!(existing.exists());
+
+        expire_tracked_file(&fixture, &existing);
+        let expiry_report =
+            execute_expired_automatic_rules(&fixture.db).expect("expiry execution should run");
+        assert!(expiry_report.entries.is_empty());
+        assert!(existing.exists());
+    }
 
     #[test]
     fn expired_automatic_move_rule_executes_and_records_rule_metadata() {

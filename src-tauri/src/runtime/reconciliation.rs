@@ -104,11 +104,20 @@ pub fn watcher_event_sink(
 ) -> engine::watcher::WatcherEventSink {
     Arc::new(move |event| match event {
         engine::watcher::WatcherEvent::PathsReady(paths) => {
-            match runtime.run_exclusive_engine_operation(|db| {
-                engine::reconciliation::reconcile_paths(db, paths)
-            }) {
-                Ok(report) => {
+            match runtime.run_exclusive_engine_operation(
+                |db| -> Result<_, crate::models::AppError> {
+                    let outcome = engine::reconciliation::reconcile_paths(db, paths)?;
+                    let arrival_report =
+                        engine::execute_arrival_automatic_rules(db, &outcome.arrival_candidates)?;
+                    Ok((outcome.report, arrival_report))
+                },
+            ) {
+                Ok((report, arrival_report)) => {
                     emit_reconciliation_report(&app_handle, &report);
+                    crate::runtime::rule_scheduler::emit_rule_execution_report(
+                        &app_handle,
+                        &arrival_report,
+                    );
                     runtime.wake_rule_scheduler();
                     crate::runtime::rule_scheduler::run_async_expired_rule_execution(
                         app_handle.clone(),

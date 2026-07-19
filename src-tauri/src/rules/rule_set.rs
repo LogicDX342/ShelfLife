@@ -3,7 +3,8 @@ use std::path::Path;
 
 use crate::engine::paths::{root_contains, PathScope};
 use crate::models::{
-    AppConfig, AppError, AutomationRule, RuleAction, RuleMatchExplanation, RuleMode, TrackedFile,
+    AppConfig, AppError, AutomationRule, RuleAction, RuleMatchExplanation, RuleMode, RuleTiming,
+    TrackedFile,
 };
 
 use super::conditions::CompiledConditions;
@@ -21,7 +22,7 @@ pub enum RuleVerdict {
     Matched {
         effective_rule: Box<AutomationRule>,
         effective_explanation: Box<RuleMatchExplanation>,
-        rule_ttl_seconds: Option<u64>,
+        expiry_ttl_seconds: Option<u64>,
     },
     Unmatched,
 }
@@ -93,7 +94,7 @@ impl CompiledRuleSet {
                     effective_match = Some((
                         compiled_rule.rule.clone(),
                         explanation.clone(),
-                        rule_ttl_seconds_for_match(&compiled_rule.rule),
+                        expiry_ttl_seconds_for_match(&compiled_rule.rule),
                     ));
                 }
             }
@@ -106,11 +107,11 @@ impl CompiledRuleSet {
         }
 
         let verdict = match effective_match {
-            Some((effective_rule, effective_explanation, rule_ttl_seconds)) => {
+            Some((effective_rule, effective_explanation, expiry_ttl_seconds)) => {
                 RuleVerdict::Matched {
                     effective_rule: Box::new(effective_rule),
                     effective_explanation: Box::new(effective_explanation),
-                    rule_ttl_seconds,
+                    expiry_ttl_seconds,
                 }
             }
             None => RuleVerdict::Unmatched,
@@ -138,11 +139,14 @@ fn should_evaluate_rule(scope: RuleDecisionScope, rule: &CompiledRule, file_path
     }
 }
 
-fn rule_ttl_seconds_for_match(rule: &AutomationRule) -> Option<u64> {
+fn expiry_ttl_seconds_for_match(rule: &AutomationRule) -> Option<u64> {
     if matches!(rule.mode, RuleMode::PreviewOnly) || matches!(rule.action, RuleAction::Ignore) {
         None
     } else {
-        Some(rule.ttl_seconds)
+        match rule.timing {
+            RuleTiming::OnArrival => None,
+            RuleTiming::AfterSeconds(seconds) => Some(seconds),
+        }
     }
 }
 
@@ -213,11 +217,11 @@ mod tests {
         match decision.verdict {
             RuleVerdict::Matched {
                 effective_rule,
-                rule_ttl_seconds,
+                expiry_ttl_seconds,
                 ..
             } => {
                 assert_eq!(effective_rule.id, automatic.id);
-                assert_eq!(rule_ttl_seconds, Some(automatic.ttl_seconds));
+                assert_eq!(expiry_ttl_seconds, Some(86_400));
             }
             RuleVerdict::Unmatched => panic!("automatic rule should be effective"),
         }
@@ -244,8 +248,8 @@ mod tests {
 
         match decision.verdict {
             RuleVerdict::Matched {
-                rule_ttl_seconds, ..
-            } => assert_eq!(rule_ttl_seconds, None),
+                expiry_ttl_seconds, ..
+            } => assert_eq!(expiry_ttl_seconds, None),
             RuleVerdict::Unmatched => panic!("ignore rule should be effective"),
         }
     }

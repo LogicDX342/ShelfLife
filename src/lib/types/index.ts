@@ -17,6 +17,7 @@ export type TrackedFile = {
 };
 
 export type RuleMode = 'PreviewOnly' | 'AskFirst' | 'Automatic';
+export type RuleTiming = 'OnArrival' | { AfterSeconds: number };
 export type RuleAction =
   'Trash' | { Move: { destination_folder: string; rename_template: string | null } } | 'Ignore';
 
@@ -40,7 +41,7 @@ export type AutomationRule = {
   enabled: boolean;
   priority: number;
   watch_path: string;
-  ttl_seconds: number;
+  timing: RuleTiming;
   conditions: RuleConditions;
   action: RuleAction;
   mode: RuleMode;

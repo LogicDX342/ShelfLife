@@ -183,7 +183,7 @@ pub fn seed_mock_workspace(
                 enabled: true,
                 priority: *priority,
                 watch_path: watch_path.clone(),
-                ttl_seconds: *ttl_days * SECONDS_PER_DAY,
+                timing: crate::models::RuleTiming::AfterSeconds(*ttl_days * SECONDS_PER_DAY),
                 conditions: RuleConditions {
                     extensions: extensions.iter().map(ToString::to_string).collect(),
                     size: (*minimum_size)

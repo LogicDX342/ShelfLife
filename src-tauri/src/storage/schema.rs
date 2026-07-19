@@ -38,6 +38,7 @@ diesel::table! {
         priority -> Integer,
         watch_path -> Text,
         ttl_seconds -> BigInt,
+        timing_kind -> Text,
         mode -> Text,
         created_at -> BigInt,
         updated_at -> BigInt,

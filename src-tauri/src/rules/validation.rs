@@ -1,10 +1,36 @@
 use std::path::Path;
 
 use crate::engine::paths::PathScope;
-use crate::models::{AppError, AutomationRule, RuleAction};
+use crate::models::{AppError, AutomationRule, RuleAction, RuleMode, RuleTiming};
 
 pub(crate) fn validate_rule(rule: &AutomationRule, scope: &PathScope<'_>) -> Result<(), AppError> {
     scope.validate_rule_watch_path(Path::new(&rule.watch_path))?;
+
+    if matches!(rule.timing, RuleTiming::OnArrival)
+        && !matches!(rule.action, RuleAction::Move { .. })
+    {
+        return Err(AppError::new(
+            "RULE_INVALID_TIMING",
+            "On-arrival timing is only available for move rules.",
+            true,
+        ));
+    }
+
+    if matches!(rule.timing, RuleTiming::OnArrival) && !matches!(rule.mode, RuleMode::Automatic) {
+        return Err(AppError::new(
+            "RULE_INVALID_ARRIVAL_MODE",
+            "On-arrival rules must run automatically because they only handle future detection events.",
+            true,
+        ));
+    }
+
+    if matches!(rule.action, RuleAction::Ignore) && matches!(rule.mode, RuleMode::AskFirst) {
+        return Err(AppError::new(
+            "RULE_INVALID_MODE",
+            "Ask-first mode is not available for Ignore rules because Ignore takes effect immediately.",
+            true,
+        ));
+    }
 
     if let RuleAction::Move {
         destination_folder,
@@ -123,4 +149,51 @@ pub(crate) fn validate_reserved_name(file_name: &str) -> Result<(), AppError> {
 
     let _ = file_name;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::engine::paths::PathScope;
+    use crate::models::{RuleAction, RuleMode, RuleTiming};
+    use crate::storage::test_util::Fixture;
+
+    use super::validate_rule;
+
+    #[test]
+    fn ask_first_ignore_rule_is_rejected() {
+        let fixture = Fixture::new("shelflife-rule-validation");
+        let config = fixture.config();
+        let scope = PathScope::new(&config);
+        let mut rule = fixture.rule();
+        rule.action = RuleAction::Ignore;
+        rule.mode = RuleMode::AskFirst;
+
+        let error = validate_rule(&rule, &scope).expect_err("Ask-first Ignore should be invalid");
+
+        assert_eq!(error.code, "RULE_INVALID_MODE");
+    }
+
+    #[test]
+    fn non_automatic_on_arrival_rule_is_rejected() {
+        let fixture = Fixture::new("shelflife-arrival-rule-validation");
+        let config = fixture.config();
+        let scope = PathScope::new(&config);
+        let mut rule = fixture.rule();
+        rule.action = RuleAction::Move {
+            destination_folder: fixture.safe.to_string_lossy().into_owned(),
+            rename_template: None,
+        };
+        rule.timing = RuleTiming::OnArrival;
+
+        for mode in [RuleMode::PreviewOnly, RuleMode::AskFirst] {
+            rule.mode = mode;
+            let error = validate_rule(&rule, &scope)
+                .expect_err("non-automatic OnArrival should be invalid");
+
+            assert_eq!(error.code, "RULE_INVALID_ARRIVAL_MODE");
+        }
+
+        rule.mode = RuleMode::Automatic;
+        validate_rule(&rule, &scope).expect("automatic OnArrival should remain valid");
+    }
 }
