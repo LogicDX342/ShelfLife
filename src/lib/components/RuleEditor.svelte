@@ -268,17 +268,19 @@
 
         <Field.Field>
           <Field.FieldLabel for="watch-path">{i18n.t('rules.watchTargetPath')}</Field.FieldLabel>
-          <div class="flex gap-2 w-full">
-            <Input
+          <InputGroup.Root>
+            <InputGroup.Input
               id="watch-path"
               bind:value={watchPath}
               required
               placeholder="C:\Users\Name\Downloads"
             />
-            <Button type="button" variant="outline" onclick={browseWatchPath}>
-              {i18n.t('settings.browse')}
-            </Button>
-          </div>
+            <InputGroup.Addon align="inline-end">
+              <InputGroup.Button onclick={browseWatchPath}>
+                {i18n.t('settings.browse')}
+              </InputGroup.Button>
+            </InputGroup.Addon>
+          </InputGroup.Root>
         </Field.Field>
 
         <Field.Field>

@@ -15,7 +15,7 @@
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
-  import { Input } from '$lib/components/ui/input';
+  import * as InputGroup from '$lib/components/ui/input-group';
   import * as Item from '$lib/components/ui/item';
   import { Label } from '$lib/components/ui/label';
   import * as Select from '$lib/components/ui/select';
@@ -75,7 +75,6 @@
       const selected = await selectDirectory('Select Watch Target Folder', targetPath);
       if (selected) {
         targetPath = selected;
-        await addTargetWithPath(selected);
       }
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('settings.errorSelectFolder')));
@@ -254,17 +253,19 @@
                 <Label for="default-move-destination">
                   {i18n.t('settings.defaultMoveDestination')}
                 </Label>
-                <div class="flex gap-2">
-                  <Input
+                <InputGroup.Root>
+                  <InputGroup.Input
                     id="default-move-destination"
                     bind:value={defaultMoveDestination}
                     placeholder={i18n.t('settings.defaultMoveDestinationPlaceholder')}
                     onchange={savePreferences}
                   />
-                  <Button type="button" variant="outline" onclick={browseDefaultMoveDestination}>
-                    {i18n.t('settings.browse')}
-                  </Button>
-                </div>
+                  <InputGroup.Addon align="inline-end">
+                    <InputGroup.Button onclick={browseDefaultMoveDestination}>
+                      {i18n.t('settings.browse')}
+                    </InputGroup.Button>
+                  </InputGroup.Addon>
+                </InputGroup.Root>
               </div>
 
               <div class="flex flex-col gap-1.5">
@@ -471,16 +472,18 @@
             <div class="flex flex-col gap-1.5 w-full">
               <Label for="target-path">{i18n.t('settings.path')}</Label>
               <div class="flex flex-col md:flex-row gap-2">
-                <div class="flex flex-1 gap-2">
-                  <Input
+                <InputGroup.Root class="flex-1">
+                  <InputGroup.Input
                     id="target-path"
                     bind:value={targetPath}
                     placeholder={i18n.t('settings.path')}
                   />
-                  <Button type="button" variant="outline" onclick={browseTargetFolder}>
-                    {i18n.t('settings.browse')}
-                  </Button>
-                </div>
+                  <InputGroup.Addon align="inline-end">
+                    <InputGroup.Button onclick={browseTargetFolder}>
+                      {i18n.t('settings.browse')}
+                    </InputGroup.Button>
+                  </InputGroup.Addon>
+                </InputGroup.Root>
                 <Button
                   variant="outline"
                   onclick={() => addTargetWithPath(targetPath)}
