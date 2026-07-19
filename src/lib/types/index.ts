@@ -153,6 +153,7 @@ export type CloseBehavior = 'Ask' | 'HideToTray' | 'Quit';
 export type TrayLabels = {
   open: string;
   review: string;
+  dashboard: string;
   pause: string;
   resume: string;
   reconcile: string;
