@@ -142,6 +142,7 @@ class AppState {
     return {
       open: this.t('tray.open'),
       review: this.t('tray.review'),
+      dashboard: this.t('tray.dashboard'),
       pause: this.t('tray.pause'),
       resume: this.t('tray.resume'),
       reconcile: this.t('tray.reconcile'),

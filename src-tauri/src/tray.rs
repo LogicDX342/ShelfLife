@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use serde::Deserialize;
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::utils::config::WebviewUrl;
 use tauri::{
@@ -18,6 +18,7 @@ const MAIN_WINDOW_LABEL: &str = "main";
 pub struct TrayLabels {
     pub open: String,
     pub review: String,
+    pub dashboard: String,
     pub pause: String,
     pub resume: String,
     pub reconcile: String,
@@ -31,10 +32,11 @@ impl Default for TrayLabels {
     fn default() -> Self {
         Self {
             open: "Open ShelfLife".to_string(),
-            review: "Review decaying files".to_string(),
-            pause: "Pause watching".to_string(),
-            resume: "Resume watching".to_string(),
-            reconcile: "Run reconciliation scan".to_string(),
+            review: "Review Queue".to_string(),
+            dashboard: "Dashboard".to_string(),
+            pause: "Pause".to_string(),
+            resume: "Resume".to_string(),
+            reconcile: "Scan Now".to_string(),
             preferences: "Preferences".to_string(),
             quit: "Quit".to_string(),
             tooltip: "ShelfLife".to_string(),
@@ -46,7 +48,7 @@ impl Default for TrayLabels {
 pub fn setup(app: &mut App) -> tauri::Result<()> {
     let labels = TrayLabels::default();
     app.manage(Mutex::new(labels.clone()));
-    let menu = build_menu(app, &labels)?;
+    let menu = build_menu(app, &labels, false)?;
 
     let mut tray = TrayIconBuilder::with_id("shelflife")
         .menu(&menu)
@@ -54,10 +56,10 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
             "open" => request_main_window(app_handle, None),
-            "review" => request_main_window(app_handle, Some("/")),
+            "review" => request_main_window(app_handle, Some("/queue")),
+            "dashboard" => request_main_window(app_handle, Some("/")),
             "preferences" => request_main_window(app_handle, Some("/settings")),
-            "pause" => pause_watching(app_handle),
-            "resume" => resume_watching(app_handle),
+            "toggle_watching" => toggle_watching(app_handle),
             "reconcile" => run_reconciliation(app_handle),
             "quit" => app_handle.exit(0),
             _ => {}
@@ -85,12 +87,22 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
 fn build_menu<R: Runtime, M: Manager<R>>(
     manager: &M,
     labels: &TrayLabels,
+    is_paused: bool,
 ) -> tauri::Result<Menu<R>> {
     let open = MenuItem::with_id(manager, "open", &labels.open, true, None::<&str>)?;
+    let primary_separator = PredefinedMenuItem::separator(manager)?;
     let review = MenuItem::with_id(manager, "review", &labels.review, true, None::<&str>)?;
-    let pause = MenuItem::with_id(manager, "pause", &labels.pause, true, None::<&str>)?;
-    let resume = MenuItem::with_id(manager, "resume", &labels.resume, true, None::<&str>)?;
+    let dashboard = MenuItem::with_id(manager, "dashboard", &labels.dashboard, true, None::<&str>)?;
+    let navigation_separator = PredefinedMenuItem::separator(manager)?;
+    let toggle_label = if is_paused {
+        &labels.resume
+    } else {
+        &labels.pause
+    };
+    let toggle_watching =
+        MenuItem::with_id(manager, "toggle_watching", toggle_label, true, None::<&str>)?;
     let reconcile = MenuItem::with_id(manager, "reconcile", &labels.reconcile, true, None::<&str>)?;
+    let actions_separator = PredefinedMenuItem::separator(manager)?;
     let preferences = MenuItem::with_id(
         manager,
         "preferences",
@@ -104,10 +116,13 @@ fn build_menu<R: Runtime, M: Manager<R>>(
         manager,
         &[
             &open,
+            &primary_separator,
             &review,
-            &pause,
-            &resume,
+            &dashboard,
+            &navigation_separator,
+            &toggle_watching,
             &reconcile,
+            &actions_separator,
             &preferences,
             &quit,
         ],
@@ -124,29 +139,10 @@ pub fn update_tray_labels(app_handle: &AppHandle, labels: TrayLabels) -> Result<
                 true,
             )
         })?;
-        *stored_labels = labels.clone();
+        *stored_labels = labels;
     }
 
-    let menu = build_menu(app_handle, &labels).map_err(|error| {
-        AppError::with_details(
-            "ACTION_FAILED",
-            "Tray menu update failed.",
-            true,
-            error.to_string(),
-        )
-    })?;
-
-    if let Some(tray) = app_handle.tray_by_id("shelflife") {
-        tray.set_menu(Some(menu)).map_err(|error| {
-            AppError::with_details(
-                "ACTION_FAILED",
-                "Tray menu update failed.",
-                true,
-                error.to_string(),
-            )
-        })?;
-        update_tray_icon(app_handle);
-    }
+    update_tray_icon(app_handle);
 
     Ok(())
 }
@@ -261,16 +257,14 @@ fn window_error(error: tauri::Error) -> AppError {
     )
 }
 
-fn pause_watching(app_handle: &AppHandle) {
+fn toggle_watching(app_handle: &AppHandle) {
     let runtime = app_handle.state::<AppRuntime>();
-    if let Err(error) = runtime.pause_watching(app_handle) {
-        let _ = app_handle.emit("action_failed", error);
-    }
-}
-
-fn resume_watching(app_handle: &AppHandle) {
-    let runtime = app_handle.state::<AppRuntime>();
-    if let Err(error) = runtime.resume_watching(app_handle) {
+    let result = if runtime.is_watching_paused() {
+        runtime.resume_watching(app_handle)
+    } else {
+        runtime.pause_watching(app_handle)
+    };
+    if let Err(error) = result {
         let _ = app_handle.emit("action_failed", error);
     }
 }
@@ -292,6 +286,10 @@ pub fn update_tray_icon(app_handle: &AppHandle) {
             .try_state::<Mutex<TrayLabels>>()
             .and_then(|labels| labels.lock().ok().map(|labels| labels.clone()))
             .unwrap_or_default();
+
+        if let Ok(menu) = build_menu(app_handle, &labels, is_paused) {
+            let _ = tray.set_menu(Some(menu));
+        }
 
         if let Some(icon) = app_handle.default_window_icon() {
             if is_paused {
