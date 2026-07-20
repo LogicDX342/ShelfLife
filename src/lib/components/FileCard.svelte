@@ -7,6 +7,7 @@
   import IconFolderOpen from '@lucide/svelte/icons/folder-open';
   import IconPin from '@lucide/svelte/icons/pin';
   import IconDelete from '@lucide/svelte/icons/trash-2';
+  import IconAlertTriangle from '@lucide/svelte/icons/triangle-alert';
 
   import { getConfig } from '$lib/api/config';
   import { explainFile, openFileLocation, selectDirectory } from '$lib/api/files';
@@ -40,11 +41,13 @@
     file,
     selectable = false,
     selected = false,
+    error = null,
     onSelectedChange = () => {},
   } = $props<{
     file: TrackedFile;
     selectable?: boolean;
     selected?: boolean;
+    error?: string | null;
     onSelectedChange?: (path: string, selected: boolean) => void;
   }>();
 
@@ -303,7 +306,7 @@
           aria-label={`Select ${file.file_name}`}
           checked={selected}
           class="mt-1"
-          onclick={() => onSelectedChange(file.path, !selected)}
+          onCheckedChange={(checked) => onSelectedChange(file.path, checked)}
         />
       {/if}
 
@@ -352,6 +355,15 @@
       </Badge>
     </div>
   </div>
+
+  {#if error}
+    <div
+      class="border-t border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive rounded-md flex items-center gap-2"
+    >
+      <IconAlertTriangle class="w-4 h-4 shrink-0 text-destructive" />
+      <span class="font-medium">{error}</span>
+    </div>
+  {/if}
 
   <!-- Row 2: Matched Rule -->
   {#if matchedExplanations.length > 0}

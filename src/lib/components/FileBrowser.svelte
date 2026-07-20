@@ -1,6 +1,7 @@
 <script lang="ts">
   import IconFolder from '@lucide/svelte/icons/folder';
   import IconFolderOpen from '@lucide/svelte/icons/folder-open';
+  import IconAlertTriangle from '@lucide/svelte/icons/triangle-alert';
   import { onMount } from 'svelte';
 
   import { getConfig } from '$lib/api/config';
@@ -17,7 +18,7 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
-  import type { AppConfig, TrackedFile, UserTriageAction } from '$lib/types';
+  import type { AppConfig, AppError, TrackedFile, UserTriageAction } from '$lib/types';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
   import {
     getDestinationOptions,
@@ -31,6 +32,7 @@
   let config = $state<AppConfig | null>(null);
   let currentDirectory = $state('');
   let selectedPaths = $state<string[]>([]);
+  let bulkErrors = $state<Record<string, AppError>>({});
   let bulkAction = $state<'Move' | 'Pin' | 'Ignore' | 'Snooze' | 'TrashNow'>('Move');
   let bulkSnoozeDays = $state(7);
   let bulkMoveDestination = $state('');
@@ -222,6 +224,8 @@
       currentFolderFiles.every((f) => selectedPaths.includes(f.path)),
   );
 
+  let failedSelectedCount = $derived(selectedPaths.filter((p) => p in bulkErrors).length);
+
   function toggleSelectAll(checked: boolean) {
     if (checked) {
       const pathsToSelect = currentFolderFiles.map((f) => f.path);
@@ -229,6 +233,9 @@
     } else {
       const pathsToRemove = currentFolderFiles.map((f) => f.path);
       selectedPaths = selectedPaths.filter((p) => !pathsToRemove.includes(p));
+      for (const p of pathsToRemove) {
+        delete bulkErrors[p];
+      }
     }
   }
 
@@ -240,6 +247,9 @@
   }
 
   function setSelected(path: string, selected: boolean) {
+    if (!selected) {
+      delete bulkErrors[path];
+    }
     selectedPaths = selected
       ? Array.from(new Set([...selectedPaths, path]))
       : selectedPaths.filter((item) => item !== path);
@@ -254,17 +264,35 @@
           : bulkAction === 'Move'
             ? { Move: { destination_folder: bulkMoveDestination.trim() } }
             : bulkAction;
+
+      for (const p of selectedPaths) {
+        delete bulkErrors[p];
+      }
+
       const result = await executeBulkTriageAction(selectedPaths, action);
       if (bulkAction === 'Move' && result.entries.length > 0) {
         recordRecentMoveDestination(bulkMoveDestination);
       }
+
+      for (const failure of result.failures) {
+        bulkErrors[failure.path] = failure.error;
+      }
+
+      selectedPaths = result.failures.map((f) => f.path);
+
       const summary = i18n.t('browser.bulkSummary', {
         action: bulkAction,
         succeeded: result.entries.length,
         failed: result.failures.length,
       });
-      notifications.success(summary);
-      selectedPaths = [];
+
+      if (result.failures.length === 0) {
+        notifications.success(summary);
+      } else if (result.entries.length > 0) {
+        notifications.warning(summary);
+      } else {
+        notifications.error(summary);
+      }
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('browser.errorBulkAction')));
     }
@@ -458,7 +486,7 @@
           </Button>
           <span class="text-fluent-border-light dark:text-fluent-border-dark">|</span>
           <label class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
-            <Checkbox checked={allSelected} onclick={() => toggleSelectAll(!allSelected)} />
+            <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} />
             {i18n.t('browser.selectAll')}
           </label>
         </div>
@@ -470,6 +498,9 @@
             {file}
             selectable
             selected={selectedPaths.includes(file.path)}
+            error={bulkErrors[file.path]
+              ? getErrorMessage(bulkErrors[file.path], i18n.t('browser.errorBulkAction'))
+              : null}
             onSelectedChange={setSelected}
           />
         {/each}
@@ -500,13 +531,27 @@
       description={i18n.t('browser.emptyFolderDesc')}
     />
   {/if}
+
+  <!-- Spacer when bulk selection bar is active so content at bottom is not covered -->
+  {#if selectedPaths.length > 0}
+    <div class="h-32 md:h-30 shrink-0 pointer-events-none" aria-hidden="true"></div>
+  {/if}
 </PageBody>
 
 <!-- Sticky Bulk Action Bar at Bottom -->
 {#if selectedPaths.length > 0}
   <div
-    class="fixed bottom-6 left-[88px] right-6 flex flex-col gap-3 border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl animate-slide-up md:left-[264px]"
+    class="fixed bottom-6 left-[88px] right-6 z-30 flex flex-col gap-3 border bg-card/95 p-4 text-card-foreground shadow-lg backdrop-blur-xl animate-slide-up md:left-[264px]"
   >
+    {#if failedSelectedCount > 0}
+      <div
+        class="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-300"
+      >
+        <IconAlertTriangle class="h-4 w-4 shrink-0 text-amber-500" />
+        <span>{i18n.t('browser.bulkFailuresNotice', { count: failedSelectedCount })}</span>
+      </div>
+    {/if}
+
     <div class="flex items-center justify-between gap-4">
       <div class="flex items-center gap-4">
         <div class="flex flex-col">
@@ -519,7 +564,13 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <Button variant="outline" onclick={() => (selectedPaths = [])}>
+        <Button
+          variant="outline"
+          onclick={() => {
+            selectedPaths = [];
+            bulkErrors = {};
+          }}
+        >
           {i18n.t('dashboard.clearSelection')}
         </Button>
 
