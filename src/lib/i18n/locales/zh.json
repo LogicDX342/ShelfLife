@@ -285,7 +285,8 @@
     "bulkConfirmMsg": "将对 {count} 个文件（共 {size}）执行“{action}”。每个文件的操作都会记录在审计日志中。",
     "apply": "应用",
     "errorBulkAction": "批量操作失败。",
-    "bulkSummary": "“{action}”已完成：{succeeded} 个成功，{failed} 个失败。"
+    "bulkSummary": "“{action}”已完成：{succeeded} 个成功，{failed} 个失败。",
+    "bulkFailuresNotice": "有 {count} 个已选文件在上次操作中失败。请在下方文件卡片中查看具体错误信息。"
   },
   "dropzone": {
     "title": "投放区",

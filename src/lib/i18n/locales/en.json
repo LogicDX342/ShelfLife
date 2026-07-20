@@ -285,7 +285,8 @@
     "bulkConfirmMsg": "{action} will be applied to {count} files totaling {size}. Each changed file will create its own audit row.",
     "apply": "Apply",
     "errorBulkAction": "Bulk action failed.",
-    "bulkSummary": "{action}: {succeeded} succeeded, {failed} failed"
+    "bulkSummary": "{action}: {succeeded} succeeded, {failed} failed",
+    "bulkFailuresNotice": "{count} selected file(s) failed to process during the last action. Review error details on the file cards."
   },
   "dropzone": {
     "title": "Dropzone",
