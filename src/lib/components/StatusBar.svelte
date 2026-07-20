@@ -6,11 +6,12 @@
   import { formatBytes } from '$lib/utils/format';
 
   let { files = [] } = $props<{ files: TrackedFile[] }>();
-  let totalSize = $derived(
-    files.reduce((sum: number, file: TrackedFile) => sum + file.size_bytes, 0),
+  let reviewableFiles = $derived(
+    files.filter((file: TrackedFile) => file.state === 'Stale' || file.state === 'Decaying'),
   );
-  let reviewCount = $derived(
-    files.filter((file: TrackedFile) => file.state === 'Stale' || file.state === 'Decaying').length,
+  let reviewCount = $derived(reviewableFiles.length);
+  let recoverableSize = $derived(
+    reviewableFiles.reduce((sum: number, file: TrackedFile) => sum + file.size_bytes, 0),
   );
 </script>
 
@@ -30,7 +31,9 @@
       <span class="text-xs font-medium text-muted-foreground">
         {i18n.t('status.recoverableSize')}
       </span>
-      <strong class="mt-1 block truncate text-2xl font-semibold">{formatBytes(totalSize)}</strong>
+      <strong class="mt-1 block truncate text-2xl font-semibold">
+        {formatBytes(recoverableSize)}
+      </strong>
     </div>
   </Card.Content>
 </Card.Root>
