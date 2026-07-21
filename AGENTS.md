@@ -1,7 +1,5 @@
 ## Workspace rules
 
-- Default to `rtk` for shell commands that execute external tools, and reference `.agents/rules/RTK.md`.
-- Plain PowerShell built-ins such as `Get-Content`, `Set-Location`, and `Select-String` are acceptable without `rtk`.
 - Treat the checked-in codebase as the source of truth for implementation work. `SPEC.md` is the product/technical target; when it disagrees with code, verify the code first and update docs or implementation deliberately.
 
 ## Project layout
