@@ -170,7 +170,9 @@
     "size": "大小：{size}",
     "rule": "规则：{name}",
     "undoing": "正在撤销…",
-    "undone": "已撤销"
+    "undone": "已撤销",
+    "loadMore": "加载更多记录（剩 {count} 条）",
+    "loadingMore": "正在加载更多记录…"
   },
   "settings": {
     "title": "应用设置",

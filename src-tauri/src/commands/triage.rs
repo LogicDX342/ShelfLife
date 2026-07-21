@@ -3,8 +3,8 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::engine;
 use crate::models::{
-    AppError, AuditActionKind, AuditEntry, BulkTriageFailure, BulkTriageResult, UndoStatus,
-    UserTriageAction,
+    AppError, AuditActionKind, AuditEntry, AuditPage, BulkTriageFailure, BulkTriageResult,
+    UndoStatus, UserTriageAction,
 };
 use crate::runtime::AppRuntime;
 use crate::storage::{self, Database};
@@ -199,8 +199,14 @@ pub async fn undo_audit_entry(
 }
 
 #[tauri::command]
-pub async fn list_audit_entries(state: State<'_, AppRuntime>) -> Result<Vec<AuditEntry>, AppError> {
-    state.with_database(storage::audit::list_audit_entries)
+pub async fn list_audit_entries(
+    state: State<'_, AppRuntime>,
+    cursor: Option<u64>,
+    search_query: String,
+) -> Result<AuditPage, AppError> {
+    state.with_database(|db| {
+        storage::audit::list_audit_entries_page(db, cursor, search_query.as_str())
+    })
 }
 
 fn notify_if_enabled(
@@ -277,8 +283,9 @@ mod tests {
         assert_eq!(result.failures.len(), 1);
         assert_eq!(result.failures[0].error.code, "PATH_OUT_OF_SCOPE");
         assert_eq!(
-            storage::audit::list_audit_entries(&fixture.db)
+            storage::audit::list_audit_entries_page(&fixture.db, None, "")
                 .expect("audit list should work")
+                .entries
                 .len(),
             2
         );

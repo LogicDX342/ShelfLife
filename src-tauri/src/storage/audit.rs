@@ -4,12 +4,28 @@ use diesel::dsl::max;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
-use crate::models::{AppError, AuditActionKind, AuditEntry, RuleMatchExplanation, UndoStatus};
+use crate::models::{
+    AppError, AuditActionKind, AuditEntry, AuditPage, RuleMatchExplanation, UndoStatus,
+};
 use crate::storage::schema::{audit_entries, audit_sequence_state};
 use crate::storage::{
     i64_to_u64, opt_i64_to_u64, rule_action_from_parts, rule_action_parts, rule_mode_from_label,
     rule_mode_label, storage_data_error, u64_to_i64, Database,
 };
+
+const AUDIT_PAGE_SIZE: i64 = 50;
+
+macro_rules! audit_search_filter {
+    ($pattern:expr) => {
+        audit_entries::file_name
+            .like($pattern)
+            .escape('\\')
+            .or(audit_entries::source_path.like($pattern).escape('\\'))
+            .or(audit_entries::destination_path.like($pattern).escape('\\'))
+            .or(audit_entries::action_kind.like($pattern).escape('\\'))
+            .or(audit_entries::rule_name.like($pattern).escape('\\'))
+    };
+}
 
 pub fn next_audit_sequence(db: &Database) -> Result<u64, AppError> {
     db.write(|conn| {
@@ -63,13 +79,65 @@ pub fn get_audit_entry_by_id(db: &Database, id: &str) -> Result<Option<AuditEntr
     row.map(audit_entry_from_row).transpose()
 }
 
-pub fn list_audit_entries(db: &Database) -> Result<Vec<AuditEntry>, AppError> {
+pub fn list_audit_entries_page(
+    db: &Database,
+    cursor: Option<u64>,
+    search_query: &str,
+) -> Result<AuditPage, AppError> {
     let mut conn = db.connect()?;
-    let rows = audit_entries::table
+    let search_pattern = audit_search_pattern(search_query);
+
+    let total_count = if cursor.is_none() {
+        let count = match search_pattern.as_deref() {
+            Some(pattern) => audit_entries::table
+                .filter(audit_search_filter!(pattern))
+                .count()
+                .get_result::<i64>(&mut conn)?,
+            None => audit_entries::table.count().get_result::<i64>(&mut conn)?,
+        };
+        Some(i64_to_u64(count, "audit page total_count")?)
+    } else {
+        None
+    };
+
+    let mut query = audit_entries::table.into_boxed::<diesel::sqlite::Sqlite>();
+    if let Some(cursor) = cursor {
+        query = query.filter(audit_entries::sequence.lt(u64_to_i64(cursor, "audit page cursor")?));
+    }
+    if let Some(pattern) = search_pattern.as_deref() {
+        query = query.filter(audit_search_filter!(pattern));
+    }
+
+    let mut rows = query
         .order(audit_entries::sequence.desc())
+        .limit(AUDIT_PAGE_SIZE + 1)
         .select(AuditRow::as_select())
         .load::<AuditRow>(&mut conn)?;
-    rows.into_iter().map(audit_entry_from_row).collect()
+    let has_more = rows.len() > AUDIT_PAGE_SIZE as usize;
+    if has_more {
+        rows.pop();
+    }
+
+    Ok(AuditPage {
+        entries: rows
+            .into_iter()
+            .map(audit_entry_from_row)
+            .collect::<Result<_, _>>()?,
+        has_more,
+        total_count,
+    })
+}
+
+fn audit_search_pattern(search_query: &str) -> Option<String> {
+    if search_query.is_empty() {
+        return None;
+    }
+
+    let escaped = search_query
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    Some(format!("%{escaped}%"))
 }
 
 pub fn list_failed_automatic_rule_attempts(
@@ -357,6 +425,32 @@ mod tests {
     };
     use crate::storage::test_util::{path_string, Fixture};
 
+    fn save_audit_entry(
+        fixture: &Fixture,
+        file_name: &str,
+        source_path: Option<String>,
+        destination_path: Option<String>,
+        action_kind: AuditActionKind,
+        rule_name: Option<String>,
+    ) -> AuditEntry {
+        let entry = AuditEntry {
+            id: Uuid::new_v4().to_string(),
+            sequence: super::next_audit_sequence(&fixture.db).expect("sequence should allocate"),
+            timestamp: 42,
+            action_kind,
+            source_path: source_path.unwrap_or_else(|| path_string(&fixture.watch.join(file_name))),
+            destination_path,
+            file_name: file_name.to_string(),
+            size_bytes: 4,
+            rule_id: rule_name.as_ref().map(|_| Uuid::new_v4().to_string()),
+            rule_name,
+            explanation: None,
+            undo_status: UndoStatus::Completed,
+        };
+        super::upsert_audit_entry(&fixture.db, &entry).expect("audit entry should save");
+        entry
+    }
+
     #[test]
     fn audit_entries_round_trip_explanations_and_undo_status() {
         let fixture = Fixture::new("shelflife-audit-round-trip");
@@ -412,5 +506,108 @@ mod tests {
 
         assert_eq!(first, 1);
         assert_eq!(second, 2);
+    }
+
+    #[test]
+    fn audit_pages_use_a_stable_sequence_cursor() {
+        let fixture = Fixture::new("shelflife-audit-pagination");
+        for index in 0..55 {
+            save_audit_entry(
+                &fixture,
+                format!("entry-{index}.txt").as_str(),
+                None,
+                None,
+                AuditActionKind::Pin,
+                None,
+            );
+        }
+
+        let first = super::list_audit_entries_page(&fixture.db, None, "")
+            .expect("first audit page should load");
+        assert_eq!(first.entries.len(), 50);
+        assert_eq!(first.total_count, Some(55));
+        assert!(first.has_more);
+        assert_eq!(first.entries.first().map(|entry| entry.sequence), Some(55));
+        assert_eq!(first.entries.last().map(|entry| entry.sequence), Some(6));
+
+        let second = super::list_audit_entries_page(&fixture.db, Some(6), "")
+            .expect("second audit page should load");
+        assert_eq!(second.entries.len(), 5);
+        assert_eq!(second.total_count, None);
+        assert!(!second.has_more);
+        assert_eq!(second.entries.first().map(|entry| entry.sequence), Some(5));
+        assert_eq!(second.entries.last().map(|entry| entry.sequence), Some(1));
+    }
+
+    #[test]
+    fn audit_page_search_matches_the_existing_fields_and_literal_wildcards() {
+        let fixture = Fixture::new("shelflife-audit-search");
+        let file_name = save_audit_entry(
+            &fixture,
+            "file-name-hit.txt",
+            None,
+            None,
+            AuditActionKind::Pin,
+            None,
+        );
+        let source = save_audit_entry(
+            &fixture,
+            "source.txt",
+            Some(String::from("C:\\source-path-hit\\source.txt")),
+            None,
+            AuditActionKind::Pin,
+            None,
+        );
+        let destination = save_audit_entry(
+            &fixture,
+            "destination.txt",
+            None,
+            Some(String::from("C:\\destination-path-hit\\destination.txt")),
+            AuditActionKind::Pin,
+            None,
+        );
+        let rule = save_audit_entry(
+            &fixture,
+            "rule.txt",
+            None,
+            None,
+            AuditActionKind::Pin,
+            Some(String::from("rule-name-hit")),
+        );
+        let action = save_audit_entry(
+            &fixture,
+            "action.txt",
+            None,
+            None,
+            AuditActionKind::Move,
+            None,
+        );
+        let percent = save_audit_entry(
+            &fixture,
+            "literal%-hit.txt",
+            None,
+            None,
+            AuditActionKind::Pin,
+            None,
+        );
+
+        for (query, expected_id) in [
+            ("FILE-NAME-HIT", file_name.id.as_str()),
+            ("source-path-hit", source.id.as_str()),
+            ("destination-path-hit", destination.id.as_str()),
+            ("rule-name-hit", rule.id.as_str()),
+            ("MOVE", action.id.as_str()),
+            ("%", percent.id.as_str()),
+        ] {
+            let page = super::list_audit_entries_page(&fixture.db, None, query)
+                .expect("searched audit page should load");
+            assert_eq!(page.total_count, Some(1), "query={query}");
+            assert_eq!(
+                page.entries.first().map(|entry| entry.id.as_str()),
+                Some(expected_id),
+                "query={query}"
+            );
+            assert!(!page.has_more, "query={query}");
+        }
     }
 }

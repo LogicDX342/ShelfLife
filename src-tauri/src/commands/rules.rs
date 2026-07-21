@@ -113,8 +113,9 @@ mod tests {
         assert!(file.exists());
         assert_eq!(explanations.len(), 1);
         assert_eq!(
-            storage::audit::list_audit_entries(&fixture.db)
+            storage::audit::list_audit_entries_page(&fixture.db, None, "")
                 .expect("audit list should work")
+                .entries
                 .len(),
             0
         );

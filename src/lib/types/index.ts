@@ -83,6 +83,12 @@ export type AuditEntry = {
   undo_status: UndoStatus;
 };
 
+export type AuditPage = {
+  entries: AuditEntry[];
+  has_more: boolean;
+  total_count: number | null;
+};
+
 export type DropzoneFile = {
   path: string;
   file_name: string;

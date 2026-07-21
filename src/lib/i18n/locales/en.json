@@ -170,7 +170,9 @@
     "size": "Size: {size}",
     "rule": "Rule: {name}",
     "undoing": "Undoing...",
-    "undone": "Undone"
+    "undone": "Undone",
+    "loadMore": "Load older entries ({count} remaining)",
+    "loadingMore": "Loading older entries..."
   },
   "settings": {
     "title": "Settings",

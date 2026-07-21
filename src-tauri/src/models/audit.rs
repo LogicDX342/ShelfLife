@@ -36,6 +36,13 @@ pub struct AuditEntry {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct AuditPage {
+    pub entries: Vec<AuditEntry>,
+    pub has_more: bool,
+    pub total_count: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct BulkTriageFailure {
     pub path: String,
     pub error: super::AppError,

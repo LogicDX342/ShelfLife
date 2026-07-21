@@ -1507,8 +1507,9 @@ mod tests {
         )
         .expect_err("move into a file path should fail");
 
-        let entries =
-            storage::audit::list_audit_entries(&fixture.db).expect("write-ahead audit should load");
+        let entries = storage::audit::list_audit_entries_page(&fixture.db, None, "")
+            .expect("write-ahead audit should load")
+            .entries;
         assert!(source.exists());
         assert_eq!(entries.len(), 1);
         assert!(matches!(entries[0].undo_status, UndoStatus::Failed { .. }));
@@ -1556,8 +1557,9 @@ mod tests {
         assert_eq!(entry.action_kind, AuditActionKind::Ignore);
         assert_eq!(tracked.state, FileDecayState::ManuallyIgnored);
         assert_eq!(
-            storage::audit::list_audit_entries(&fixture.db)
+            storage::audit::list_audit_entries_page(&fixture.db, None, "")
                 .expect("audit list should work")
+                .entries
                 .len(),
             1
         );

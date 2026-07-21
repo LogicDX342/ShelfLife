@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { AuditEntry, BulkTriageResult, UserTriageAction } from '$lib/types';
+import type { AuditEntry, AuditPage, BulkTriageResult, UserTriageAction } from '$lib/types';
 
 export function executeTriageAction(path: string, action: UserTriageAction) {
   return invoke<AuditEntry>('execute_triage_action', { path, action });
@@ -18,6 +18,6 @@ export function undoAuditEntry(auditId: string) {
   return invoke<AuditEntry>('undo_audit_entry', { auditId });
 }
 
-export function listAuditEntries() {
-  return invoke<AuditEntry[]>('list_audit_entries');
+export function listAuditEntries(cursor: number | null, searchQuery: string) {
+  return invoke<AuditPage>('list_audit_entries', { cursor, searchQuery });
 }
