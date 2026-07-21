@@ -95,9 +95,9 @@ jobs:
       - name: Stage MSIX contents
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path $env:DIST_DIR | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:DIST_DIR 'src-tauri\icons') | Out-Null
           Copy-Item -Path src-tauri\target\release\shelflife.exe -Destination (Join-Path $env:DIST_DIR 'shelflife.exe') -Force
-          Copy-Item -Path Assets -Destination (Join-Path $env:DIST_DIR 'Assets') -Recurse -Force
+          Copy-Item -Path src-tauri\icons\assets -Destination (Join-Path $env:DIST_DIR 'src-tauri\icons\assets') -Recurse -Force
 
       - name: Package MSIX
         shell: pwsh

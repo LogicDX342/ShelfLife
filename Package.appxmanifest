@@ -19,7 +19,7 @@
   <Properties>
     <DisplayName>ShelfLife</DisplayName>
     <PublisherDisplayName>LogicDX342</PublisherDisplayName>
-    <Logo>Assets\StoreLogo.png</Logo>
+    <Logo>src-tauri\icons\assets\StoreLogo.png</Logo>
   </Properties>
 
   <Dependencies>
@@ -41,9 +41,9 @@
         DisplayName="LogicDX342.ShelfLife"
         Description="Windows Application"
         BackgroundColor="transparent"
-        Square150x150Logo="Assets\MedTile.png"
-        Square44x44Logo="Assets\AppList.png">
-        <uap:DefaultTile Wide310x150Logo="Assets\WideTile.png" />
+        Square150x150Logo="src-tauri\icons\assets\MedTile.png"
+        Square44x44Logo="src-tauri\icons\assets\AppList.png">
+        <uap:DefaultTile Wide310x150Logo="src-tauri\icons\assets\WideTile.png" />
       </uap:VisualElements>
     </Application>
   </Applications>
