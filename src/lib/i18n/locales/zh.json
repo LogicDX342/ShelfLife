@@ -1,4 +1,7 @@
 {
+  "meta": {
+    "languageName": "简体中文"
+  },
   "nav": {
     "dashboard": "仪表板",
     "queue": "清理队列",
@@ -23,11 +26,6 @@
     "light": "浅色",
     "dark": "深色",
     "system": "跟随系统"
-  },
-  "lang": {
-    "title": "语言",
-    "en": "English",
-    "zh": "简体中文"
   },
   "dashboard": {
     "welcome": "欢迎使用 ShelfLife，从侧边栏选择功能开始管理文件。",
@@ -183,6 +181,7 @@
     "path": "文件夹路径",
     "savedShort": "已保存",
     "general": "通用设置",
+    "language": "语言",
     "defaultMoveDestination": "默认移动目标",
     "defaultMoveDestinationPlaceholder": "可选文件夹路径",
     "selectDefaultMoveDestination": "选择默认移动目标",

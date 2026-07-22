@@ -269,7 +269,7 @@
               </div>
 
               <div class="flex flex-col gap-1.5">
-                <Label for="lang-select">{i18n.t('lang.title')}</Label>
+                <Label for="lang-select">{i18n.t('settings.language')}</Label>
                 <Select.Root
                   type="single"
                   value={i18n.currentLang}
@@ -277,13 +277,13 @@
                 >
                   <Select.Trigger id="lang-select" class="w-full">
                     <span data-slot="select-value">
-                      {i18n.t(`lang.${i18n.currentLang}`)}
+                      {i18n.languageName(i18n.currentLang)}
                     </span>
                   </Select.Trigger>
                   <Select.Content>
                     <Select.Group>
-                      {#each i18n.languages as language (language)}
-                        <Select.Item value={language} label={i18n.t(`lang.${language}`)} />
+                      {#each i18n.languageOptions as language (language.code)}
+                        <Select.Item value={language.code} label={language.label} />
                       {/each}
                     </Select.Group>
                   </Select.Content>

@@ -1,4 +1,7 @@
 {
+  "meta": {
+    "languageName": "English"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "queue": "Review Queue",
@@ -23,11 +26,6 @@
     "light": "Light",
     "dark": "Dark",
     "system": "System"
-  },
-  "lang": {
-    "title": "Language",
-    "en": "English",
-    "zh": "简体中文"
   },
   "dashboard": {
     "welcome": "Welcome to ShelfLife. Select an option from the sidebar to manage or browse your files.",
@@ -183,6 +181,7 @@
     "path": "Folder Path",
     "savedShort": "Saved",
     "general": "General Settings",
+    "language": "Language",
     "defaultMoveDestination": "Default Move Destination",
     "defaultMoveDestinationPlaceholder": "Optional folder path",
     "selectDefaultMoveDestination": "Select Default Move Destination",

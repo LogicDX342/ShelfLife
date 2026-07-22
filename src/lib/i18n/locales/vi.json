@@ -1,4 +1,7 @@
 {
+  "meta": {
+    "languageName": "Tiếng Việt"
+  },
   "nav": {
     "dashboard": "Bảng điều khiển",
     "queue": "Hàng chờ xem xét",
@@ -23,12 +26,6 @@
     "light": "Sáng",
     "dark": "Tối",
     "system": "Hệ thống"
-  },
-  "lang": {
-    "title": "Ngôn ngữ",
-    "en": "Tiếng Anh",
-    "zh": "Tiếng Trung giản thể",
-    "vi": "Tiếng Việt"
   },
   "dashboard": {
     "welcome": "Chào mừng bạn đến với ShelfLife. Chọn một mục từ thanh bên để quản lý hoặc duyệt các tệp của bạn.",
@@ -184,6 +181,7 @@
     "path": "Đường dẫn thư mục",
     "savedShort": "Đã lưu",
     "general": "Cài đặt chung",
+    "language": "Ngôn ngữ",
     "defaultMoveDestination": "Đích đến di chuyển mặc định",
     "defaultMoveDestinationPlaceholder": "Đường dẫn thư mục tùy chọn",
     "selectDefaultMoveDestination": "Chọn đích đến di chuyển mặc định",

@@ -23,7 +23,6 @@ const translations = Object.fromEntries(
     return [language, translation];
   }),
 ) as Record<Language, TranslationTree>;
-const languages = Object.keys(translations).sort((a, b) => a.localeCompare(b));
 const fallbackTranslations = translations[fallbackLanguage];
 
 if (!fallbackTranslations) {
@@ -52,8 +51,20 @@ function resolveTranslation(dict: TranslationTree, keys: string[]): string | und
   return typeof current === 'string' ? current : undefined;
 }
 
+const languageOptions = Object.entries(translations)
+  .map(([code, translation]) => {
+    const label = resolveTranslation(translation, ['meta', 'languageName']);
+    if (!label) {
+      throw new Error(`Missing language name metadata for locale: ${code}`);
+    }
+
+    return { code, label };
+  })
+  .sort((a, b) => a.code.localeCompare(b.code));
+const languageNames = new Map(languageOptions.map(({ code, label }) => [code, label] as const));
+
 class AppState {
-  readonly languages = languages;
+  readonly languageOptions = languageOptions;
 
   currentLang = $state<Language>(fallbackLanguage);
   currentTheme = $state<Theme>('system');
@@ -129,6 +140,10 @@ class AppState {
     if (browser) {
       localStorage.setItem('shelflife_lang', lang);
     }
+  }
+
+  languageName(language: string): string {
+    return languageNames.get(language) ?? language;
   }
 
   setTheme(theme: Theme) {

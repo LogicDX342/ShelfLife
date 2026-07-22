@@ -129,6 +129,7 @@ const allTranslationKeys = new Set(Object.values(languageKeys).flatMap((keys) =>
 
 const sourceFiles = await listSourceFiles(srcDir);
 const usage = { literalKeys: new Set(), dynamicPrefixes: new Set() };
+usage.literalKeys.add('meta.languageName');
 usage.dynamicPrefixes.add('error.');
 usage.dynamicPrefixes.add('tab.');
 usage.dynamicPrefixes.add('tray.');
