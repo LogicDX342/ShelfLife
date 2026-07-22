@@ -27,7 +27,8 @@
   "lang": {
     "title": "Ngôn ngữ",
     "en": "Tiếng Anh",
-    "zh": "Tiếng Trung giản thể"
+    "zh": "Tiếng Trung giản thể",
+    "vi": "Tiếng Việt"
   },
   "dashboard": {
     "welcome": "Chào mừng bạn đến với ShelfLife. Chọn một mục từ thanh bên để quản lý hoặc duyệt các tệp của bạn.",
