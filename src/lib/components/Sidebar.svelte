@@ -22,6 +22,7 @@
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { filesState } from '$lib/stores/files.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
+  import { cn } from '$lib/utils';
   import { getErrorMessage } from '$lib/utils/format';
 
   type AppRoute = '/' | '/queue' | '/browser' | '/rules' | '/audit' | '/settings' | '/about';
@@ -149,7 +150,7 @@
 
   <!-- Navigation -->
   <nav
-    class="flex-1 px-2 md:px-3 pb-4 space-y-1 overflow-y-auto overflow-x-hidden"
+    class="flex flex-1 flex-col gap-1 px-2 md:px-3 pb-4 overflow-y-auto overflow-x-hidden"
     aria-label="Primary"
   >
     {#each navItems as item (item.path)}
@@ -157,18 +158,20 @@
       <Button
         href={resolve(item.path)}
         variant="ghost"
-        class="relative w-full justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 text-sm font-medium group {isActive(
-          item.path,
-        )
-          ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold'
-          : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'}"
+        class={cn(
+          'relative w-full justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 text-sm font-medium group',
+          isActive(item.path)
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold'
+            : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+        )}
         title={i18n.t(item.labelKey)}
       >
         {#if isActive(item.path)}
           <div class="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-primary"></div>
         {/if}
         <Icon
-          class="w-5 h-5 flex-shrink-0 transition-transform duration-150 group-hover:scale-105"
+          data-icon="inline-start"
+          class="transition-transform duration-150 group-hover:scale-105"
         />
         <span class="hidden md:inline whitespace-nowrap">{i18n.t(item.labelKey)}</span>
       </Button>
@@ -183,18 +186,20 @@
         <Button
           href={resolve(item.path)}
           variant="ghost"
-          class="relative w-full justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 text-sm font-medium group {isActive(
-            item.path,
-          )
-            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold'
-            : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'}"
+          class={cn(
+            'relative w-full justify-center md:justify-start gap-3 px-3 md:px-4 py-2.5 text-sm font-medium group',
+            isActive(item.path)
+              ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold'
+              : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+          )}
           title={i18n.t(item.labelKey)}
         >
           {#if isActive(item.path)}
             <div class="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-primary"></div>
           {/if}
           <Icon
-            class="w-5 h-5 flex-shrink-0 transition-transform duration-150 group-hover:scale-105"
+            data-icon="inline-start"
+            class="transition-transform duration-150 group-hover:scale-105"
           />
           <span class="hidden md:inline whitespace-nowrap">{i18n.t(item.labelKey)}</span>
         </Button>
@@ -210,7 +215,7 @@
             <span class="text-xs text-muted-foreground">{i18n.t('status.watchStatus')}</span>
             {#if filesState.syncing}
               <span class="flex items-center gap-1.5 text-sm font-medium">
-                <Spinner class="size-3.5 text-primary" />
+                <Spinner class="size-3.5" />
                 {i18n.t('status.syncing')}
               </span>
             {:else}
@@ -236,6 +241,7 @@
         onclick={() => setWatchingEnabled(isPaused)}
         disabled={watchStatusBusy}
         variant="ghost"
+        size="icon"
         class="relative"
         title={`${i18n.t('status.watchStatus')}: ${isPaused ? i18n.t('status.paused') : i18n.t('status.active')}`}
       >
@@ -243,18 +249,17 @@
           <Spinner />
         {:else if isPaused}
           <IconPlayCircle
-            class="w-5 h-5 text-amber-500 dark:text-amber-400 transition-transform duration-150 group-hover:scale-105"
+            class="text-warning transition-transform duration-150 group-hover:scale-105"
           />
-          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500"></span>
+          <span class="absolute top-1.5 right-1.5 size-2 rounded-full bg-warning"></span>
         {:else}
           <IconPauseCircle
-            class="w-5 h-5 text-emerald-500 dark:text-emerald-400 transition-transform duration-150 group-hover:scale-105"
+            class="text-success transition-transform duration-150 group-hover:scale-105"
           />
           {#if filesState.syncing}
-            <Spinner class="absolute -right-0.5 -top-0.5 size-3.5 text-primary" />
+            <Spinner class="absolute -right-0.5 -top-0.5 size-3.5" />
           {:else}
-            <span
-              class="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-500 animate-pulse"
+            <span class="absolute right-1.5 top-1.5 size-2 rounded-full bg-success animate-pulse"
             ></span>
           {/if}
         {/if}

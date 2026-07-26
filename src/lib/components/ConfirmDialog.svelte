@@ -40,7 +40,7 @@
     </Dialog.Header>
 
     {#if message || children}
-      <div class="space-y-4">
+      <div class="flex flex-col gap-4">
         {#if message}
           <Dialog.Description>
             {message}

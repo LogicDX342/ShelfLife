@@ -36,12 +36,10 @@
   }
 </script>
 
-<Card.Root class="flex flex-col justify-between gap-4 p-4 md:flex-row md:items-center">
-  <div class="space-y-1 min-w-0 flex-1">
+<Card.Root class="flex flex-col justify-between gap-2 p-3 md:flex-row md:items-center">
+  <div class="flex min-w-0 flex-1 flex-col gap-1">
     <div class="flex items-center gap-2.5">
-      <span
-        class="font-semibold text-sm tracking-tight text-fluent-text-light dark:text-fluent-text-dark"
-      >
+      <span class="font-semibold text-sm tracking-tight text-foreground">
         {rule.name}
       </span>
       <Badge variant="secondary">
@@ -49,15 +47,12 @@
       </Badge>
     </div>
 
-    <p
-      class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark truncate"
-      title={rule.watch_path}
-    >
+    <p class="text-xs text-muted-foreground truncate" title={rule.watch_path}>
       {i18n.t('rules.watchTarget', { path: rule.watch_path })}
     </p>
 
     <div
-      class="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] font-medium text-fluent-muted-light dark:text-fluent-muted-dark"
+      class="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] font-medium text-muted-foreground"
     >
       <Badge variant="outline">
         {i18n.t('rules.mode')}: {modeLabel(rule.mode)}
@@ -88,7 +83,7 @@
 
   <div class="flex items-center gap-3.5 flex-shrink-0">
     <div class="flex items-center gap-2">
-      <span class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark">
+      <span class="text-xs text-muted-foreground">
         {rule.enabled ? i18n.t('rules.enabled') : i18n.t('rules.disabled')}
       </span>
       <Switch

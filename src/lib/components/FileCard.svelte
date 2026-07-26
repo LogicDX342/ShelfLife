@@ -27,6 +27,7 @@
     TrackedFile,
     UserTriageAction,
   } from '$lib/types';
+  import { cn } from '$lib/utils';
   import { formatBytes, formatDate, getErrorMessage } from '$lib/utils/format';
   import {
     getDestinationOptions,
@@ -277,15 +278,15 @@
   function getBorderColor(state: string) {
     switch (state) {
       case 'Fresh':
-        return 'border-l-4 border-l-green-500';
+        return 'border-l-4 border-l-success';
       case 'Stale':
-        return 'border-l-4 border-l-amber-500';
+        return 'border-l-4 border-l-warning';
       case 'Decaying':
-        return 'border-l-4 border-l-red-500';
+        return 'border-l-4 border-l-destructive';
       case 'Pinned':
-        return 'border-l-4 border-l-blue-500';
+        return 'border-l-4 border-l-info';
       default:
-        return 'border-l-4 border-l-neutral-400';
+        return 'border-l-4 border-l-muted-foreground';
     }
   }
 
@@ -295,7 +296,10 @@
 </script>
 
 <Card.Root
-  class="relative flex flex-col gap-3 p-4 transition-all duration-200 {getBorderColor(file.state)}"
+  class={cn(
+    'relative flex flex-col gap-2 p-3 transition-all duration-200',
+    getBorderColor(file.state),
+  )}
 >
   <!-- Row 1: File Info -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -311,7 +315,7 @@
       {/if}
 
       <div class="mt-0.5 text-muted-foreground flex-shrink-0">
-        <IconDocument class="w-5 h-5 opacity-80" />
+        <IconDocument class="size-5 opacity-80" />
       </div>
 
       <div class="min-w-0 flex-1">
@@ -327,13 +331,13 @@
           </p>
           <Button
             variant="ghost"
-            size="icon"
-            class="h-5 w-5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
+            size="icon-xs"
+            class="shrink-0"
             onclick={openLocation}
             title={i18n.t('file.openFolder')}
             aria-label={i18n.t('file.openFolder')}
           >
-            <IconFolderOpen class="w-3.5 h-3.5" />
+            <IconFolderOpen />
           </Button>
         </div>
       </div>
@@ -360,7 +364,7 @@
     <div
       class="border-t border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive rounded-md flex items-center gap-2"
     >
-      <IconAlertTriangle class="w-4 h-4 shrink-0 text-destructive" />
+      <IconAlertTriangle class="size-4 shrink-0 text-destructive" />
       <span class="font-medium">{error}</span>
     </div>
   {/if}
@@ -381,46 +385,22 @@
     <!-- Left actions (Pin/Ignore, Move, Snooze) -->
     <div class="flex flex-wrap gap-2">
       {#if file.state === 'Pinned'}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onclick={() => queueAction('Ignore')}
-          class="h-8 text-xs gap-1.5"
-        >
-          <IconEyeOff class="w-3.5 h-3.5" />
+        <Button variant="outline" size="sm" disabled={busy} onclick={() => queueAction('Ignore')}>
+          <IconEyeOff data-icon="inline-start" />
           {i18n.t('file.ignore')}
         </Button>
       {:else if isIgnored(file.state)}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onclick={() => queueAction('Pin')}
-          class="h-8 text-xs gap-1.5"
-        >
-          <IconPin class="w-3.5 h-3.5" />
+        <Button variant="outline" size="sm" disabled={busy} onclick={() => queueAction('Pin')}>
+          <IconPin data-icon="inline-start" />
           {i18n.t('file.pin')}
         </Button>
       {:else}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onclick={() => queueAction('Pin')}
-          class="h-8 text-xs gap-1.5"
-        >
-          <IconPin class="w-3.5 h-3.5" />
+        <Button variant="outline" size="sm" disabled={busy} onclick={() => queueAction('Pin')}>
+          <IconPin data-icon="inline-start" />
           {i18n.t('file.pin')}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onclick={() => queueAction('Ignore')}
-          class="h-8 text-xs gap-1.5"
-        >
-          <IconEyeOff class="w-3.5 h-3.5" />
+        <Button variant="outline" size="sm" disabled={busy} onclick={() => queueAction('Ignore')}>
+          <IconEyeOff data-icon="inline-start" />
           {i18n.t('file.ignore')}
         </Button>
       {/if}
@@ -430,9 +410,8 @@
         size="sm"
         disabled={busy}
         onclick={toggleMoveControls}
-        class="h-8 text-xs gap-1.5"
       >
-        <IconFolderArrowRight class="w-3.5 h-3.5" />
+        <IconFolderArrowRight data-icon="inline-start" />
         {i18n.t('file.actionMove')}
       </Button>
 
@@ -441,9 +420,8 @@
         size="sm"
         disabled={busy}
         onclick={toggleSnoozeControls}
-        class="h-8 text-xs gap-1.5"
       >
-        <IconClock class="w-3.5 h-3.5" />
+        <IconClock data-icon="inline-start" />
         {i18n.t('file.snooze')}
       </Button>
     </div>
@@ -456,9 +434,8 @@
           size="sm"
           disabled={busy}
           onclick={() => queueRuleConfirmation(confirmableExplanation)}
-          class="h-8 text-xs gap-1.5"
         >
-          <IconCircleCheck class="w-3.5 h-3.5" />
+          <IconCircleCheck data-icon="inline-start" />
           {i18n.t('file.confirmRuleAction')}
         </Button>
       {/if}
@@ -467,9 +444,8 @@
         size="sm"
         disabled={busy}
         onclick={() => queueAction('TrashNow')}
-        class="h-8 text-xs gap-1.5"
       >
-        <IconDelete class="w-3.5 h-3.5" />
+        <IconDelete data-icon="inline-start" />
         {i18n.t('file.trash')}
       </Button>
     </div>
@@ -522,24 +498,16 @@
           size="sm"
           disabled={moveLoading || busy}
           onclick={chooseMoveDestination}
-          class="h-9 text-xs"
         >
           {i18n.t('file.chooseAnotherFolder')}
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onclick={() => (moveOpen = false)}
-          class="h-9 text-xs"
-        >
+        <Button variant="ghost" size="sm" disabled={busy} onclick={() => (moveOpen = false)}>
           {i18n.t('dialog.cancel')}
         </Button>
         <Button
           size="sm"
           disabled={busy || moveLoading || !moveDestination.trim()}
           onclick={queueMoveAction}
-          class="h-9 text-xs"
         >
           {i18n.t('file.actionMove')}
         </Button>
@@ -559,7 +527,7 @@
         <Select.Root type="single" bind:value={snoozeDays}>
           <Select.Trigger
             id="snooze-in-{file.file_name}"
-            class="h-9 text-xs {snoozeDays === '-1' ? 'w-32 shrink-0' : 'flex-1 min-w-64'}"
+            class={cn('h-9 text-xs', snoozeDays === '-1' ? 'w-32 shrink-0' : 'flex-1 min-w-64')}
           >
             <span data-slot="select-value">{snoozeLabel(snoozeDays)}</span>
           </Select.Trigger>
@@ -582,17 +550,11 @@
           />
         {/if}
 
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          onclick={() => (snoozeOpen = false)}
-          class="h-9 text-xs"
-        >
+        <Button variant="ghost" size="sm" disabled={busy} onclick={() => (snoozeOpen = false)}>
           {i18n.t('dialog.cancel')}
         </Button>
 
-        <Button size="sm" disabled={busy} onclick={snoozeAction} class="h-9 text-xs">
+        <Button size="sm" disabled={busy} onclick={snoozeAction}>
           {i18n.t('file.snooze')}
         </Button>
       </div>

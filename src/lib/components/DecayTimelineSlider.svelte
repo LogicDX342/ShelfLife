@@ -29,11 +29,11 @@
     const decayPercent = (decayStartDays / max) * 100;
     const expiryPercent = (expiryDays / max) * 100;
 
-    return `linear-gradient(to right, 
-      #22c55e 0%, #22c55e ${stalePercent}%, 
-      #eab308 ${stalePercent}%, #eab308 ${decayPercent}%, 
-      #ef4444 ${decayPercent}%, #ef4444 ${expiryPercent}%, 
-      #9ca3af ${expiryPercent}%, #9ca3af 100%)`;
+    return `linear-gradient(to right,
+      var(--success) 0%, var(--success) ${stalePercent}%,
+      var(--warning) ${stalePercent}%, var(--warning) ${decayPercent}%,
+      var(--destructive) ${decayPercent}%, var(--destructive) ${expiryPercent}%,
+      var(--muted-foreground) ${expiryPercent}%, var(--muted-foreground) 100%)`;
   });
 
   function handleValueChange(nextValues: number[]) {
@@ -84,37 +84,36 @@
   let zones = $derived<ZoneConfig[]>([
     {
       key: 'fresh',
-      bgClass: 'bg-green-500/5 dark:bg-green-500/10 border-green-500/20 dark:border-green-500/30',
-      titleClass: 'text-green-600 dark:text-green-400',
-      dotClass: 'bg-green-500',
+      bgClass: 'bg-success/5 border-success/20',
+      titleClass: 'text-success',
+      dotClass: 'bg-success',
       title: i18n.t('settings.freshZone'),
       range: `0 - ${value[0]} ${value[0] === 1 ? i18n.t('settings.dayUnit') : i18n.t('settings.daysUnit')}`,
       desc: i18n.t('settings.freshZoneDesc'),
     },
     {
       key: 'stale',
-      bgClass:
-        'bg-yellow-500/5 dark:bg-yellow-500/10 border-yellow-500/20 dark:border-yellow-500/30',
-      titleClass: 'text-yellow-600 dark:text-yellow-400',
-      dotClass: 'bg-yellow-500',
+      bgClass: 'bg-warning/5 border-warning/20',
+      titleClass: 'text-warning',
+      dotClass: 'bg-warning',
       title: i18n.t('settings.staleZone'),
       range: `${value[0]} - ${value[1]} ${i18n.t('settings.daysUnit')}`,
       desc: i18n.t('settings.staleZoneDesc'),
     },
     {
       key: 'decaying',
-      bgClass: 'bg-red-500/5 dark:bg-red-500/10 border-red-500/20 dark:border-red-500/30',
-      titleClass: 'text-red-600 dark:text-red-400',
-      dotClass: 'bg-red-500',
+      bgClass: 'bg-destructive/5 border-destructive/20',
+      titleClass: 'text-destructive',
+      dotClass: 'bg-destructive',
       title: i18n.t('settings.decayingZone'),
       range: `${value[1]} - ${value[2]} ${i18n.t('settings.daysUnit')}`,
       desc: i18n.t('settings.decayingZoneDesc'),
     },
     {
       key: 'expired',
-      bgClass: 'bg-zinc-500/5 dark:bg-zinc-500/10 border-zinc-500/20 dark:border-zinc-500/30',
-      titleClass: 'text-zinc-500 dark:text-zinc-400',
-      dotClass: 'bg-zinc-400',
+      bgClass: 'bg-muted/50 border-border',
+      titleClass: 'text-muted-foreground',
+      dotClass: 'bg-muted-foreground',
       title: i18n.t('settings.expiredZone'),
       range: `> ${value[2]} ${i18n.t('settings.daysUnit')}`,
       desc: i18n.t('settings.expiredZoneDesc'),
@@ -138,7 +137,7 @@
       {#snippet children({ thumbItems }: { thumbItems: ThumbItem[] })}
         <span
           data-slot="slider-track"
-          class="relative h-2.5 w-full grow rounded-full shadow-inner border border-black/5 dark:border-white/5"
+          class="relative h-2.5 w-full grow rounded-full shadow-inner border border-border"
           style="background: {trackBackground};"
         >
         </span>
@@ -147,13 +146,13 @@
             data-slot="slider-thumb"
             index={thumb.index}
             class={cn(
-              'relative size-5 rounded-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-md transition-[color,box-shadow,transform] hover:ring-2 hover:ring-primary/20 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:outline-none active:scale-110 block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50 cursor-pointer',
+              'relative size-5 rounded-full border border-border bg-background shadow-md transition-[color,box-shadow,transform] hover:ring-2 hover:ring-ring/20 focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none active:scale-110 block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50 cursor-pointer',
               thumb.index === 0 &&
-                'border-green-500 hover:ring-green-500/20 focus-visible:ring-green-500/30',
+                'border-success hover:ring-success/20 focus-visible:ring-success/30',
               thumb.index === 1 &&
-                'border-yellow-500 hover:ring-yellow-500/20 focus-visible:ring-yellow-500/30',
+                'border-warning hover:ring-warning/20 focus-visible:ring-warning/30',
               thumb.index === 2 &&
-                'border-red-500 hover:ring-red-500/20 focus-visible:ring-red-500/30',
+                'border-destructive hover:ring-destructive/20 focus-visible:ring-destructive/30',
             )}
           />
         {/each}
@@ -170,14 +169,10 @@
             <span class={cn('size-2 rounded-full', zone.dotClass)}></span>
             {zone.title}
           </Item.Title>
-          <div
-            class="text-fluent-muted-light dark:text-fluent-muted-dark text-[11px] font-medium leading-none mt-0.5"
-          >
+          <div class="text-muted-foreground text-[11px] font-medium leading-none mt-0.5">
             {zone.range}
           </div>
-          <Item.Description
-            class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark leading-relaxed mt-1 line-clamp-none"
-          >
+          <Item.Description class="text-[10px] leading-relaxed mt-1 line-clamp-none">
             {zone.desc}
           </Item.Description>
         </Item.Content>

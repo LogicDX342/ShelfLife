@@ -161,7 +161,9 @@
         <Spinner />
       </div>
     {:else if errorMessage}
-      <div class="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs">
+      <div
+        class="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive"
+      >
         {errorMessage}
       </div>
     {:else if preview}
@@ -205,23 +207,14 @@
                   {#if executingKey === `rule:${group.rule_id}`}
                     <IconLoader
                       data-icon="inline-start"
-                      class="w-4 h-4 animate-spin text-muted-foreground shrink-0"
+                      class="animate-spin text-muted-foreground"
                     />
                   {:else if group.action === 'Trash'}
-                    <IconDelete
-                      data-icon="inline-start"
-                      class="w-4 h-4 text-destructive shrink-0"
-                    />
+                    <IconDelete data-icon="inline-start" class="text-destructive" />
                   {:else if typeof group.action === 'object' && 'Move' in group.action}
-                    <IconFolderInput
-                      data-icon="inline-start"
-                      class="w-4 h-4 text-primary shrink-0"
-                    />
+                    <IconFolderInput data-icon="inline-start" />
                   {:else if group.action === 'Ignore'}
-                    <IconEyeOff
-                      data-icon="inline-start"
-                      class="w-4 h-4 text-muted-foreground shrink-0"
-                    />
+                    <IconEyeOff data-icon="inline-start" class="text-muted-foreground" />
                   {/if}
                   <span class="min-w-0 flex-1 font-medium truncate">{group.rule_name}</span>
                   <Badge variant="outline" class="shrink-0">{group.file_count}</Badge>
@@ -236,7 +229,7 @@
                     >
                   {:else if typeof group.action === 'object' && 'Move' in group.action}
                     <span
-                      class="text-primary font-semibold truncate"
+                      class="font-semibold truncate"
                       title={group.action.Move.destination_folder}
                     >
                       {i18n.t('dropzone.actionMove', {

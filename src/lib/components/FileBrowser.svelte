@@ -19,6 +19,7 @@
   import { filesState } from '$lib/stores/files.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { AppConfig, AppError, TrackedFile, UserTriageAction } from '$lib/types';
+  import { cn } from '$lib/utils';
   import { formatBytes, getErrorMessage } from '$lib/utils/format';
   import {
     getDestinationOptions,
@@ -339,18 +340,18 @@
   function getWorstStateColors(state: string) {
     switch (state) {
       case 'Fresh':
-        return 'bg-green-500 text-green-500 border-green-500/20';
+        return 'bg-success';
       case 'Stale':
-        return 'bg-amber-500 text-amber-500 border-amber-500/20';
+        return 'bg-warning';
       case 'Decaying':
-        return 'bg-red-500 text-red-500 border-red-500/20';
+        return 'bg-destructive';
       case 'Pinned':
-        return 'bg-blue-500 text-blue-500 border-blue-500/20';
+        return 'bg-info';
       case 'ManuallyIgnored':
       case 'RuleIgnored':
-        return 'bg-neutral-400 text-neutral-400 border-neutral-400/20';
+        return 'bg-muted-foreground';
       default:
-        return 'bg-neutral-500 text-neutral-500 border-neutral-500/20';
+        return 'bg-muted-foreground';
     }
   }
 </script>
@@ -393,9 +394,7 @@
   <!-- Folders Section -->
   {#if directoryContents.folders.length > 0}
     <div>
-      <h2
-        class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark mb-3"
-      >
+      <h2 class="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
         {i18n.t('browser.folders')}
       </h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -403,24 +402,19 @@
           <Button
             onclick={() => (currentDirectory = folder.path)}
             variant="outline"
-            class="group h-auto justify-between p-4 text-left"
+            class="group h-auto justify-between p-3 text-left"
           >
-            <div class="flex items-center gap-3 min-w-0">
+            <div class="flex items-center gap-2 min-w-0">
               <!-- Folder Icon -->
               <IconFolder
-                class="w-8 h-8 text-primary/80 group-hover:scale-105 transition-transform flex-shrink-0"
+                data-icon="inline-start"
+                class="size-6 group-hover:scale-105 transition-transform"
               />
               <div class="min-w-0">
-                <h3
-                  class="text-sm font-semibold truncate text-fluent-text-light dark:text-fluent-text-dark"
-                  title={folder.name}
-                >
+                <h3 class="text-sm font-semibold truncate text-foreground" title={folder.name}>
                   {folder.name}
                 </h3>
-                <p
-                  class="text-[10px] text-fluent-muted-light dark:text-fluent-muted-dark truncate mt-0.5"
-                  title={folder.path}
-                >
+                <p class="text-[10px] text-muted-foreground truncate mt-0.5" title={folder.path}>
                   {folder.filesCount === 1
                     ? i18n.t('browser.fileCountSingular', { count: folder.filesCount })
                     : i18n.t('browser.fileCountPlural', { count: folder.filesCount })}
@@ -429,18 +423,20 @@
             </div>
 
             <!-- Worst state indicator dot -->
-            <span class="flex h-2 w-2 relative flex-shrink-0">
+            <span class="flex size-2 relative flex-shrink-0">
               {#if folder.worstState === 'Decaying' || folder.worstState === 'Stale'}
                 <span
-                  class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 {getWorstStateColors(
-                    folder.worstState,
-                  ).split(' ')[0]}"
+                  class={cn(
+                    'animate-ping absolute inline-flex size-full rounded-full opacity-75',
+                    getWorstStateColors(folder.worstState),
+                  )}
                 ></span>
               {/if}
               <span
-                class="relative inline-flex rounded-full h-2 w-2 {getWorstStateColors(
-                  folder.worstState,
-                ).split(' ')[0]}"
+                class={cn(
+                  'relative inline-flex size-2 rounded-full',
+                  getWorstStateColors(folder.worstState),
+                )}
               ></span>
             </span>
           </Button>
@@ -468,23 +464,16 @@
   {#if directoryContents.files.length > 0}
     <div>
       <div class="flex items-center justify-between mb-3">
-        <h2
-          class="text-xs font-bold uppercase tracking-wider text-fluent-muted-light dark:text-fluent-muted-dark"
-        >
+        <h2 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           {i18n.t('browser.files')}
         </h2>
 
         <!-- Bulk Select Operations -->
         <div class="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="link"
-            class="h-auto p-0"
-            onclick={selectReviewableInFolder}
-          >
+          <Button type="button" variant="ghost" size="xs" onclick={selectReviewableInFolder}>
             {i18n.t('browser.selectReviewable')}
           </Button>
-          <span class="text-fluent-border-light dark:text-fluent-border-dark">|</span>
+          <span class="text-border">|</span>
           <label class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
             <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} />
             {i18n.t('browser.selectAll')}
@@ -492,7 +481,7 @@
         </div>
       </div>
 
-      <div class="space-y-4">
+      <div class="flex flex-col gap-4">
         {#each directoryContents.files.slice(0, visibleFilesCount) as file (file.path)}
           <FileCard
             {file}
@@ -545,9 +534,9 @@
   >
     {#if failedSelectedCount > 0}
       <div
-        class="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-300"
+        class="flex items-center gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-medium text-warning"
       >
-        <IconAlertTriangle class="h-4 w-4 shrink-0 text-amber-500" />
+        <IconAlertTriangle class="size-4 shrink-0" />
         <span>{i18n.t('browser.bulkFailuresNotice', { count: failedSelectedCount })}</span>
       </div>
     {/if}
@@ -555,10 +544,10 @@
     <div class="flex items-center justify-between gap-4">
       <div class="flex items-center gap-4">
         <div class="flex flex-col">
-          <span class="text-sm font-semibold text-primary">
+          <span class="text-sm font-semibold">
             {i18n.t('dashboard.selected', { count: selectedPaths.length })}
           </span>
-          <span class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark">
+          <span class="text-xs text-muted-foreground">
             {formatBytes(selectedSize)}
           </span>
         </div>

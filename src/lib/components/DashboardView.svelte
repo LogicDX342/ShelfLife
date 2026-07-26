@@ -18,19 +18,19 @@
       label={i18n.t('dashboard.triageNeeded')}
       value={filesState.counts.stale + filesState.counts.decaying}
       description={i18n.t('dashboard.triageDesc')}
-      valueClass="text-amber-500"
+      tone="warning"
     />
     <DashboardStatCard
       label={i18n.t('dashboard.healthyFiles')}
       value={filesState.counts.fresh + filesState.counts.pinned}
       description={i18n.t('dashboard.healthyDesc')}
-      valueClass="text-green-500"
+      tone="success"
     />
     <DashboardStatCard
       label={i18n.t('dashboard.ignoredFiles')}
       value={filesState.counts.ignored}
       description={i18n.t('dashboard.ignoredDesc')}
-      valueClass="text-neutral-500"
+      tone="muted"
     />
   </div>
 </PageBody>

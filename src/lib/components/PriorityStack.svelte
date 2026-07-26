@@ -88,7 +88,7 @@
 <!-- Scrollable content -->
 <PageBody>
   {#if filesState.error}
-    <div class="p-6 text-center text-red-500">
+    <div class="p-6 text-center text-destructive">
       <p class="font-semibold">{i18n.t('dashboard.errorLoading')}</p>
       <p class="text-sm mt-1">{filesState.error}</p>
     </div>
@@ -101,7 +101,7 @@
       description={i18n.t('dashboard.noFilesDesc')}
     />
   {:else}
-    <div class="space-y-4">
+    <div class="flex flex-col gap-4">
       {#each filteredFiles.slice(0, visibleLimit) as file (file.path)}
         <FileCard {file} selectable={false} />
       {/each}

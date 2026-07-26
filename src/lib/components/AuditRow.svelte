@@ -52,11 +52,11 @@
       case 'Trash':
         return 'bg-destructive/10 text-destructive';
       case 'Move':
-        return 'bg-primary/10 text-primary';
+        return 'bg-secondary text-secondary-foreground';
       case 'Pin':
-        return 'bg-chart-2/10 text-chart-2';
+        return 'bg-success/10 text-success';
       case 'Snooze':
-        return 'bg-chart-4/10 text-chart-4';
+        return 'bg-warning/10 text-warning';
       case 'Ignore':
         return 'bg-muted text-muted-foreground';
       default:
@@ -71,15 +71,15 @@
       <!-- Action icon badge -->
       <div class={cn('flex shrink-0 rounded-lg p-2.5', getActionColors(entry.action_kind))}>
         {#if entry.action_kind === 'Trash'}
-          <IconDelete class="w-5 h-5" />
+          <IconDelete class="size-5" />
         {:else if entry.action_kind === 'Move'}
-          <IconFolderArrowRight class="w-5 h-5" />
+          <IconFolderArrowRight class="size-5" />
         {:else if entry.action_kind === 'Pin'}
-          <IconPin class="w-5 h-5" />
+          <IconPin class="size-5" />
         {:else if entry.action_kind === 'Snooze'}
-          <IconClock class="w-5 h-5" />
+          <IconClock class="size-5" />
         {:else}
-          <IconEyeOff class="w-5 h-5" />
+          <IconEyeOff class="size-5" />
         {/if}
       </div>
 
@@ -107,7 +107,7 @@
           <span>{formatDate(entry.timestamp)}</span>
           {#if entry.rule_name}
             <span>•</span>
-            <span class="font-medium text-primary">
+            <span class="font-medium text-foreground">
               {i18n.t('audit.rule', { name: entry.rule_name })}
             </span>
           {/if}

@@ -251,7 +251,7 @@
 >
   <!-- Section 1: General Settings -->
   <Card.Root>
-    <Card.Header>
+    <Card.Header class="border-b">
       <Card.Title>{i18n.t('rules.generalSettings')}</Card.Title>
     </Card.Header>
     <Card.Content>
@@ -293,7 +293,9 @@
 
   <!-- Section 2: Match Conditions -->
   <Card.Root>
-    <Card.Header><Card.Title>{i18n.t('rules.matchConditions')}</Card.Title></Card.Header>
+    <Card.Header class="border-b">
+      <Card.Title>{i18n.t('rules.matchConditions')}</Card.Title>
+    </Card.Header>
     <Card.Content>
       <Field.FieldGroup class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field.Field>
@@ -384,7 +386,7 @@
 
   <!-- Section 3: Rule behavior -->
   <Card.Root>
-    <Card.Header>
+    <Card.Header class="border-b">
       <Card.Title>{i18n.t('rules.behavior')}</Card.Title>
       <Card.Description>{i18n.t('rules.behaviorDescription')}</Card.Description>
     </Card.Header>
@@ -520,7 +522,7 @@
   <!-- Live Test Panel -->
   {#if hasTestedOnce}
     <Card.Root>
-      <Card.Header>
+      <Card.Header class="border-b">
         <Card.Title>{i18n.t('rules.testResultsCount', { count: testResults.length })}</Card.Title>
       </Card.Header>
       <Card.Content>

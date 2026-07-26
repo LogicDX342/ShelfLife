@@ -79,7 +79,7 @@
     {@render children()}
   {:else}
     <div
-      class="app-container h-screen overflow-hidden flex flex-col bg-fluent-bg-light dark:bg-fluent-bg-dark text-fluent-text-light dark:text-fluent-text-dark transition-colors duration-200 relative"
+      class="app-container h-screen overflow-hidden flex flex-col bg-background text-foreground transition-colors duration-200 relative"
     >
       <!-- Custom Title Bar -->
       <TitleBar />

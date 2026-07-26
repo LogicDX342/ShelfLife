@@ -74,7 +74,7 @@
           <div class="relative">
             <!-- Timeline Node Circle -->
             <span
-              class="absolute -left-[31px] top-1.5 w-3 h-3 rounded-full bg-fluent-accent border-2 border-fluent-bg-light dark:border-fluent-bg-dark ring-4 ring-fluent-accent/15"
+              class="absolute -left-[31px] top-1.5 size-3 rounded-full bg-primary border-2 border-background ring-4 ring-primary/15"
             ></span>
 
             <AuditRow {entry} />

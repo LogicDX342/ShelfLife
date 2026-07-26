@@ -42,35 +42,35 @@
     <!-- Minimize Button -->
     <button
       type="button"
-      class="w-[46px] h-full flex items-center justify-center text-fluent-text-light dark:text-fluent-text-dark hover:bg-black/10 dark:hover:bg-white/10 active:bg-black/20 dark:active:bg-white/20 transition-colors duration-100 focus:outline-none"
+      class="w-[46px] h-full flex items-center justify-center text-foreground hover:bg-foreground/10 active:bg-foreground/20 transition-colors duration-100 focus:outline-none"
       onclick={() => appWindow.minimize()}
       title="Minimize"
     >
-      <IconMinimize class="w-3.5 h-3.5" />
+      <IconMinimize class="size-3.5" />
     </button>
 
     <!-- Maximize / Restore Button -->
     <button
       type="button"
-      class="w-[46px] h-full flex items-center justify-center text-fluent-text-light dark:text-fluent-text-dark hover:bg-black/10 dark:hover:bg-white/10 active:bg-black/20 dark:active:bg-white/20 transition-colors duration-100 focus:outline-none"
+      class="w-[46px] h-full flex items-center justify-center text-foreground hover:bg-foreground/10 active:bg-foreground/20 transition-colors duration-100 focus:outline-none"
       onclick={() => appWindow.toggleMaximize()}
       title={isMaximized ? 'Restore' : 'Maximize'}
     >
       {#if isMaximized}
-        <IconRestore class="w-3.5 h-3.5" />
+        <IconRestore class="size-3.5" />
       {:else}
-        <IconMaximize class="w-3.5 h-3.5" />
+        <IconMaximize class="size-3.5" />
       {/if}
     </button>
 
     <!-- Close Button -->
     <button
       type="button"
-      class="w-[46px] h-full flex items-center justify-center text-fluent-text-light dark:text-fluent-text-dark hover:bg-[#e81123] hover:text-white active:bg-[#f1707a] active:text-white transition-colors duration-100 focus:outline-none"
+      class="w-[46px] h-full flex items-center justify-center text-foreground hover:bg-[#e81123] hover:text-white active:bg-[#f1707a] active:text-white transition-colors duration-100 focus:outline-none"
       onclick={() => appWindow.close()}
       title="Close"
     >
-      <IconDismiss class="w-3.5 h-3.5" />
+      <IconDismiss class="size-3.5" />
     </button>
   </div>
 </div>

@@ -13,12 +13,14 @@
   import { selectDirectory } from '$lib/api/files';
   import PageBody from '$lib/components/common/PageBody.svelte';
   import PageHeader from '$lib/components/common/PageHeader.svelte';
+  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import * as InputGroup from '$lib/components/ui/input-group';
   import * as Item from '$lib/components/ui/item';
   import { Label } from '$lib/components/ui/label';
   import * as Select from '$lib/components/ui/select';
+  import { Separator } from '$lib/components/ui/separator';
   import { Spinner } from '$lib/components/ui/spinner';
   import { Switch } from '$lib/components/ui/switch';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -222,33 +224,22 @@
     <!-- Grid System for Forms (Full-width settings panel) -->
     <div class="grid grid-cols-1 gap-6">
       <!-- Form Settings & Watch Targets -->
-      <div class="space-y-6">
+      <div class="flex flex-col gap-6">
         <!-- General Preferences Section -->
         <Card.Root>
-          <Card.Content class="space-y-4">
-            <div
-              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
-            >
-              <h3 class="text-sm font-semibold text-primary">
-                {i18n.t('settings.general')}
-              </h3>
-              <div
-                class="text-[11px] flex items-center gap-1.5 text-fluent-muted-light dark:text-fluent-muted-dark min-h-[1.5rem]"
-              >
-                {#if showSavedIndicator}
-                  <span
-                    class="text-green-600 dark:text-green-400 flex items-center gap-1 font-semibold transition-all duration-300"
-                  >
-                    <IconCheckmark class="w-3.5 h-3.5" />
-                    {i18n.t('settings.savedShort')}
-                  </span>
-                {/if}
-              </div>
-            </div>
-
-            <div
-              class="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-fluent-border-light dark:border-fluent-border-dark pb-4"
-            >
+          <Card.Header class="border-b">
+            <Card.Title>{i18n.t('settings.general')}</Card.Title>
+            {#if showSavedIndicator}
+              <Card.Action>
+                <Badge variant="outline" class="border-success/20 bg-success/10 text-success">
+                  <IconCheckmark data-icon="inline-start" />
+                  {i18n.t('settings.savedShort')}
+                </Badge>
+              </Card.Action>
+            {/if}
+          </Card.Header>
+          <Card.Content class="flex flex-col gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="flex flex-col gap-1.5">
                 <Label for="default-move-destination">
                   {i18n.t('settings.defaultMoveDestination')}
@@ -340,17 +331,15 @@
               </div>
             </div>
 
+            <Separator />
+
             <!-- Notification & Boot Toggles -->
             <Item.Group class="select-none flex flex-col gap-3">
               <Item.Root
                 class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
               >
                 <Item.Content class="flex flex-col gap-0.5">
-                  <Item.Title
-                    class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex"
-                  >
-                    {i18n.t('settings.notifications')}
-                  </Item.Title>
+                  <Item.Title>{i18n.t('settings.notifications')}</Item.Title>
                 </Item.Content>
                 <Item.Actions class="flex-shrink-0 ml-4">
                   <Switch
@@ -368,11 +357,7 @@
                 class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
               >
                 <Item.Content class="flex flex-col gap-0.5">
-                  <Item.Title
-                    class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex"
-                  >
-                    {i18n.t('settings.startAtLogin')}
-                  </Item.Title>
+                  <Item.Title>{i18n.t('settings.startAtLogin')}</Item.Title>
                 </Item.Content>
                 <Item.Actions class="flex-shrink-0 ml-4">
                   <Switch
@@ -390,7 +375,7 @@
                 class="px-0 py-0 border-none hover:bg-transparent flex items-center justify-between"
               >
                 <Item.Content class="flex flex-col gap-0.5">
-                  <Item.Title class="text-xs font-semibold text-neutral-800 dark:text-neutral-200">
+                  <Item.Title>
                     {i18n.t('settings.dropzone')}
                     <Tooltip.Root>
                       <Tooltip.Trigger>
@@ -419,32 +404,20 @@
 
         <!-- Decay Timeline Card -->
         <Card.Root>
-          <Card.Content class="space-y-4">
-            <div
-              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
-            >
-              <h3 class="text-sm font-semibold text-primary">
-                {i18n.t('settings.decayTimeline')}
-              </h3>
-            </div>
-            <p class="text-xs text-fluent-muted-light dark:text-fluent-muted-dark leading-relaxed">
-              {i18n.t('settings.decayTimelineDesc')}
-            </p>
-            <div class="pt-2">
-              <DecayTimelineSlider bind:value={sliderValue} onCommit={savePreferences} />
-            </div>
+          <Card.Header class="border-b">
+            <Card.Title>{i18n.t('settings.decayTimeline')}</Card.Title>
+            <Card.Description>{i18n.t('settings.decayTimelineDesc')}</Card.Description>
+          </Card.Header>
+          <Card.Content>
+            <DecayTimelineSlider bind:value={sliderValue} onCommit={savePreferences} />
           </Card.Content>
         </Card.Root>
 
         <!-- Watch Targets Section -->
         <Card.Root>
-          <Card.Content class="space-y-4">
-            <div
-              class="flex items-center justify-between border-b border-fluent-border-light dark:border-fluent-border-dark pb-2"
-            >
-              <h3 class="text-sm font-semibold text-primary font-medium">
-                {i18n.t('settings.watchTargets')}
-              </h3>
+          <Card.Header class="border-b">
+            <Card.Title>{i18n.t('settings.watchTargets')}</Card.Title>
+            <Card.Action>
               <Button
                 type="button"
                 variant="outline"
@@ -466,8 +439,9 @@
                   <span>{i18n.t('settings.reconcileScan')}</span>
                 {/if}
               </Button>
-            </div>
-
+            </Card.Action>
+          </Card.Header>
+          <Card.Content class="flex flex-col gap-4">
             <!-- Add new folder form -->
             <div class="flex flex-col gap-1.5 w-full">
               <Label for="target-path">{i18n.t('settings.path')}</Label>
@@ -497,12 +471,12 @@
             <!-- Target list -->
             {#if config.watch_targets.length === 0}
               <div
-                class="p-6 text-center text-xs text-fluent-muted-light dark:text-fluent-muted-dark border border-dashed border-fluent-border-light dark:border-fluent-border-dark rounded-md bg-neutral-50 dark:bg-neutral-900/40"
+                class="p-6 text-center text-xs text-muted-foreground border border-dashed border-border rounded-md bg-muted/30"
               >
                 {i18n.t('settings.noTargets')}
               </div>
             {:else}
-              <div class="space-y-3">
+              <div class="flex flex-col gap-3">
                 {#each config.watch_targets as target (target.id)}
                   <WatchTargetCard
                     {target}

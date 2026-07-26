@@ -32,7 +32,7 @@
     description={i18n.t('rules.noRulesDesc')}
   />
 {:else}
-  <section class="space-y-3">
+  <section class="flex flex-col gap-3">
     {#each rules as rule (rule.id)}
       <RuleCard {rule} {onEdit} {onDelete} {onToggleEnabled} />
     {/each}
