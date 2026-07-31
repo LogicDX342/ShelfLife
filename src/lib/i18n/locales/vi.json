@@ -109,6 +109,44 @@
     "errorTest": "Không thể thử nghiệm quy tắc.",
     "loading": "Đang tải các quy tắc tự động...",
     "noRulesDesc": "Tạo quy tắc để tự động xóa, di chuyển hoặc bỏ qua các tệp trong mục tiêu theo dõi.",
+    "useTemplate": "Dùng mẫu",
+    "templateSetTitle": "Bắt đầu với các quy tắc sẵn dùng",
+    "templateSetDescription": "Hầu hết mẫu sẽ hỏi trước khi thực hiện. Các mẫu khi phát hiện được đánh dấu rõ là tự động và dùng đích di chuyển mặc định.",
+    "templateContext": "Bản nháp dùng {path}. Bạn vẫn có thể điều chỉnh mọi cài đặt trước khi lưu.",
+    "templateContextNoTarget": "Chọn mục tiêu theo dõi trong trình chỉnh sửa trước khi lưu; các cài đặt khác đã sẵn sàng.",
+    "templateDestinationRequired": "Cần chọn đích",
+    "templates": {
+      "sortDocuments": {
+        "name": "Sắp xếp tài liệu khi phát hiện",
+        "description": "Di chuyển tệp PDF và tài liệu Office đến đích mặc định ngay khi chúng xuất hiện trong thư mục đang theo dõi.",
+        "summary": "Tệp PDF & Office"
+      },
+      "installers": {
+        "name": "Bộ cài đặt còn lại",
+        "description": "Xem lại các gói cài đặt Windows sau khi chúng đã quá hạn.",
+        "summary": "Tệp cài đặt"
+      },
+      "archives": {
+        "name": "Tệp nén đã tải xuống",
+        "description": "Xem lại các gói nén thường không còn cần thiết sau khi giải nén.",
+        "summary": "Tệp nén"
+      },
+      "largeDownloads": {
+        "name": "Tệp tải xuống lớn",
+        "description": "Hiển thị các tệp lớn bất thường trước khi chúng âm thầm chiếm thêm dung lượng.",
+        "summary": "Tệp trên 1 GB"
+      },
+      "duplicateDownloads": {
+        "name": "Tệp tải xuống trùng lặp",
+        "description": "Xem lại các tệp có tên bản sao được đánh số như báo cáo (1).pdf.",
+        "summary": "Bản sao đánh số"
+      },
+      "screenshots": {
+        "name": "Ảnh chụp màn hình",
+        "description": "Xem lại ảnh chụp màn hình sau khi chúng đã đủ thời gian phục vụ mục đích.",
+        "summary": "Ảnh chụp màn hình"
+      }
+    },
     "watchTarget": "Mục tiêu theo dõi: {path}",
     "ttlDays": "Thời gian tồn tại: {days} ngày",
     "timing": "Thời điểm thực hiện",

@@ -138,6 +138,8 @@ src/
     │   ├── i18n.svelte.ts        # Central translation registry and language/theme state
     │   └── locales/              # Locale-specific translation files
     ├── live/liveSnapshots.ts     # Owner of backend event names, coalesced refresh, focus refresh
+    ├── rules/                    # Frontend rule template definitions
+    │   └── templates.ts          # Starter rule catalog and rule construction
     ├── stores/                   # Svelte 5 rune state classes
     │   ├── audit.svelte.ts
     │   ├── files.svelte.ts

@@ -109,6 +109,44 @@
     "errorTest": "Could not test rule.",
     "loading": "Loading automation rules...",
     "noRulesDesc": "Create a rule to automate trashing, moving, or ignoring files in your watch targets.",
+    "useTemplate": "Use a template",
+    "templateSetTitle": "Start with ready-to-use rules",
+    "templateSetDescription": "Most presets ask before acting. On-detection presets are clearly marked automatic and use your default move destination.",
+    "templateContext": "Drafts use {path}. You can adjust any setting before saving.",
+    "templateContextNoTarget": "Choose a watch target in the editor before saving; the other settings are ready to use.",
+    "templateDestinationRequired": "Destination needed",
+    "templates": {
+      "sortDocuments": {
+        "name": "Sort documents on detection",
+        "description": "Move PDFs and Office documents to your default destination as soon as they arrive in the watched folder.",
+        "summary": "PDF & Office files"
+      },
+      "installers": {
+        "name": "Installer leftovers",
+        "description": "Review Windows installer packages after they have aged out.",
+        "summary": "Installer files"
+      },
+      "archives": {
+        "name": "Downloaded archives",
+        "description": "Review compressed bundles that are often no longer needed after extraction.",
+        "summary": "Archive files"
+      },
+      "largeDownloads": {
+        "name": "Large downloads",
+        "description": "Surface unusually large files before they quietly consume more space.",
+        "summary": "Files over 1 GB"
+      },
+      "duplicateDownloads": {
+        "name": "Duplicate downloads",
+        "description": "Review files with numbered duplicate names such as report (1).pdf.",
+        "summary": "Numbered copies"
+      },
+      "screenshots": {
+        "name": "Screenshots",
+        "description": "Review screenshot images after they have had time to serve their purpose.",
+        "summary": "Screenshot images"
+      }
+    },
     "watchTarget": "Watch target: {path}",
     "ttlDays": "TTL: {days} days",
     "timing": "Execution Timing",
