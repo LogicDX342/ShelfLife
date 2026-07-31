@@ -22,7 +22,12 @@
   type ActionKind = 'Ignore' | 'Trash' | 'Move';
   type TimingKind = 'OnArrival' | 'AfterSeconds';
 
-  let { onSaved, rule = null } = $props<{
+  let {
+    draft = null,
+    onSaved,
+    rule = null,
+  } = $props<{
+    draft?: AutomationRule | null;
     onSaved: () => Promise<void>;
     rule?: AutomationRule | null;
   }>();
@@ -159,7 +164,7 @@
   }
 
   $effect(() => {
-    applyRule(rule);
+    applyRule(rule ?? draft);
   });
 
   $effect(() => {

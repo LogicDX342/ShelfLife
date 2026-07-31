@@ -40,7 +40,7 @@ The interface avoids countdown timers and real-time anxiety. File state is repre
 
 ### 1.5 User-controlled automation
 
-Automation is earned gradually. New rules begin in PreviewOnly mode. The user may promote a rule to AskFirst or Automatic after observing correct behavior.
+Automation is earned gradually. Manually created rules begin in PreviewOnly and may be promoted after review. Starter templates use predefined AskFirst or Automatic modes and timing.
 
 ---
 
@@ -50,7 +50,7 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 
 - User selects folders to watch (e.g. Downloads, Desktop).
 - User chooses a default decay period.
-- App explains that new rules begin in PreviewOnly mode.
+- App explains that manually created rules begin in PreviewOnly mode.
 - App performs an initial scan and shows a read-only review queue.
 
 ### Daily review
@@ -62,7 +62,7 @@ Automation is earned gradually. New rules begin in PreviewOnly mode. The user ma
 
 ### Rule preview
 
-- User creates or edits a rule (starts in PreviewOnly mode).
+- User creates or edits a manual rule (starts in PreviewOnly mode).
 - shelflife records what the rule would have done.
 - User reviews outcomes and may promote to AskFirst or Automatic.
 
@@ -171,14 +171,14 @@ A rule may match origin only when `origin_url` contains a matching domain. Absen
 
 ### Rule modes
 
-- **PreviewOnly**: default for new rules. Records what would happen, changes nothing.
+- **PreviewOnly**: default for manually created rules. Records what would happen, changes nothing.
 - **AskFirst**: proposes actions that require user confirmation.
 - **Automatic**: acts without user confirmation when the rule's timing becomes eligible.
 
 ### Rule timing
 
 - **OnArrival**: for Automatic Move rules only. After an incremental watcher event indexes a new stable file, Automatic rules move it immediately. Full startup/manual reconciliation scans and existing tracked files do not trigger arrival actions, and the rule does not replace their decay TTL.
-- **AfterSeconds**: applies the configured rule TTL and becomes eligible when the file expires. This is the default for existing and newly created rules.
+- **AfterSeconds**: applies the configured rule TTL and becomes eligible when the file expires. This is the default for existing and manually created rules.
 
 ### Actions
 

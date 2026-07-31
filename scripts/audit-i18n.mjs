@@ -34,11 +34,20 @@ function collectUsage(source) {
     literalKeys.add(match[2]);
   }
 
+  for (const match of source.matchAll(
+    /\bi18n\.t\(\s*[^;'"`]{0,400}?\?\s*(['"])([^'"$]+?)\1\s*:\s*(['"])([^'"$]+?)\3/g,
+  )) {
+    literalKeys.add(match[2]);
+    literalKeys.add(match[4]);
+  }
+
   for (const match of source.matchAll(/\bi18n\.t\(\s*`([^`$]*?)\$\{/g)) {
     if (match[1]) dynamicPrefixes.add(match[1]);
   }
 
-  for (const match of source.matchAll(/\blabelKey\s*:\s*(['"])([^'"$]+?)\1/g)) {
+  for (const match of source.matchAll(
+    /\b(?:label|name|description|summary)Key\s*:\s*(['"])([^'"$]+?)\1/g,
+  )) {
     literalKeys.add(match[2]);
   }
 

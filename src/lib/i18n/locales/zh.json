@@ -109,6 +109,44 @@
     "errorTest": "测试规则失败。",
     "loading": "正在加载自动化规则…",
     "noRulesDesc": "创建规则以自动清理、移动或忽略监控目标中的文件。",
+    "useTemplate": "使用模板",
+    "templateSetTitle": "从开箱即用的规则开始",
+    "templateSetDescription": "多数预设执行前会弹出确认提示。新文件到达时自动运行的预设会明确标注，并使用默认移动目标。",
+    "templateContext": "草稿将使用 {path}。保存前仍可调整任何设置。",
+    "templateContextNoTarget": "保存前在编辑器中选择一个监控目标；其他设置可直接使用。",
+    "templateDestinationRequired": "需要目标文件夹",
+    "templates": {
+      "sortDocuments": {
+        "name": "检测到文件时自动整理文档",
+        "description": "PDF 和 Office 文档一旦进入监控文件夹，立即移至默认目标。",
+        "summary": "PDF 与 Office 文件"
+      },
+      "installers": {
+        "name": "残留安装包",
+        "description": "Windows 安装包过期后，可查看并决定是否清理。",
+        "summary": "安装包文件"
+      },
+      "archives": {
+        "name": "已下载的压缩包",
+        "description": "解压后通常不再需要的压缩文件，可按需检查清理。",
+        "summary": "压缩文件"
+      },
+      "largeDownloads": {
+        "name": "大型下载文件",
+        "description": "在超大文件占满磁盘之前，及时标记处理。",
+        "summary": "超过 1 GB"
+      },
+      "duplicateDownloads": {
+        "name": "重复下载文件",
+        "description": "检查名称带编号的重复文件，例如 report (1).pdf。",
+        "summary": "编号副本"
+      },
+      "screenshots": {
+        "name": "屏幕截图",
+        "description": "截屏一段时间后，可按需检查是否仍需保留。",
+        "summary": "截图图片"
+      }
+    },
     "watchTarget": "监控目标：{path}",
     "ttlDays": "有效期：{days} 天",
     "timing": "执行时机",
