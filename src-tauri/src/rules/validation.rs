@@ -4,7 +4,7 @@ use crate::engine::paths::PathScope;
 use crate::models::{AppError, AutomationRule, RuleAction, RuleMode, RuleTiming};
 
 pub(crate) fn validate_rule(rule: &AutomationRule, scope: &PathScope<'_>) -> Result<(), AppError> {
-    scope.validate_rule_watch_path(Path::new(&rule.watch_path))?;
+    scope.ensure_watch_scope(Path::new(&rule.watch_path))?;
 
     if matches!(rule.timing, RuleTiming::OnArrival)
         && !matches!(rule.action, RuleAction::Move { .. })

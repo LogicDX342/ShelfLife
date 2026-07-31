@@ -101,17 +101,6 @@ pub(crate) fn replace_tracked_file_tx(
     upsert_tracked_file_tx(conn, file)
 }
 
-/// Write all file changes in a single transaction.
-pub fn upsert_tracked_files_batch(db: &Database, files: &[TrackedFile]) -> Result<(), AppError> {
-    apply_tracked_file_changes(
-        db,
-        TrackedFileChanges {
-            updates: files.to_vec(),
-            ..TrackedFileChanges::default()
-        },
-    )
-}
-
 pub fn apply_tracked_file_changes(
     db: &Database,
     changes: TrackedFileChanges,

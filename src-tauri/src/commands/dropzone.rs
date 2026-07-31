@@ -5,7 +5,8 @@ use tauri::{AppHandle, Emitter, State};
 use crate::engine;
 use crate::engine::paths::PathScope;
 use crate::models::{
-    AppError, DropzoneActionFailure, DropzoneActionResult, DropzonePreview, RuleAction, RuleMode,
+    AppError, AuditEntry, DropzoneActionFailure, DropzoneActionResult, DropzonePreview, RuleAction,
+    RuleMode,
 };
 use crate::rules::{CompiledRuleSet, RuleDecisionScope, RuleVerdict};
 use crate::runtime::AppRuntime;
@@ -52,19 +53,7 @@ pub async fn execute_dropzone_ingest(
         Ok::<_, AppError>((result, failure_audits))
     })?;
 
-    for entry in &result.entries {
-        let _ = app_handle.emit("action_completed", entry);
-        let _ = app_handle.emit("audit_updated", entry);
-        if let Some(destination) = &entry.destination_path {
-            let _ = app_handle.emit("file_indexed", destination);
-        }
-    }
-
-    for entry in &failure_audits {
-        let _ = app_handle.emit("audit_updated", entry);
-    }
-
-    emit_dropzone_failures(&app_handle, &result.failures);
+    emit_dropzone_outcome(&app_handle, &result, &failure_audits, true);
     if !result.entries.is_empty() {
         state.wake_rule_scheduler();
         crate::runtime::rule_scheduler::run_async_expired_rule_execution(
@@ -183,15 +172,7 @@ pub async fn execute_dropzone_rule_group(
         Ok::<_, AppError>((result, failure_audits))
     })?;
 
-    for entry in &result.entries {
-        let _ = app_handle.emit("action_completed", entry);
-        let _ = app_handle.emit("audit_updated", entry);
-    }
-    for entry in &failure_audits {
-        let _ = app_handle.emit("audit_updated", entry);
-    }
-
-    emit_dropzone_failures(&app_handle, &result.failures);
+    emit_dropzone_outcome(&app_handle, &result, &failure_audits, false);
     if !result.entries.is_empty() {
         state.wake_rule_scheduler();
     }
@@ -209,4 +190,25 @@ fn emit_dropzone_failures(app_handle: &AppHandle, failures: &[DropzoneActionFail
     for failure in failures {
         let _ = app_handle.emit("action_failed", &failure.error);
     }
+}
+
+fn emit_dropzone_outcome(
+    app_handle: &AppHandle,
+    result: &DropzoneActionResult,
+    failure_audits: &[AuditEntry],
+    emit_indexed_destinations: bool,
+) {
+    for entry in &result.entries {
+        let _ = app_handle.emit("action_completed", entry);
+        let _ = app_handle.emit("audit_updated", entry);
+        if emit_indexed_destinations {
+            if let Some(destination) = &entry.destination_path {
+                let _ = app_handle.emit("file_indexed", destination);
+            }
+        }
+    }
+    for entry in failure_audits {
+        let _ = app_handle.emit("audit_updated", entry);
+    }
+    emit_dropzone_failures(app_handle, &result.failures);
 }

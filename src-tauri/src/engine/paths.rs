@@ -57,10 +57,6 @@ impl<'a> PathScope<'a> {
         Ok(())
     }
 
-    pub fn validate_rule_watch_path(&self, path: &Path) -> Result<(), AppError> {
-        self.ensure_watch_scope(path)
-    }
-
     fn is_inside_enabled_watch_root(&self, path: &Path) -> bool {
         self.config
             .watch_targets

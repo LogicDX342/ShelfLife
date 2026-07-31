@@ -20,18 +20,7 @@ pub async fn execute_triage_action(
         engine::executor::execute_triage_action_audited(db, &path, action)
     }) {
         Ok(entry) => {
-            let _ = app_handle.emit("action_completed", &entry);
-            let _ = app_handle.emit("audit_updated", &entry);
-            notify_if_enabled(
-                &app_handle,
-                &state,
-                "Action completed",
-                format!(
-                    "{} recorded for {}.",
-                    audit_action_kind_label(&entry.action_kind),
-                    entry.file_name
-                ),
-            );
+            emit_triage_success(&app_handle, &state, &entry);
             Ok(entry)
         }
         Err(failure) => {
@@ -64,18 +53,7 @@ pub async fn confirm_rule_action(
         engine::executor::execute_confirmed_rule_action(db, &path, &rule_id)
     }) {
         Ok(entry) => {
-            let _ = app_handle.emit("action_completed", &entry);
-            let _ = app_handle.emit("audit_updated", &entry);
-            notify_if_enabled(
-                &app_handle,
-                &state,
-                "Action completed",
-                format!(
-                    "{} recorded for {}.",
-                    audit_action_kind_label(&entry.action_kind),
-                    entry.file_name
-                ),
-            );
+            emit_triage_success(&app_handle, &state, &entry);
             Ok(entry)
         }
         Err(failure) => {
@@ -231,6 +209,21 @@ fn notify_if_enabled(
         .title(title)
         .body(body.into())
         .show();
+}
+
+fn emit_triage_success(app_handle: &AppHandle, state: &State<'_, AppRuntime>, entry: &AuditEntry) {
+    let _ = app_handle.emit("action_completed", entry);
+    let _ = app_handle.emit("audit_updated", entry);
+    notify_if_enabled(
+        app_handle,
+        state,
+        "Action completed",
+        format!(
+            "{} recorded for {}.",
+            audit_action_kind_label(&entry.action_kind),
+            entry.file_name
+        ),
+    );
 }
 
 fn audit_action_kind_label(action_kind: &AuditActionKind) -> &'static str {

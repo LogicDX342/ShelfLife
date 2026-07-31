@@ -6,15 +6,11 @@ use crate::engine::paths::PathScope;
 use crate::models::{AppError, RuleMatchExplanation, TrackedFile};
 use crate::rules::CompiledRuleSet;
 use crate::runtime::AppRuntime;
-use crate::storage::{self, Database};
+use crate::storage;
 
 #[tauri::command]
 pub async fn get_active_files(state: State<'_, AppRuntime>) -> Result<Vec<TrackedFile>, AppError> {
-    state.with_database(active_files)
-}
-
-fn active_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
-    storage::tracked::list_tracked_files(db)
+    state.with_database(storage::tracked::list_tracked_files)
 }
 
 #[tauri::command]
@@ -110,7 +106,7 @@ mod tests {
     use crate::models::{AppConfig, FileDecayState};
     use crate::storage;
 
-    use super::{active_files, existing_directories};
+    use super::existing_directories;
 
     #[test]
     fn active_files_include_ignored_files_by_default() {
@@ -132,7 +128,7 @@ mod tests {
             storage::tracked::upsert_tracked_file(&db, &tracked).expect("tracked file should save");
         }
 
-        let files = active_files(&db).expect("active files should load");
+        let files = storage::tracked::list_tracked_files(&db).expect("active files should load");
 
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].path, fresh.to_string_lossy());

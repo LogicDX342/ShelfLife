@@ -21,9 +21,13 @@ pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport,
         }
     }
 
-    if !changed.is_empty() {
-        storage::tracked::upsert_tracked_files_batch(db, &changed)?;
-    }
+    storage::tracked::apply_tracked_file_changes(
+        db,
+        storage::tracked::TrackedFileChanges {
+            updates: changed,
+            ..storage::tracked::TrackedFileChanges::default()
+        },
+    )?;
 
     Ok(report)
 }

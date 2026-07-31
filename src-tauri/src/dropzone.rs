@@ -133,11 +133,11 @@ fn monitor_cursor(app_handle: AppHandle, stop: Arc<AtomicBool>) {
 
 #[cfg(target_os = "windows")]
 fn shell_drag_image_is_visible() -> bool {
-    use windows::core::w;
+    use windows_sys::core::w;
     use windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW;
 
     // Explorer displays this top-level drag image only while a shell drag is active.
-    unsafe { !FindWindowW(w!("SysDragImage").as_ptr(), std::ptr::null()).is_null() }
+    unsafe { !FindWindowW(w!("SysDragImage"), std::ptr::null()).is_null() }
 }
 
 #[cfg(not(target_os = "windows"))]
