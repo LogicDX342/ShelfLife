@@ -29,7 +29,7 @@ jobs:
           version: 11
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: pnpm
@@ -44,7 +44,7 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Setup WinApp CLI
-        uses: microsoft/setup-WinAppCli@v0.1
+        uses: microsoft/setup-WinAppCli@v0.2
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -118,7 +118,7 @@ jobs:
           if-no-files-found: error
 
       - name: Configure Microsoft Store CLI
-        uses: microsoft/microsoft-store-apppublisher@v1.3
+        uses: microsoft/microsoft-store-apppublisher@v1.4
 
       - name: Reconfigure Store credentials
         shell: pwsh
