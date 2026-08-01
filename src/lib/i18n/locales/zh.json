@@ -17,7 +17,7 @@
     "syncing": "同步中",
     "watchStatus": "监控状态",
     "review": "待处理",
-    "tracked": "监控中",
+    "tracked": "已跟踪",
     "recoverableSize": "可回收空间",
     "watchError": "无法更新监控状态。"
   },
@@ -31,7 +31,7 @@
     "welcome": "欢迎使用 ShelfLife，从侧边栏选择功能开始管理文件。",
     "triageNeeded": "待清理",
     "triageDesc": "闲置或即将过期的文件",
-    "healthyFiles": "无需处理",
+    "healthyFiles": "状态良好",
     "healthyDesc": "活跃或已固定的文件",
     "ignoredFiles": "已忽略",
     "ignoredDesc": "已从审查和自动清理中排除的文件",
@@ -66,7 +66,7 @@
     "actionLabel": "操作",
     "confirmMsg": "将对“{name}”执行“{action}”，该操作会记录在审计日志中。是否可撤销取决于操作类型和文件状态。",
     "confirmRuleAction": "确认操作",
-    "confirmRuleMsg": "确认对“{name}”执行规则“{rule}”建议的“{action}”。",
+    "confirmRuleMsg": "确认按规则“{rule}”的建议，对“{name}”执行“{action}”吗？",
     "confirmMoveRuleMsg": "确认按照规则“{rule}”的建议，将“{name}”移动到“{destination}”。",
     "confirmMoveRuleMsgWithRename": "确认按照规则“{rule}”的建议，将“{name}”移动到“{destination}”。同时将应用规则的重命名模板。",
     "errorOpenLocation": "无法打开文件位置。",
@@ -84,7 +84,7 @@
     "snoozeCustom": "自定义",
     "day": "天",
     "days": "天",
-    "noRule": "无规则匹配",
+    "noRule": "无规则",
     "noRuleMatched": "未匹配到任何规则"
   },
   "rules": {
@@ -299,7 +299,7 @@
   },
   "tray": {
     "open": "打开 ShelfLife",
-    "review": "审核队列",
+    "review": "清理队列",
     "dashboard": "仪表板",
     "pause": "暂停",
     "resume": "恢复",
@@ -374,7 +374,7 @@
     "RULE_NOT_EXECUTABLE": "所选规则无法在此处修改文件。",
     "RULE_NOT_FOUND": "未找到所选规则。",
     "RULE_PREVIEW_ONLY": "仅预览模式的规则无法在投放区修改文件。",
-    "RULE_IGNORE_OUTSIDE_TARGET": "忽略规则只能对监控目标文件夹内的文件生效。",
+    "RULE_IGNORE_OUTSIDE_TARGET": "在投放区中，忽略规则只能对监控目标文件夹内的文件生效。",
     "RULE_NOT_MATCHED": "所选规则已不再匹配此文件，未执行任何文件更改。",
     "RULE_NOT_EXPIRED": "此文件尚不符合建议规则操作的执行条件。",
     "UNDO_FAILED": "撤销失败。",
