@@ -43,7 +43,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^26.1.2",
-    "bits-ui": "^2.18.1",
+    "bits-ui": "^2.19.0",
     "clsx": "^2.1.1",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
