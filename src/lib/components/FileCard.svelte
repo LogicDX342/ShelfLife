@@ -10,7 +10,7 @@
   import IconAlertTriangle from '@lucide/svelte/icons/triangle-alert';
 
   import { getConfig } from '$lib/api/config';
-  import { explainFile, openFileLocation, selectDirectory } from '$lib/api/files';
+  import { openFileLocation, selectDirectory } from '$lib/api/files';
   import { confirmRuleAction, executeTriageAction } from '$lib/api/triage';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
@@ -40,19 +40,20 @@
 
   let {
     file,
+    explanations = [],
     selectable = false,
     selected = false,
     error = null,
     onSelectedChange = () => {},
-  } = $props<{
+  }: {
     file: TrackedFile;
+    explanations?: RuleMatchExplanation[];
     selectable?: boolean;
     selected?: boolean;
     error?: string | null;
     onSelectedChange?: (path: string, selected: boolean) => void;
-  }>();
+  } = $props();
 
-  let explanations = $state<RuleMatchExplanation[]>([]);
   let matchedExplanations = $derived(
     explanations.filter((e) => e.rule_id !== null && e.proposed_action !== null),
   );
@@ -102,17 +103,6 @@
       chosen: i18n.t('file.chosenDestination'),
     }),
   );
-
-  $effect(() => {
-    const path = file.path;
-    explainFile(path)
-      .then((data) => {
-        explanations = data;
-      })
-      .catch((reason) => {
-        notifications.error(getErrorMessage(reason, i18n.t('file.errorExplanation')));
-      });
-  });
 
   async function act(action: UserTriageAction) {
     busy = true;

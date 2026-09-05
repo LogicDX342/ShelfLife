@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use tauri::State;
@@ -14,19 +15,39 @@ pub async fn get_active_files(state: State<'_, AppRuntime>) -> Result<Vec<Tracke
 }
 
 #[tauri::command]
-pub async fn explain_file(
+pub async fn explain_files(
     state: State<'_, AppRuntime>,
-    path: String,
-) -> Result<Vec<RuleMatchExplanation>, AppError> {
-    validate_path_scope(&state, &path)?;
-    let Some(file) = state.with_database(|db| storage::tracked::get_tracked_file(db, &path))?
-    else {
-        return Err(AppError::path_not_found(&path));
-    };
-    let config = state.with_database(storage::get_config)?;
-    let rules = state.with_database(storage::rules::list_rules)?;
+    paths: Vec<String>,
+) -> Result<BTreeMap<String, Vec<RuleMatchExplanation>>, AppError> {
+    state.with_database(|db| build_file_explanations(db, paths))
+}
+
+fn build_file_explanations(
+    db: &storage::Database,
+    mut paths: Vec<String>,
+) -> Result<BTreeMap<String, Vec<RuleMatchExplanation>>, AppError> {
+    if paths.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let config = storage::get_config(db)?;
+    let scope = PathScope::new(&config);
+    // A watch target can change before reconciliation removes its tracked files.
+    paths.retain(|path| scope.is_in_enabled_watch_target(Path::new(path)));
+    if paths.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let files = storage::tracked::list_tracked_files_by_paths(db, &paths)?;
+    let rules = storage::rules::list_rules(db)?;
     let rule_set = CompiledRuleSet::compile(rules, &config)?;
-    Ok(rule_set.explain_file(&file))
+    Ok(files
+        .into_iter()
+        .map(|file| {
+            let explanations = rule_set.explain_file(&file);
+            (file.path, explanations)
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -105,8 +126,82 @@ mod tests {
 
     use crate::models::{AppConfig, FileDecayState};
     use crate::storage;
+    use crate::storage::test_util::{path_string, Fixture as StorageFixture};
 
-    use super::existing_directories;
+    use super::{build_file_explanations, existing_directories};
+
+    #[test]
+    fn batch_explanations_return_found_requested_file_paths() {
+        let fixture = StorageFixture::new("shelflife-file-explanations");
+        let archive = fixture.write_watch_file("archive.zip", "archive");
+        let notes = fixture.write_watch_file("notes.txt", "notes");
+        let omitted = fixture.write_watch_file("omitted.zip", "omitted");
+        fixture.save_config();
+        fixture.track_file(&archive);
+        fixture.track_file(&notes);
+        fixture.track_file(&omitted);
+        storage::rules::save_rule(&fixture.db, &fixture.rule()).expect("rule should save");
+
+        let archive_path = path_string(&archive);
+        let notes_path = path_string(&notes);
+        let missing_path = path_string(&fixture.watch.join("missing.zip"));
+        let explanations = build_file_explanations(
+            &fixture.db,
+            vec![
+                archive_path.clone(),
+                notes_path.clone(),
+                missing_path.clone(),
+            ],
+        )
+        .expect("batch explanations should build");
+
+        assert_eq!(explanations.len(), 2);
+        assert!(explanations[&archive_path][0].proposed_action.is_some());
+        assert!(explanations[&notes_path][0].proposed_action.is_none());
+        assert!(!explanations.contains_key(&missing_path));
+        assert!(!explanations.contains_key(&path_string(&omitted)));
+    }
+
+    #[test]
+    fn batch_explanations_skip_paths_outside_enabled_watch_targets() {
+        let fixture = StorageFixture::new("shelflife-file-explanations-scope");
+        let active = fixture.write_watch_file("active.zip", "active");
+        let disabled = fixture.write_outside_file("disabled.zip", "disabled");
+        let outside = fixture.write_file(&fixture.safe.join("outside.zip"), "outside");
+        for path in [&active, &disabled, &outside] {
+            fixture.track_file(path);
+        }
+
+        let mut disabled_target = fixture.watch_target(false);
+        disabled_target.id = String::from("disabled");
+        disabled_target.path = path_string(&fixture.outside);
+        disabled_target.enabled = false;
+        fixture.save_config_with_targets(vec![fixture.watch_target(false), disabled_target]);
+        storage::rules::save_rule(&fixture.db, &fixture.rule()).expect("rule should save");
+
+        let active_path = path_string(&active);
+        let disabled_path = path_string(&disabled);
+        let outside_path = path_string(&outside);
+        let explanations = build_file_explanations(
+            &fixture.db,
+            vec![
+                active_path.clone(),
+                disabled_path.clone(),
+                outside_path.clone(),
+            ],
+        )
+        .expect("out-of-scope files should not fail the batch");
+
+        assert_eq!(explanations.len(), 1);
+        assert!(explanations[&active_path][0].proposed_action.is_some());
+        assert!(!explanations.contains_key(&disabled_path));
+        assert!(!explanations.contains_key(&outside_path));
+
+        fixture.save_config_without_watch_targets();
+        let explanations = build_file_explanations(&fixture.db, vec![active_path])
+            .expect("a batch with no in-scope files should succeed");
+        assert!(explanations.is_empty());
+    }
 
     #[test]
     fn active_files_include_ignored_files_by_default() {

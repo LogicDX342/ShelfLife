@@ -23,7 +23,7 @@ pub fn run() {
         .setup(runtime::setup)
         .invoke_handler(tauri::generate_handler![
             commands::get_active_files,
-            commands::explain_file,
+            commands::explain_files,
             commands::filter_existing_directories,
             commands::open_file_location,
             commands::execute_triage_action,

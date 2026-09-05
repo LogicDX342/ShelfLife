@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use diesel::dsl::sql;
 use diesel::prelude::*;
 use diesel::sql_types::{Integer, Text};
@@ -75,6 +77,45 @@ pub fn list_tracked_files(db: &Database) -> Result<Vec<TrackedFile>, AppError> {
         files.push(tracked_file_from_row(row, matched_rule_ids)?);
     }
     Ok(files)
+}
+
+pub fn list_tracked_files_by_paths(
+    db: &Database,
+    paths: &[String],
+) -> Result<Vec<TrackedFile>, AppError> {
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut conn = db.connect()?;
+    let rows = tracked_files::table
+        .filter(tracked_files::path.eq_any(paths))
+        .order(tracked_files::path.asc())
+        .select(TrackedRow::as_select())
+        .load::<TrackedRow>(&mut conn)?;
+
+    let matched_rules = tracked_file_rules::table
+        .filter(tracked_file_rules::file_path.eq_any(paths))
+        .order((
+            tracked_file_rules::file_path.asc(),
+            tracked_file_rules::ordinal.asc(),
+        ))
+        .select((tracked_file_rules::file_path, tracked_file_rules::rule_id))
+        .load::<(String, String)>(&mut conn)?;
+    let mut matched_rules_by_path: HashMap<String, Vec<String>> = HashMap::new();
+    for (file_path, rule_id) in matched_rules {
+        matched_rules_by_path
+            .entry(file_path)
+            .or_default()
+            .push(rule_id);
+    }
+
+    rows.into_iter()
+        .map(|row| {
+            let matched_rule_ids = matched_rules_by_path.remove(&row.path).unwrap_or_default();
+            tracked_file_from_row(row, matched_rule_ids)
+        })
+        .collect()
 }
 
 pub fn upsert_tracked_file(db: &Database, file: &TrackedFile) -> Result<(), AppError> {

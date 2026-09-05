@@ -6,8 +6,8 @@ export function getActiveFiles() {
   return invoke<TrackedFile[]>('get_active_files');
 }
 
-export function explainFile(path: string) {
-  return invoke<RuleMatchExplanation[]>('explain_file', { path });
+export function explainFiles(paths: string[]) {
+  return invoke<Record<string, RuleMatchExplanation[]>>('explain_files', { paths });
 }
 
 export function openFileLocation(path: string) {

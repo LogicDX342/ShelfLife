@@ -9,6 +9,7 @@
   import { Button } from '$lib/components/ui/button';
   import * as InputGroup from '$lib/components/ui/input-group';
   import { i18n } from '$lib/i18n/i18n.svelte';
+  import { createFileExplanations } from '$lib/live/fileExplanations.svelte';
   import { filesState } from '$lib/stores/files.svelte';
 
   import FileCard from './FileCard.svelte';
@@ -57,6 +58,8 @@
       return file.file_name.toLowerCase().includes(q) || file.path.toLowerCase().includes(q);
     }),
   );
+  let visibleFiles = $derived(filteredFiles.slice(0, visibleLimit));
+  const fileExplanations = createFileExplanations(() => visibleFiles);
 </script>
 
 <PageHeader title={i18n.t('nav.queue')} subtitle={i18n.t('dashboard.subtitle')}>
@@ -102,8 +105,12 @@
     />
   {:else}
     <div class="flex flex-col gap-4">
-      {#each filteredFiles.slice(0, visibleLimit) as file (file.path)}
-        <FileCard {file} selectable={false} />
+      {#each visibleFiles as file (file.path)}
+        <FileCard
+          {file}
+          explanations={fileExplanations.byPath[file.path] ?? []}
+          selectable={false}
+        />
       {/each}
 
       {#if filteredFiles.length > visibleLimit}

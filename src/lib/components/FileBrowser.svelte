@@ -16,6 +16,7 @@
   import { Input } from '$lib/components/ui/input';
   import * as Select from '$lib/components/ui/select';
   import { i18n } from '$lib/i18n/i18n.svelte';
+  import { createFileExplanations } from '$lib/live/fileExplanations.svelte';
   import { filesState } from '$lib/stores/files.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
   import type { AppConfig, AppError, TrackedFile, UserTriageAction } from '$lib/types';
@@ -185,6 +186,8 @@
       files: sortedFiles,
     };
   });
+  let visibleFiles = $derived(directoryContents.files.slice(0, visibleFilesCount));
+  const fileExplanations = createFileExplanations(() => visibleFiles);
 
   // Calculate breadcrumbs from current directory
   let breadcrumbs = $derived.by(() => {
@@ -482,9 +485,10 @@
       </div>
 
       <div class="flex flex-col gap-4">
-        {#each directoryContents.files.slice(0, visibleFilesCount) as file (file.path)}
+        {#each visibleFiles as file (file.path)}
           <FileCard
             {file}
+            explanations={fileExplanations.byPath[file.path] ?? []}
             selectable
             selected={selectedPaths.includes(file.path)}
             error={bulkErrors[file.path]
