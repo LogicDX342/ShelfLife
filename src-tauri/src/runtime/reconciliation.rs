@@ -28,7 +28,7 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
         };
 
         let result = runtime_clone.run_exclusive_engine_operation(|db| {
-            engine::reconciliation::reconcile_with_report_with_progress(db, Some(&progress_emitter))
+            engine::reconciliation::reconcile_with_progress(db, Some(&progress_emitter))
         });
 
         runtime_clone
@@ -36,7 +36,7 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
             .store(false, Ordering::SeqCst);
 
         match result {
-            Ok(_) => {
+            Ok(()) => {
                 emit_reconciliation_completed(&app_handle_clone);
                 runtime_clone.wake_rule_scheduler();
                 crate::runtime::rule_scheduler::run_async_expired_rule_execution(
@@ -85,8 +85,7 @@ pub fn watcher_event_sink(
         engine::watcher::WatcherEvent::PathsReady(paths) => {
             match runtime.run_exclusive_engine_operation(
                 |db| -> Result<_, crate::models::AppError> {
-                    let (_, arrival_candidates) =
-                        engine::reconciliation::reconcile_paths(db, paths)?;
+                    let arrival_candidates = engine::reconciliation::reconcile_paths(db, paths)?;
                     engine::execute_arrival_automatic_rules(db, &arrival_candidates)
                 },
             ) {

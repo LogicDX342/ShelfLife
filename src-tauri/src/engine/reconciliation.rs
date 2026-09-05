@@ -6,13 +6,6 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
 use std::sync::Mutex;
 
-struct ReconciliationPlan {
-    report: ReconciliationReport,
-    to_insert: Vec<TrackedFile>,
-    to_update: Vec<TrackedFile>,
-    to_remove: Vec<String>,
-}
-
 struct ScannedFile {
     path: PathBuf,
     metadata: fs::Metadata,
@@ -31,14 +24,15 @@ use crate::engine::{
     arrival_rule_candidate, project_watched_file, tracked_file_from_metadata,
     AutomaticRuleCandidate, TrackedRuleProjection,
 };
-use crate::models::{AppConfig, AppError, ReconciliationReport, TrackedFile, WatchTarget};
+use crate::models::{AppConfig, AppError, TrackedFile, WatchTarget};
 use crate::rules::CompiledRuleSet;
+use crate::storage::tracked::TrackedFileChanges;
 use crate::storage::{self, Database};
 
-pub fn reconcile_with_report_with_progress(
+pub fn reconcile_with_progress(
     db: &Database,
     progress_cb: Option<&(dyn Fn(usize, usize) + Send + Sync)>,
-) -> Result<ReconciliationReport, AppError> {
+) -> Result<(), AppError> {
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
     let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
@@ -125,44 +119,33 @@ fn plan_reconciliation(
     existing: &HashMap<String, TrackedFile>,
     observations: Vec<TrackedFile>,
     paths_to_remove: &HashSet<String>,
-) -> ReconciliationPlan {
+) -> TrackedFileChanges {
     let mut observed_paths = HashSet::new();
-    let mut report = ReconciliationReport::default();
-    let mut to_insert = Vec::new();
-    let mut to_update = Vec::new();
+    let mut changes = TrackedFileChanges::default();
 
     for tracked in observations {
         observed_paths.insert(tracked.path.clone());
         match existing.get(&tracked.path) {
             Some(file) if tracked.changed_from(file) => {
-                report.updated.push(tracked.path.clone());
-                to_update.push(tracked);
+                changes.updates.push(tracked);
             }
             None => {
-                report.indexed.push(tracked.path.clone());
-                to_insert.push(tracked);
+                changes.inserts.push(tracked);
             }
             _ => {}
         };
     }
 
-    let mut to_remove = Vec::new();
     for path in existing.keys() {
         if observed_paths.contains(path) {
             continue;
         }
         if paths_to_remove.contains(path) {
-            report.removed.push(path.clone());
-            to_remove.push(path.clone());
+            changes.removes.push(path.clone());
         }
     }
 
-    ReconciliationPlan {
-        report,
-        to_insert,
-        to_update,
-        to_remove,
-    }
+    changes
 }
 
 /// Incremental reconciliation for watcher events: processes only the given paths
@@ -170,7 +153,7 @@ fn plan_reconciliation(
 pub fn reconcile_paths(
     db: &Database,
     paths: Vec<PathBuf>,
-) -> Result<(ReconciliationReport, Vec<AutomaticRuleCandidate>), AppError> {
+) -> Result<Vec<AutomaticRuleCandidate>, AppError> {
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
     let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
@@ -230,8 +213,8 @@ pub fn reconcile_paths(
 
     let paths_to_remove =
         paths_to_remove_for(&existing_map, &scope, &observations, &excluded_paths);
-    let report = reconcile_observations(db, &existing_map, observations, &paths_to_remove, None)?;
-    Ok((report, arrival_candidates))
+    reconcile_observations(db, &existing_map, observations, &paths_to_remove, None)?;
+    Ok(arrival_candidates)
 }
 
 fn observe_path(
@@ -299,19 +282,8 @@ fn reconcile_observations(
     observations: Vec<TrackedFile>,
     paths_to_remove: &HashSet<String>,
     progress_cb: Option<&(dyn Fn(usize, usize) + Send + Sync)>,
-) -> Result<ReconciliationReport, AppError> {
-    let plan = plan_reconciliation(existing, observations, paths_to_remove);
-    let ReconciliationPlan {
-        report,
-        to_insert,
-        to_update,
-        to_remove,
-    } = plan;
-    let changes = storage::tracked::TrackedFileChanges {
-        inserts: to_insert,
-        updates: to_update,
-        removes: to_remove,
-    };
+) -> Result<(), AppError> {
+    let changes = plan_reconciliation(existing, observations, paths_to_remove);
 
     if let Some(cb) = progress_cb {
         let total_changes = changes.inserts.len() + changes.updates.len() + changes.removes.len();
@@ -339,12 +311,10 @@ fn reconcile_observations(
             db,
             changes,
             Some(&progress_emitter),
-        )?;
+        )
     } else {
-        storage::tracked::apply_tracked_file_changes(db, changes)?;
+        storage::tracked::apply_tracked_file_changes(db, changes)
     }
-
-    Ok(report)
 }
 
 fn scan_target_paths(
@@ -493,7 +463,7 @@ mod tests {
     use crate::models::{AppConfig, AppError, Expiry, FileDecayState, TrackedFile, WatchTarget};
     use crate::storage::{self, Database};
 
-    use super::{plan_reconciliation, reconcile_paths, reconcile_with_report_with_progress};
+    use super::{plan_reconciliation, reconcile_paths, reconcile_with_progress};
 
     fn tracked(path: &str) -> TrackedFile {
         TrackedFile {
@@ -525,34 +495,19 @@ mod tests {
         .collect();
         let paths_to_remove = [String::from("removed")].into_iter().collect();
 
-        let plan = plan_reconciliation(
+        let changes = plan_reconciliation(
             &existing,
-            vec![unchanged, updated, tracked("indexed")],
+            vec![unchanged, updated.clone(), tracked("indexed")],
             &paths_to_remove,
         );
 
-        assert_eq!(plan.report.indexed, vec!["indexed"]);
-        assert_eq!(plan.report.updated, vec!["updated"]);
-        assert_eq!(plan.report.removed, vec!["removed"]);
-        assert_eq!(
-            plan.to_insert
-                .iter()
-                .map(|file| file.path.as_str())
-                .collect::<Vec<_>>(),
-            vec!["indexed"]
-        );
-        assert_eq!(
-            plan.to_update
-                .iter()
-                .map(|file| file.path.as_str())
-                .collect::<Vec<_>>(),
-            vec!["updated"]
-        );
-        assert_eq!(plan.to_remove, vec!["removed"]);
+        assert_eq!(changes.inserts, vec![tracked("indexed")]);
+        assert_eq!(changes.updates, vec![updated]);
+        assert_eq!(changes.removes, vec!["removed"]);
     }
 
-    fn reconcile(db: &Database) -> Result<Vec<String>, AppError> {
-        Ok(reconcile_with_report_with_progress(db, None)?.indexed)
+    fn reconcile(db: &Database) -> Result<(), AppError> {
+        reconcile_with_progress(db, None)
     }
 
     #[cfg(windows)]
@@ -577,8 +532,7 @@ mod tests {
         let file = fixture.write_watch_file("download.txt", "body");
         fixture.save_config();
 
-        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
-        assert_eq!(indexed, vec![path_string(&file)]);
+        reconcile(&fixture.db).expect("reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
@@ -610,7 +564,7 @@ mod tests {
                 .push((current, total));
         };
 
-        reconcile_with_report_with_progress(&fixture.db, Some(&processing_progress))
+        reconcile_with_progress(&fixture.db, Some(&processing_progress))
             .expect("reconciliation should succeed");
 
         let progress = progress.lock().expect("progress lock should work");
@@ -624,8 +578,7 @@ mod tests {
         let file = fixture.write_watch_file("download.txt", "body");
         fixture.save_config();
 
-        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
-        assert_eq!(indexed, vec![path_string(&file)]);
+        reconcile(&fixture.db).expect("reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
@@ -639,9 +592,7 @@ mod tests {
         };
         storage::save_config(&fixture.db, &config).expect("config should save");
 
-        let report = reconcile_with_report_with_progress(&fixture.db, None)
-            .expect("reconciliation should succeed");
-        assert_eq!(report.removed, vec![path_string(&file)]);
+        reconcile(&fixture.db).expect("reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
@@ -655,8 +606,7 @@ mod tests {
         let partial = fixture.write_watch_file("asset.zip.crdownload", "partial");
         fixture.save_config();
 
-        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
-        assert!(indexed.is_empty());
+        reconcile(&fixture.db).expect("reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&partial))
                 .expect("tracked lookup should work")
@@ -672,9 +622,8 @@ mod tests {
         set_hidden(&hidden);
         fixture.save_config();
 
-        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
+        reconcile(&fixture.db).expect("reconciliation should succeed");
 
-        assert!(indexed.is_empty());
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&hidden))
                 .expect("tracked lookup should work")
@@ -691,10 +640,9 @@ mod tests {
         reconcile(&fixture.db).expect("initial reconciliation should succeed");
         set_hidden(&file);
 
-        let (report, _) = reconcile_paths(&fixture.db, vec![file.clone()])
+        reconcile_paths(&fixture.db, vec![file.clone()])
             .expect("incremental reconciliation should succeed");
 
-        assert_eq!(report.removed, vec![path_string(&file)]);
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
@@ -709,9 +657,13 @@ mod tests {
         let kept = fixture.write_watch_file("keep.txt", "kept");
         fixture.save_config_with_ignore_patterns(vec![String::from("*.me")]);
 
-        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
+        reconcile(&fixture.db).expect("reconciliation should succeed");
 
-        assert_eq!(indexed, vec![path_string(&kept)]);
+        assert!(
+            storage::tracked::get_tracked_file(&fixture.db, &path_string(&kept))
+                .expect("tracked lookup should work")
+                .is_some()
+        );
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&ignored))
                 .expect("tracked lookup should work")
@@ -731,14 +683,12 @@ mod tests {
             .any(|tracked| tracked.file_name == "skip.me"));
 
         fixture.save_config_with_ignore_patterns(vec![String::from("*.me")]);
-        let report = reconcile_with_report_with_progress(&fixture.db, None)
-            .expect("reconciliation should succeed");
+        reconcile(&fixture.db).expect("reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
                 .is_none()
         );
-        assert_eq!(report.removed, vec![path_string(&file)]);
     }
 
     #[test]
@@ -749,14 +699,13 @@ mod tests {
         reconcile(&fixture.db).expect("initial reconciliation should succeed");
 
         fixture.save_config_with_ignore_patterns(vec![String::from("*.me")]);
-        let (report, _) = reconcile_paths(&fixture.db, vec![file.clone()])
+        reconcile_paths(&fixture.db, vec![file.clone()])
             .expect("incremental reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
                 .is_none()
         );
-        assert_eq!(report.removed, vec![path_string(&file)]);
     }
 
     #[test]
@@ -775,14 +724,12 @@ mod tests {
         );
 
         fixture.save_config_recursive_with_ignore_patterns(vec![String::from("ignored")]);
-        let report = reconcile_with_report_with_progress(&fixture.db, None)
-            .expect("reconciliation should succeed");
+        reconcile(&fixture.db).expect("reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
                 .is_none()
         );
-        assert_eq!(report.removed, vec![path_string(&file)]);
     }
 
     #[test]
@@ -806,11 +753,13 @@ mod tests {
         fixture.write_watch_file("keep.txt", "kept");
         fixture.save_config_recursive();
 
-        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
+        reconcile(&fixture.db).expect("reconciliation should succeed");
+        let tracked =
+            storage::tracked::list_tracked_files(&fixture.db).expect("tracked list should work");
 
         // Only the non-system file should be indexed.
-        assert_eq!(indexed.len(), 1);
-        assert!(indexed[0].ends_with("keep.txt"));
+        assert_eq!(tracked.len(), 1);
+        assert_eq!(tracked[0].file_name, "keep.txt");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&system_file))
                 .expect("tracked lookup should work")
@@ -828,9 +777,8 @@ mod tests {
         std::os::unix::fs::symlink(&outside, &link).expect("symlink should be created");
         fixture.save_config();
 
-        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
+        reconcile(&fixture.db).expect("reconciliation should succeed");
 
-        assert!(indexed.is_empty());
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&link))
                 .expect("tracked lookup should work")
@@ -850,9 +798,8 @@ mod tests {
         }
         fixture.save_config();
 
-        let indexed = reconcile(&fixture.db).expect("reconciliation should succeed");
+        reconcile(&fixture.db).expect("reconciliation should succeed");
 
-        assert!(indexed.is_empty());
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&link))
                 .expect("tracked lookup should work")
@@ -1044,8 +991,7 @@ mod tests {
 
         // Switch to non-recursive (top-level only)
         fixture.save_config();
-        let report = reconcile_with_report_with_progress(&fixture.db, None)
-            .expect("non-recursive reconciliation should succeed");
+        reconcile(&fixture.db).expect("non-recursive reconciliation should succeed");
 
         // Root file stays, subfolder file is removed
         assert!(
@@ -1059,10 +1005,6 @@ mod tests {
                 .expect("tracked lookup should work")
                 .is_none(),
             "nested file should be removed in top-level mode"
-        );
-        assert!(
-            report.removed.contains(&path_string(&sub_file)),
-            "nested file should appear in removed report"
         );
     }
 

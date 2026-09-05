@@ -1,22 +1,20 @@
 use crate::engine::project_watched_file;
-use crate::models::{AppError, ReconciliationReport};
+use crate::models::AppError;
 use crate::rules::CompiledRuleSet;
 use crate::storage::{self, Database};
 
-pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport, AppError> {
+pub fn refresh_tracked_rule_state(db: &Database) -> Result<(), AppError> {
     let config = storage::get_config(db)?;
     let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
     let files = storage::tracked::list_tracked_files(db)?;
     let now = crate::engine::freshness::now_seconds();
 
-    let mut report = ReconciliationReport::default();
     let mut changed = Vec::new();
 
     for file in files {
         let refreshed = project_watched_file(file.clone(), &config, &rule_set, now).tracked;
 
         if refreshed != file {
-            report.updated.push(refreshed.path.clone());
             changed.push(refreshed);
         }
     }
@@ -27,9 +25,7 @@ pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport,
             updates: changed,
             ..storage::tracked::TrackedFileChanges::default()
         },
-    )?;
-
-    Ok(report)
+    )
 }
 
 #[cfg(test)]
@@ -51,12 +47,11 @@ mod tests {
         rule.mode = RuleMode::Automatic;
         storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
 
-        let report = refresh_tracked_rule_state(&fixture.db).expect("rule state should refresh");
+        refresh_tracked_rule_state(&fixture.db).expect("rule state should refresh");
         let tracked = storage::tracked::get_tracked_file(&fixture.db, &file.to_string_lossy())
             .expect("tracked lookup should work")
             .expect("tracked file should exist");
 
-        assert_eq!(report.updated, vec![file.to_string_lossy().to_string()]);
         assert_eq!(tracked.matched_rule_ids, vec![String::from("zip-rule")]);
         assert_eq!(tracked.expiry, Expiry::At(tracked.freshness_at + 86_400));
     }

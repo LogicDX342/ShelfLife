@@ -197,11 +197,11 @@ mod tests {
         };
         storage::rules::save_rule(&fixture.db, &rule).expect("rule should save");
 
-        let (reconciliation_report, arrival_candidates) =
+        let arrival_candidates =
             crate::engine::reconciliation::reconcile_paths(&fixture.db, vec![arriving.clone()])
                 .expect("incremental reconciliation should succeed");
-        assert_eq!(reconciliation_report.indexed, vec![path_string(&arriving)]);
         assert_eq!(arrival_candidates.len(), 1);
+        assert_eq!(arrival_candidates[0].file_path, path_string(&arriving));
 
         let report = execute_arrival_automatic_rules(&fixture.db, &arrival_candidates)
             .expect("arrival rule execution should run");

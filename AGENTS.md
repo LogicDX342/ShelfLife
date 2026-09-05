@@ -63,7 +63,6 @@ src-tauri/src/
     ├── dropzone.rs          # Dropzone preview/action result models
     ├── error.rs             # AppError and Diesel/io conversions
     ├── rule.rs              # AutomationRule, RuleMode, RuleAction, RuleConditions
-    ├── runtime.rs           # ReconciliationReport
     └── tracked_file.rs      # TrackedFile, FileDecayState, Expiry
 ```
 
