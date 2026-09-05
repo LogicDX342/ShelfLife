@@ -11,7 +11,6 @@
   import PageHeader from '$lib/components/common/PageHeader.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
-  import * as Item from '$lib/components/ui/item';
   import { Spinner } from '$lib/components/ui/spinner';
   import { i18n } from '$lib/i18n/i18n.svelte';
   import { notifications } from '$lib/stores/notifications.svelte';
@@ -34,13 +33,6 @@
     } catch (reason) {
       notifications.error(getErrorMessage(reason, i18n.t('about.errorOpenLink')));
     }
-  }
-
-  function openLinkFromKey(event: KeyboardEvent, url: ExternalUrl) {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-
-    event.preventDefault();
-    void openLink(url);
   }
 
   async function checkForUpdates() {
@@ -159,66 +151,28 @@
         <Card.Title>{i18n.t('about.linksTitle')}</Card.Title>
       </Card.Header>
       <Card.Content>
-        <Item.Group>
-          <Item.Root
-            role="button"
-            tabindex={0}
-            class="cursor-pointer transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+        <div class="flex flex-col">
+          <Button
+            type="button"
+            variant="ghost"
+            class="h-auto w-full justify-start gap-2.5 px-3 py-2.5"
             onclick={() => openLink(externalUrls.github)}
-            onkeydown={(event) => openLinkFromKey(event, externalUrls.github)}
           >
-            <Item.Media>
-              <IconGitBranch />
-            </Item.Media>
-            <Item.Content>
-              <Item.Title>{i18n.t('about.github')}</Item.Title>
-            </Item.Content>
-            <Item.Actions>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                title={i18n.t('about.github')}
-                aria-label={i18n.t('about.github')}
-                onclick={(event) => {
-                  event.stopPropagation();
-                  openLink(externalUrls.github);
-                }}
-              >
-                <IconExternalLink />
-              </Button>
-            </Item.Actions>
-          </Item.Root>
-          <Item.Root
-            role="button"
-            tabindex={0}
-            class="cursor-pointer transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            <IconGitBranch data-icon="inline-start" aria-hidden="true" />
+            <span class="flex-1 text-left">{i18n.t('about.github')}</span>
+            <IconExternalLink data-icon="inline-end" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            class="h-auto w-full justify-start gap-2.5 px-3 py-2.5"
             onclick={() => openLink(externalUrls.bugReport)}
-            onkeydown={(event) => openLinkFromKey(event, externalUrls.bugReport)}
           >
-            <Item.Media>
-              <IconBug />
-            </Item.Media>
-            <Item.Content>
-              <Item.Title>{i18n.t('about.reportBug')}</Item.Title>
-            </Item.Content>
-            <Item.Actions>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                title={i18n.t('about.reportBug')}
-                aria-label={i18n.t('about.reportBug')}
-                onclick={(event) => {
-                  event.stopPropagation();
-                  openLink(externalUrls.bugReport);
-                }}
-              >
-                <IconExternalLink />
-              </Button>
-            </Item.Actions>
-          </Item.Root>
-        </Item.Group>
+            <IconBug data-icon="inline-start" aria-hidden="true" />
+            <span class="flex-1 text-left">{i18n.t('about.reportBug')}</span>
+            <IconExternalLink data-icon="inline-end" aria-hidden="true" />
+          </Button>
+        </div>
       </Card.Content>
     </Card.Root>
   </div>
