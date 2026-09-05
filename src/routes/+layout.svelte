@@ -95,7 +95,7 @@
       </div>
 
       <!-- Toast Notification System -->
-      <Toaster richColors position="bottom-right" />
+      <Toaster theme={i18n.currentTheme} richColors position="bottom-right" />
       <ConfirmDialog
         open={closePromptOpen}
         title={i18n.t('closeDialog.title')}
