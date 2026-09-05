@@ -156,7 +156,7 @@ pub fn preview_dropzone_files(
     }
 
     let (rule_groups, preview_only, unmatched_files) =
-        plan_rule_groups(&config, &rule_set, &tracked_files)?;
+        plan_rule_groups(&config, &rule_set, &tracked_files);
 
     Ok(DropzonePreview {
         files,
@@ -207,19 +207,15 @@ pub fn build_dropzone_file(
     ))
 }
 
-#[allow(clippy::type_complexity)]
 pub fn plan_rule_groups(
     config: &AppConfig,
     rule_set: &CompiledRuleSet,
     files: &[TrackedFile],
-) -> Result<
-    (
-        Vec<DropzoneRuleGroup>,
-        Vec<RuleMatchExplanation>,
-        Vec<String>,
-    ),
-    AppError,
-> {
+) -> (
+    Vec<DropzoneRuleGroup>,
+    Vec<RuleMatchExplanation>,
+    Vec<String>,
+) {
     let mut groups: HashMap<String, DropzoneRuleGroup> = HashMap::new();
     let mut preview_only = Vec::new();
     let mut unmatched_files = Vec::new();
@@ -279,7 +275,7 @@ pub fn plan_rule_groups(
     let mut rule_groups: Vec<DropzoneRuleGroup> = groups.into_values().collect();
     rule_groups.sort_by(|left, right| left.rule_name.cmp(&right.rule_name));
 
-    Ok((rule_groups, preview_only, unmatched_files))
+    (rule_groups, preview_only, unmatched_files)
 }
 
 #[cfg(test)]

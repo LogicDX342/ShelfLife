@@ -23,7 +23,7 @@ pub fn execute_expired_automatic_rules(db: &Database) -> Result<RuleExecutionRep
     let mut candidates = Vec::new();
 
     for file in files {
-        let Some(candidate) = automatic_rule_candidate(&file, &config, &rule_set)? else {
+        let Some(candidate) = automatic_rule_candidate(&file, &config, &rule_set) else {
             continue;
         };
         let Some(eligible_at) = candidate.eligible_at else {
@@ -107,7 +107,7 @@ pub fn next_automatic_rule_execution_delay(
     let failed_attempts = storage::audit::list_failed_automatic_rule_attempts(db)?;
 
     for file in storage::tracked::list_tracked_files(db)? {
-        let Some(candidate) = automatic_rule_candidate(&file, &config, &rule_set)? else {
+        let Some(candidate) = automatic_rule_candidate(&file, &config, &rule_set) else {
             continue;
         };
         if failed_attempts.contains(&(file.path.clone(), candidate.rule.id.clone())) {

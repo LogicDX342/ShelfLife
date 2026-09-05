@@ -92,9 +92,9 @@ pub fn reconcile_with_report_with_progress(
                 )
             })
             .collect::<Vec<_>>();
-        let path_results: Result<Vec<Option<TrackedFile>>, AppError> = files
+        let observed_files: Vec<TrackedFile> = files
             .into_par_iter()
-            .map(|file| {
+            .filter_map(|file| {
                 let path_string = file.path.to_string_lossy().to_string();
                 let context = ObservationContext {
                     target,
@@ -108,11 +108,11 @@ pub fn reconcile_with_report_with_progress(
                     existing_map.get(&path_string),
                     &context,
                 )
-                .map(|result| result.map(|projection| projection.tracked))
+                .map(|projection| projection.tracked)
             })
             .collect();
 
-        observations.extend(path_results?.into_iter().flatten());
+        observations.extend(observed_files);
     }
 
     let paths_to_remove =
@@ -223,7 +223,7 @@ pub fn reconcile_paths(
             rules: &rule_set,
             now,
         };
-        if let Some(projection) = observe_path(path, existing_map.get(&path_string), &context)? {
+        if let Some(projection) = observe_path(path, existing_map.get(&path_string), &context) {
             if !existing_map.contains_key(&path_string) {
                 if let Some(candidate) = arrival_rule_candidate(&projection) {
                     arrival_candidates.push(candidate);
@@ -246,12 +246,9 @@ fn observe_path(
     path: &Path,
     existing: Option<&TrackedFile>,
     context: &ObservationContext<'_>,
-) -> Result<Option<TrackedRuleProjection>, AppError> {
+) -> Option<TrackedRuleProjection> {
     // Single stat — symlink_metadata covers both symlink detection and file metadata.
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(_) => return Ok(None),
-    };
+    let metadata = fs::symlink_metadata(path).ok()?;
     observe_path_with_metadata(path, &metadata, existing, context)
 }
 
@@ -260,24 +257,24 @@ fn observe_path_with_metadata(
     metadata: &fs::Metadata,
     existing: Option<&TrackedFile>,
     context: &ObservationContext<'_>,
-) -> Result<Option<TrackedRuleProjection>, AppError> {
+) -> Option<TrackedRuleProjection> {
     if is_transient_path(path) {
-        return Ok(None);
+        return None;
     }
     if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Ok(None);
+        return None;
     }
     if is_hidden_path(path, metadata) {
-        return Ok(None);
+        return None;
     }
     let tracked =
         tracked_file_from_metadata(path, metadata, existing, context.config, &context.target.id);
-    Ok(Some(project_watched_file(
+    Some(project_watched_file(
         tracked,
         context.config,
         context.rules,
         context.now,
-    )?))
+    ))
 }
 
 fn paths_to_remove_for(

@@ -1,7 +1,7 @@
 use crate::engine::freshness::classify_decay_state;
 use crate::models::{
-    AppConfig, AppError, AutomationRule, Expiry, FileDecayState, RuleAction, RuleMatchExplanation,
-    RuleMode, RuleTiming, TrackedFile,
+    AppConfig, AutomationRule, Expiry, FileDecayState, RuleAction, RuleMatchExplanation, RuleMode,
+    RuleTiming, TrackedFile,
 };
 use crate::rules::{CompiledRuleSet, RuleDecision, RuleDecisionScope, RuleVerdict};
 
@@ -23,29 +23,29 @@ pub fn project_watched_file(
     config: &AppConfig,
     rule_set: &CompiledRuleSet,
     now: u64,
-) -> Result<TrackedRuleProjection, AppError> {
+) -> TrackedRuleProjection {
     let decision = rule_set.decide_file(&tracked, RuleDecisionScope::WatchedFile);
     tracked.matched_rule_ids = decision.matched_rule_ids.clone();
     apply_rule_decision(&mut tracked, &decision, config, now);
 
-    Ok(TrackedRuleProjection { tracked, decision })
+    TrackedRuleProjection { tracked, decision }
 }
 
 pub fn automatic_rule_candidate(
     file: &TrackedFile,
     config: &AppConfig,
     rule_set: &CompiledRuleSet,
-) -> Result<Option<AutomaticRuleCandidate>, AppError> {
+) -> Option<AutomaticRuleCandidate> {
     let Expiry::At(expires_at) = file.expiry else {
-        return Ok(None);
+        return None;
     };
     let projection = project_watched_file(
         file.clone(),
         config,
         rule_set,
         crate::engine::freshness::now_seconds(),
-    )?;
-    Ok(match_candidate(&projection, Some(expires_at)))
+    );
+    match_candidate(&projection, Some(expires_at))
 }
 
 pub fn arrival_rule_candidate(
@@ -157,8 +157,7 @@ mod tests {
 
         let rule_set =
             CompiledRuleSet::compile(vec![rule], &config).expect("rule set should compile");
-        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())
-            .expect("projection should build");
+        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds());
 
         assert_eq!(
             projection.tracked.matched_rule_ids,
@@ -189,10 +188,8 @@ mod tests {
             CompiledRuleSet::compile(vec![automatic_rule.clone(), preview_rule], &config)
                 .expect("rule set should compile");
 
-        let projection = project_watched_file(tracked.clone(), &config, &rule_set, now_seconds())
-            .expect("projection should build");
-        let candidate = automatic_rule_candidate(&projection.tracked, &config, &rule_set)
-            .expect("candidate should evaluate");
+        let projection = project_watched_file(tracked.clone(), &config, &rule_set, now_seconds());
+        let candidate = automatic_rule_candidate(&projection.tracked, &config, &rule_set);
 
         assert_eq!(
             projection.tracked.matched_rule_ids,
@@ -221,8 +218,7 @@ mod tests {
 
         let rule_set =
             CompiledRuleSet::compile(vec![rule], &config).expect("rule set should compile");
-        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())
-            .expect("projection should build");
+        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds());
 
         assert_eq!(projection.tracked.state, FileDecayState::RuleIgnored);
         assert_eq!(
@@ -240,8 +236,7 @@ mod tests {
 
         let rule_set = CompiledRuleSet::compile(Vec::<AutomationRule>::new(), &config)
             .expect("rule set should compile");
-        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())
-            .expect("projection should build");
+        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds());
 
         assert_eq!(projection.tracked.state, FileDecayState::ManuallyIgnored);
         assert!(projection.tracked.matched_rule_ids.is_empty());
@@ -260,7 +255,6 @@ mod tests {
         let rule_set = CompiledRuleSet::compile(vec![automatic_rule.clone()], &config)
             .expect("rule set should compile");
         let candidate = automatic_rule_candidate(&tracked, &config, &rule_set)
-            .expect("candidate should evaluate")
             .expect("automatic rule should be actionable");
 
         assert_eq!(candidate.eligible_at, Some(expires_at));
@@ -274,41 +268,25 @@ mod tests {
         ask_first.mode = RuleMode::AskFirst;
         let ask_first_rule_set =
             CompiledRuleSet::compile(vec![ask_first], &config).expect("rule set should compile");
-        assert!(
-            automatic_rule_candidate(&tracked, &config, &ask_first_rule_set)
-                .expect("candidate should evaluate")
-                .is_none()
-        );
+        assert!(automatic_rule_candidate(&tracked, &config, &ask_first_rule_set).is_none());
 
         let mut preview = automatic_rule.clone();
         preview.mode = RuleMode::PreviewOnly;
         let preview_rule_set =
             CompiledRuleSet::compile(vec![preview], &config).expect("rule set should compile");
-        assert!(
-            automatic_rule_candidate(&tracked, &config, &preview_rule_set)
-                .expect("candidate should evaluate")
-                .is_none()
-        );
+        assert!(automatic_rule_candidate(&tracked, &config, &preview_rule_set).is_none());
 
         let mut ignore = automatic_rule.clone();
         ignore.action = RuleAction::Ignore;
         let ignore_rule_set =
             CompiledRuleSet::compile(vec![ignore], &config).expect("rule set should compile");
-        assert!(
-            automatic_rule_candidate(&tracked, &config, &ignore_rule_set)
-                .expect("candidate should evaluate")
-                .is_none()
-        );
+        assert!(automatic_rule_candidate(&tracked, &config, &ignore_rule_set).is_none());
 
         let mut ignored = tracked;
         ignored.state = FileDecayState::ManuallyIgnored;
         let automatic_rule_set = CompiledRuleSet::compile(vec![automatic_rule], &config)
             .expect("rule set should compile");
-        assert!(
-            automatic_rule_candidate(&ignored, &config, &automatic_rule_set)
-                .expect("candidate should evaluate")
-                .is_none()
-        );
+        assert!(automatic_rule_candidate(&ignored, &config, &automatic_rule_set).is_none());
     }
 
     #[test]
@@ -326,8 +304,7 @@ mod tests {
         let rule_set =
             CompiledRuleSet::compile(vec![rule.clone()], &config).expect("rule set should compile");
 
-        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())
-            .expect("projection should build");
+        let projection = project_watched_file(tracked, &config, &rule_set, now_seconds());
         let arrival =
             arrival_rule_candidate(&projection).expect("arrival rule should be actionable");
 
@@ -337,11 +314,7 @@ mod tests {
             projection.tracked.expiry,
             Expiry::At(projection.tracked.freshness_at + AppConfig::default().default_ttl_seconds)
         );
-        assert!(
-            automatic_rule_candidate(&projection.tracked, &config, &rule_set)
-                .expect("expiry candidate should evaluate")
-                .is_none()
-        );
+        assert!(automatic_rule_candidate(&projection.tracked, &config, &rule_set).is_none());
     }
 
     fn tracked_fixture_file(

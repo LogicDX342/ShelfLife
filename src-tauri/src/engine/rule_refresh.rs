@@ -13,7 +13,7 @@ pub fn refresh_tracked_rule_state(db: &Database) -> Result<ReconciliationReport,
     let mut changed = Vec::new();
 
     for file in files {
-        let refreshed = project_watched_file(file.clone(), &config, &rule_set, now)?.tracked;
+        let refreshed = project_watched_file(file.clone(), &config, &rule_set, now).tracked;
 
         if refreshed != file {
             report.updated.push(refreshed.path.clone());

@@ -132,7 +132,7 @@ pub(crate) fn execute_confirmed_rule_action(
         )
     })?;
     let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
-    let projection = project_watched_file(tracked, &config, &rule_set, now_seconds())?;
+    let projection = project_watched_file(tracked, &config, &rule_set, now_seconds());
     let RuleVerdict::Matched {
         effective_rule,
         effective_explanation,
@@ -786,7 +786,7 @@ fn sync_restored_tracking(
     tracked.state = FileDecayState::Fresh;
 
     let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, config)?;
-    let tracked = project_watched_file(tracked, config, &rule_set, now)?.tracked;
+    let tracked = project_watched_file(tracked, config, &rule_set, now).tracked;
     storage::tracked::replace_tracked_file(db, previous_tracked_path, &tracked)
 }
 
