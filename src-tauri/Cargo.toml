@@ -23,7 +23,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-diesel = { version = "2.3.11", features = ["sqlite"] }
+diesel = { version = "2.3.13", features = ["sqlite"] }
 libsqlite3-sys = { version = "0.37", features = ["bundled"] }
 notify-debouncer-full = "0.7"
 trash = "5"
@@ -35,7 +35,7 @@ chrono = { version = "0.4", features = ["serde"] }
 rfd = { version = "0.17.2", features = ["common-controls-v6"] }
 rayon = "1.12.0"
 tauri-plugin-autostart = "2.5.1"
-tauri-plugin-single-instance = "2.4.3"
+tauri-plugin-single-instance = "2.4.4"
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
