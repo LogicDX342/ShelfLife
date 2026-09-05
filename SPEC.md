@@ -90,6 +90,8 @@ The watcher is a signal source, not the only source of truth. Three layers coope
 
 The watcher must not own database access. It debounces file events, waits for path stability, and emits stable paths. `AppRuntime` owns the database handle and calls reconciliation logic with those paths.
 
+Frontend file snapshots refresh on `reconciliation_completed` and `action_completed`. Reconciliation completion is a payload-free signal; individual indexed, updated, and removed paths are not emitted to the frontend.
+
 ### Debounce
 
 Minimum 500 ms debounce window. Must handle: rename stitching, duplicate create events, create/modify coalescing, remove consolidation, burst downloads, and editor atomic-save behavior.

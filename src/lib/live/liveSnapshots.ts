@@ -106,14 +106,6 @@ export function startLiveSnapshots(): () => void {
     auditRefresh.request();
   });
 
-  const refreshOnPathEvent = () => {
-    if (!filesState.syncing) filesRefresh.request();
-  };
-
-  register('file_indexed', refreshOnPathEvent);
-  register('file_updated', refreshOnPathEvent);
-  register('file_removed', refreshOnPathEvent);
-
   const refreshFilesOnFocus = () => {
     filesRefresh.request();
   };

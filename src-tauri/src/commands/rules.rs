@@ -24,13 +24,13 @@ pub async fn save_rule(
     }
     rule.updated_at = now;
 
-    let report = state.run_exclusive_engine_operation(|db| {
+    state.run_exclusive_engine_operation(|db| {
         let config = storage::get_config(db)?;
         CompiledRuleSet::compile(vec![rule.clone()], &config)?;
         storage::rules::save_rule(db, &rule)?;
         crate::engine::refresh_tracked_rule_state(db)
     })?;
-    crate::runtime::reconciliation::emit_reconciliation_report(&app_handle, &report);
+    crate::runtime::reconciliation::emit_reconciliation_completed(&app_handle);
     state.wake_rule_scheduler();
     crate::runtime::rule_scheduler::run_async_expired_rule_execution(
         app_handle,
@@ -79,11 +79,11 @@ pub async fn delete_rule(
     state: State<'_, AppRuntime>,
     id: String,
 ) -> Result<(), AppError> {
-    let report = state.run_exclusive_engine_operation(|db| {
+    state.run_exclusive_engine_operation(|db| {
         storage::rules::delete_rule(db, &id)?;
         crate::engine::refresh_tracked_rule_state(db)
     })?;
-    crate::runtime::reconciliation::emit_reconciliation_report(&app_handle, &report);
+    crate::runtime::reconciliation::emit_reconciliation_completed(&app_handle);
     state.wake_rule_scheduler();
 
     Ok(())

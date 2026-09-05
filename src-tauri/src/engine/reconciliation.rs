@@ -13,11 +13,6 @@ struct ReconciliationPlan {
     to_remove: Vec<String>,
 }
 
-pub struct IncrementalReconciliationOutcome {
-    pub report: ReconciliationReport,
-    pub arrival_candidates: Vec<AutomaticRuleCandidate>,
-}
-
 struct ScannedFile {
     path: PathBuf,
     metadata: fs::Metadata,
@@ -175,7 +170,7 @@ fn plan_reconciliation(
 pub fn reconcile_paths(
     db: &Database,
     paths: Vec<PathBuf>,
-) -> Result<IncrementalReconciliationOutcome, AppError> {
+) -> Result<(ReconciliationReport, Vec<AutomaticRuleCandidate>), AppError> {
     let config = storage::get_config(db)?;
     let scope = PathScope::new(&config);
     let rule_set = CompiledRuleSet::compile(storage::rules::list_rules(db)?, &config)?;
@@ -236,10 +231,7 @@ pub fn reconcile_paths(
     let paths_to_remove =
         paths_to_remove_for(&existing_map, &scope, &observations, &excluded_paths);
     let report = reconcile_observations(db, &existing_map, observations, &paths_to_remove, None)?;
-    Ok(IncrementalReconciliationOutcome {
-        report,
-        arrival_candidates,
-    })
+    Ok((report, arrival_candidates))
 }
 
 fn observe_path(
@@ -699,10 +691,10 @@ mod tests {
         reconcile(&fixture.db).expect("initial reconciliation should succeed");
         set_hidden(&file);
 
-        let report = reconcile_paths(&fixture.db, vec![file.clone()])
+        let (report, _) = reconcile_paths(&fixture.db, vec![file.clone()])
             .expect("incremental reconciliation should succeed");
 
-        assert_eq!(report.report.removed, vec![path_string(&file)]);
+        assert_eq!(report.removed, vec![path_string(&file)]);
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
@@ -757,14 +749,14 @@ mod tests {
         reconcile(&fixture.db).expect("initial reconciliation should succeed");
 
         fixture.save_config_with_ignore_patterns(vec![String::from("*.me")]);
-        let report = reconcile_paths(&fixture.db, vec![file.clone()])
+        let (report, _) = reconcile_paths(&fixture.db, vec![file.clone()])
             .expect("incremental reconciliation should succeed");
         assert!(
             storage::tracked::get_tracked_file(&fixture.db, &path_string(&file))
                 .expect("tracked lookup should work")
                 .is_none()
         );
-        assert_eq!(report.report.removed, vec![path_string(&file)]);
+        assert_eq!(report.removed, vec![path_string(&file)]);
     }
 
     #[test]

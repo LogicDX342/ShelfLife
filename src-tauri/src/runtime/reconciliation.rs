@@ -6,12 +6,10 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 use crate::engine;
-use crate::models::ReconciliationReport;
 use crate::runtime::AppRuntime;
 
 const PERIODIC_RECONCILIATION_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const RESOURCE_LIMIT_RETRY_INTERVAL: Duration = Duration::from_secs(5 * 60);
-const MAX_PATH_EVENT_EMITS: usize = 256;
 
 pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
     if runtime.reconciliation_active.swap(true, Ordering::SeqCst) {
@@ -38,8 +36,8 @@ pub fn run_async_reconciliation(app_handle: AppHandle, runtime: AppRuntime) {
             .store(false, Ordering::SeqCst);
 
         match result {
-            Ok(report) => {
-                emit_reconciliation_report(&app_handle_clone, &report);
+            Ok(_) => {
+                emit_reconciliation_completed(&app_handle_clone);
                 runtime_clone.wake_rule_scheduler();
                 crate::runtime::rule_scheduler::run_async_expired_rule_execution(
                     app_handle_clone,
@@ -75,27 +73,8 @@ pub fn start_periodic_reconciliation(app_handle: AppHandle, runtime: AppRuntime)
     });
 }
 
-fn emit_indexed_files(app_handle: &AppHandle, paths: &[String]) {
-    for path in paths {
-        let _ = app_handle.emit("file_indexed", path);
-    }
-}
-
-pub fn emit_reconciliation_report(app_handle: &AppHandle, report: &ReconciliationReport) {
-    let path_event_count = report.indexed.len() + report.updated.len() + report.removed.len();
-
-    if path_event_count <= MAX_PATH_EVENT_EMITS {
-        emit_indexed_files(app_handle, &report.indexed);
-        for path in &report.updated {
-            let _ = app_handle.emit("file_updated", path);
-        }
-        for path in &report.removed {
-            let _ = app_handle.emit("file_removed", path);
-        }
-        let _ = app_handle.emit("reconciliation_completed", report);
-    } else {
-        let _ = app_handle.emit("reconciliation_completed", ReconciliationReport::default());
-    }
+pub fn emit_reconciliation_completed(app_handle: &AppHandle) {
+    let _ = app_handle.emit("reconciliation_completed", ());
 }
 
 pub fn watcher_event_sink(
@@ -106,14 +85,13 @@ pub fn watcher_event_sink(
         engine::watcher::WatcherEvent::PathsReady(paths) => {
             match runtime.run_exclusive_engine_operation(
                 |db| -> Result<_, crate::models::AppError> {
-                    let outcome = engine::reconciliation::reconcile_paths(db, paths)?;
-                    let arrival_report =
-                        engine::execute_arrival_automatic_rules(db, &outcome.arrival_candidates)?;
-                    Ok((outcome.report, arrival_report))
+                    let (_, arrival_candidates) =
+                        engine::reconciliation::reconcile_paths(db, paths)?;
+                    engine::execute_arrival_automatic_rules(db, &arrival_candidates)
                 },
             ) {
-                Ok((report, arrival_report)) => {
-                    emit_reconciliation_report(&app_handle, &report);
+                Ok(arrival_report) => {
+                    emit_reconciliation_completed(&app_handle);
                     crate::runtime::rule_scheduler::emit_rule_execution_report(
                         &app_handle,
                         &arrival_report,
