@@ -8,22 +8,11 @@ const i18nPath = path.join(srcDir, 'lib', 'i18n', 'i18n.svelte.ts');
 const sourceExtensions = new Set(['.svelte', '.ts']);
 
 async function listSourceFiles(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-
-  for (const entry of entries) {
-    const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await listSourceFiles(fullPath)));
-      continue;
-    }
-
-    if (sourceExtensions.has(path.extname(entry.name)) && fullPath !== i18nPath) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => !entry.isDirectory() && sourceExtensions.has(path.extname(entry.name)))
+    .map((entry) => path.join(entry.parentPath, entry.name))
+    .filter((file) => file !== i18nPath);
 }
 
 function collectUsage(source) {
