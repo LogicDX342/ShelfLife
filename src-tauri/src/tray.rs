@@ -309,7 +309,7 @@ fn to_grayscale(image: &tauri::image::Image) -> tauri::image::Image<'static> {
     let height = image.height();
     let rgba = image.rgba();
     let mut gray_rgba = Vec::with_capacity(rgba.len());
-    for chunk in rgba.chunks_exact(4) {
+    for chunk in rgba.as_chunks::<4>().0 {
         let r = chunk[0] as f32;
         let g = chunk[1] as f32;
         let b = chunk[2] as f32;
